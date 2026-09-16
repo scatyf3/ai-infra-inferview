@@ -1,0 +1,77 @@
+:root {
+  --vp-c-brand-1: #2563eb;
+  --vp-c-brand-2: #3b82f6;
+  --vp-c-brand-3: #60a5fa;
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #2563eb 30%, #8b5cf6);
+
+  /* 状态色 */
+  --st-todo: #9ca3af;
+  --st-draft: #f59e0b;
+  --st-reviewed: #22c55e;
+
+  /* widget 通用 */
+  --wg-bg: var(--vp-c-bg-soft);
+  --wg-border: var(--vp-c-divider);
+  --wg-text: var(--vp-c-text-1);
+  --wg-muted: var(--vp-c-text-2);
+  --wg-radius: 10px;
+}
+
+.dark {
+  --vp-home-hero-name-background: linear-gradient(120deg, #60a5fa 30%, #a78bfa);
+}
+
+/* 所有 widget 共用外框 */
+.widget {
+  border: 1px solid var(--wg-border);
+  background: var(--wg-bg);
+  border-radius: var(--wg-radius);
+  padding: 16px;
+  margin: 20px 0;
+  font-size: 14px;
+  color: var(--wg-text);
+}
+.widget h4 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.widget .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: flex-end;
+}
+.widget .grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px 14px;
+}
+.widget .muted { color: var(--wg-muted); }
+.widget .warn { color: #dc2626; }
+.widget .mono { font-family: var(--vp-font-family-mono); font-size: 13px; }
+.widget svg text { fill: var(--wg-text); }
+.widget .toggle-group { display: inline-flex; gap: 0; border: 1px solid var(--wg-border); border-radius: 6px; overflow: hidden; }
+.widget .toggle-group button {
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  color: var(--wg-text);
+  cursor: pointer;
+  font-size: 13px;
+}
+.widget .toggle-group button.active { background: var(--vp-c-brand-1); color: #fff; }
+.widget .toggle-group button:not(:last-child) { border-right: 1px solid var(--wg-border); }
+.widget .btn {
+  padding: 4px 12px;
+  border: 1px solid var(--wg-border);
+  border-radius: 6px;
+  background: var(--vp-c-bg);
+  color: var(--wg-text);
+  cursor: pointer;
+  font-size: 13px;
+}
+.widget .btn:hover { border-color: var(--vp-c-brand-1); }
+.widget .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.widget table { margin: 8px 0; font-size: 13px; }

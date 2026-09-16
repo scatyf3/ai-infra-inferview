@@ -1,0 +1,23 @@
+{
+  "name": "ai-infra-inferview",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AI Infra 面试知识库：VitePress 文档 + 交互式可视化插件",
+  "scripts": {
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "gray-matter": "^4.0.3",
+    "markdown-it-mathjax3": "^4.3.2",
+    "typescript": "~5.9.0",
+    "vitepress": "^1.6.4",
+    "vitest": "^3.2.7",
+    "vue": "^3.5.22"
+  }
+}

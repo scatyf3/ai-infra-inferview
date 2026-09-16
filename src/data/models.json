@@ -1,0 +1,7 @@
+[
+  { "id": "llama3-8b", "name": "Llama-3-8B", "layers": 32, "hidden": 4096, "heads": 32, "kvHeads": 8, "ffn": 14336, "vocab": 128256, "attention": "gqa", "tiedEmbeddings": false },
+  { "id": "llama3-70b", "name": "Llama-3-70B", "layers": 80, "hidden": 8192, "heads": 64, "kvHeads": 8, "ffn": 28672, "vocab": 128256, "attention": "gqa", "tiedEmbeddings": false },
+  { "id": "qwen2.5-7b", "name": "Qwen2.5-7B", "layers": 28, "hidden": 3584, "heads": 28, "kvHeads": 4, "ffn": 18944, "vocab": 152064, "attention": "gqa", "tiedEmbeddings": false },
+  { "id": "llama2-7b", "name": "Llama-2-7B (MHA)", "layers": 32, "hidden": 4096, "heads": 32, "kvHeads": 32, "ffn": 11008, "vocab": 32000, "attention": "mha", "tiedEmbeddings": false },
+  { "id": "deepseek-v3", "name": "DeepSeek-V3 (MLA + MoE)", "layers": 61, "hidden": 7168, "heads": 128, "kvHeads": 128, "headDim": 128, "ffn": 2048, "vocab": 129280, "attention": "mla", "mlaLatentDim": 512, "mlaRopeDim": 64, "numExperts": 256, "topK": 8, "sharedExperts": 1, "params": 671000000000, "activeParams": 37000000000, "tiedEmbeddings": false }
+]

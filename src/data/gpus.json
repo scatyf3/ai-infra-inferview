@@ -1,0 +1,8 @@
+[
+  { "id": "h100-sxm", "name": "H100 SXM 80GB", "memoryGiB": 80, "bandwidthTBs": 3.35, "bf16TFLOPS": 989, "fp8TFLOPS": 1979, "interconnect": "NVLink", "interconnectGBs": 900 },
+  { "id": "h200-sxm", "name": "H200 SXM 141GB", "memoryGiB": 141, "bandwidthTBs": 4.8, "bf16TFLOPS": 989, "fp8TFLOPS": 1979, "interconnect": "NVLink", "interconnectGBs": 900 },
+  { "id": "a100-80g", "name": "A100 SXM 80GB", "memoryGiB": 80, "bandwidthTBs": 2.04, "bf16TFLOPS": 312, "fp8TFLOPS": null, "interconnect": "NVLink", "interconnectGBs": 600 },
+  { "id": "b200", "name": "B200 180GB", "memoryGiB": 180, "bandwidthTBs": 8.0, "bf16TFLOPS": 2250, "fp8TFLOPS": 4500, "interconnect": "NVLink", "interconnectGBs": 1800 },
+  { "id": "l40s", "name": "L40S 48GB", "memoryGiB": 48, "bandwidthTBs": 0.864, "bf16TFLOPS": 362, "fp8TFLOPS": 733, "interconnect": "PCIe", "interconnectGBs": 64 },
+  { "id": "rtx-4090", "name": "RTX 4090 24GB", "memoryGiB": 24, "bandwidthTBs": 1.008, "bf16TFLOPS": 165, "fp8TFLOPS": 330, "interconnect": "PCIe", "interconnectGBs": 64 }
+]
