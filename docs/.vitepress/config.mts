@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
 import { fileURLToPath } from 'node:url'
 import { buildSidebar } from './sidebar'
+import { markPlugin } from './markdown/mark'
 
 export default defineConfig({
   lang: 'zh-CN',
@@ -13,6 +14,9 @@ export default defineConfig({
   markdown: {
     math: true,
     lineNumbers: false,
+    config: (md) => {
+      md.use(markPlugin)
+    },
   },
   themeConfig: {
     nav: [

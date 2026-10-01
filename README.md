@@ -24,7 +24,7 @@ docs/                 VitePress 站点（srcDir）
     domains.ts        领域元数据（唯一手工维护的结构信息）
     sidebar.ts        从 frontmatter 生成 sidebar
     data/topics.data.ts  构建时收集各页 status
-    theme/components/    知识地图 + 四个可视化插件
+    theme/components/    知识地图 + 五个可视化插件
 src/lib/              纯 TS 计算逻辑（可单测，不依赖 Vue/DOM）
 src/data/             GPU 与模型规格表
 templates/topic.md    写作模板
@@ -57,6 +57,9 @@ sidebar 和知识地图都从 frontmatter 自动生成，不需要改配置。`s
 | `<ShapeFlow variant="gqa" phase="decode" />` | 一层 Transformer 的 tensor shape 流转，可切 MHA/GQA/MQA/MLA 与 prefill/decode |
 | `<ParallelismViz :tp="4" :pp="2" />` | TP/PP/DP/EP 切分示意与各项通信量 |
 | `<PagedKV :block-size="4" :num-blocks="24" />` | PagedAttention 的 block 分配、prefix 共享、swap/recompute 抢占 |
+| `<ReleaseTimeline view="table" />` | vLLM 版本时间线：按类别筛选、点开看每版的 observation / 场景 / 做法；数据在 `src/data/vllm-releases.json` |
+
+正文里可以用 `==重点==` 高亮，`==重点=={批注}` 加悬停批注（批注内支持行内 markdown）；`src/data/vllm-releases.json` 的文本字段也支持同样写法。读者在任意页面选中文字即可加自己的高亮 / 批注，存在本机浏览器，右下角 ✎ 面板可导出导入。
 
 计算逻辑在 `src/lib/`，组件只负责渲染。改公式请先改 `src/lib` 并补测试。
 

@@ -18,3 +18,4 @@ title: 框架内功
 - [vLLM V1 架构与 SGLang](./vllm-v1-architecture) — EngineCore / scheduler / worker / executor 分层；RadixAttention + 前端语言
 - [服务层：异步请求、Batching 队列、Streaming、多副本路由](./serving-layer) — API server 到 engine 的边界
 - [一个 Request 的全链路](./request-lifecycle) — 从 HTTP 进来到第一个 token 出去
+- [vLLM 版本演进](./vllm-release-history) — 30 个 minor 版本、6 个阶段：每次大版本观察到的瓶颈、优化的场景、怎么做

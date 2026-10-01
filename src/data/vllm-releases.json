@@ -1,0 +1,366 @@
+{
+  "eras": [
+    {
+      "id": "2023-memory",
+      "label": "2023 · 显存与 batching",
+      "summary": "PagedAttention 解决 KV cache 碎片，continuous batching 把 decode 的 batch 做大；量化和 CUDA graph 补上显存和 launch 开销两个短板。"
+    },
+    {
+      "id": "2024h1-feature",
+      "label": "2024 上半年 · 功能扩张",
+      "summary": "prefix caching、multi-LoRA、chunked prefill、speculative decoding、PP 各自落地，各有 flag、各走代码路径，为 V1 重写埋下伏笔。"
+    },
+    {
+      "id": "2024h2-cpu",
+      "label": "2024 下半年 · CPU overhead",
+      "summary": "H100 上 8B 模型 GPU 每步不到 10 ms，Python 调度、HTTP、detokenize 成了瓶颈；进程分离、multi-step、async output 一起把 CPU 从关键路径上挪开。"
+    },
+    {
+      "id": "2025h1-v1",
+      "label": "2025 上半年 · V1 重写与 DeepSeek",
+      "summary": "V1 用 token-budget 统一调度器、独立 EngineCore 进程和零开销 prefix caching 重写核心；DeepSeek R1 把 MLA、MTP、EP/DP 推成一等公民。"
+    },
+    {
+      "id": "2025h2-v0gone",
+      "label": "2025 下半年 · V0 移除、async scheduling、DBO",
+      "summary": "V0 代码彻底删除；调度与 GPU 执行 overlap（async scheduling）、两个 microbatch 互相掩盖通信（DBO）、KV 开始往 CPU 溢出。"
+    },
+    {
+      "id": "2026-mrv2",
+      "label": "2026 · Model Runner V2、sparse MLA、分层 KV",
+      "summary": "执行层第二次重写并分步成为默认；DeepSeek V4 / Kimi K3 的 sparse attention 推动 KV 分层到主机内存、对象存储和磁盘；Fast Start 解决冷启动。"
+    }
+  ],
+  "releases": [
+    {
+      "version": "v0.1",
+      "date": "2023-06-20",
+      "headline": "PagedAttention 首发；0.1.3 切到 continuous batching",
+      "tags": ["memory", "scheduling", "kernel"],
+      "milestone": true,
+      "era": "2023-memory",
+      "observation": "博客原文：现有系统 \"waste 60% – 80% of memory due to fragmentation and over-reservation\"，KV cache 按 max_len 连续预分配，碎片和预留吃掉大半显存，batch 做不大。",
+      "scenario": "单卡高并发 serving，尤其 parallel sampling / beam search 这类多序列共享 prompt 的场景。",
+      "how": "KV 切成固定大小 block，block table 把逻辑连续映射到物理离散，浪费降到 \"under 4%\"；相同前缀的 block 用 refcount 共享，写时 copy-on-write。0.1.3 调度器改成 \"TGI-style continuous batching\"，每步重组 batch。",
+      "related": ["/inference/kv-cache-paged-attention", "/inference/batching-scheduling"],
+      "sources": ["https://vllm.ai/blog/2023-06-20-vllm", "https://github.com/vllm-project/vllm/releases/tag/v0.1.3"]
+    },
+    {
+      "version": "v0.2",
+      "date": "2023-09-28",
+      "headline": "AWQ (0.2.0) → GPTQ (0.2.6)；CUDA graph 执行；Mixtral + expert parallelism",
+      "tags": ["quantization", "kernel", "parallel", "hardware", "models"],
+      "milestone": true,
+      "era": "2023-memory",
+      "observation": "权重是显存大头，7B fp16 就要 14 GiB；decode 每步几百次 kernel launch，小 batch 下 CPU launch 开销与 GPU 计算同量级。",
+      "scenario": "显存受限的单卡部署（消费卡、A10），以及小 batch 低延迟 decode。",
+      "how": "W4A16 量化（AWQ 0.2.0、GPTQ 0.2.6）把权重压到 1/4；0.2.6 \"Fast model execution with CUDA/HIP graph\" 把 decode 整图捕获重放；0.2.1 PagedAttention V2 kernel 端到端延迟降 20%；0.2.5 Mixtral 用 expert parallelism。",
+      "related": ["/inference/quantization", "/gpu/cuda-graph-fusion"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.2.0", "https://github.com/vllm-project/vllm/releases/tag/v0.2.6"]
+    },
+    {
+      "version": "v0.3",
+      "date": "2024-01-31",
+      "headline": "Experimental multi-LoRA、experimental prefix caching、FP8 KV cache；0.3.3 Marlin kernel",
+      "tags": ["serving", "memory", "quantization", "kernel"],
+      "milestone": true,
+      "era": "2024h1-feature",
+      "observation": "多租户场景每个微调模型各占一份完整权重；长 system prompt 每个请求都重新 prefill 一遍。",
+      "scenario": "多 LoRA adapter 共享一个 base model 的服务；共享长前缀的对话和 RAG。",
+      "how": "\"Experimental multi-lora support\"：base 权重一份，adapter 按请求动态切换，用 Punica 风格的 batched GEMV；\"Experimental prefix caching support\" 手动声明前缀复用 block；FP8 KV cache 把每 token 的 KV 减半。spec decode 的第一块代码（rejection sampler）也在这版合入。",
+      "related": ["/inference/kv-cache-paged-attention", "/inference/quantization"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.3.0", "https://github.com/vllm-project/vllm/releases/tag/v0.3.3"]
+    },
+    {
+      "version": "v0.4",
+      "date": "2024-03-30",
+      "headline": "Automatic prefix caching 正式化；chunked prefill 与 spec decode 可测 (0.4.2)；Ray 可选 (0.4.3)",
+      "tags": ["memory", "scheduling", "kernel", "architecture"],
+      "milestone": true,
+      "era": "2024h1-feature",
+      "observation": "0.4.2 原文：chunked prefill \"improves inter-token latency in high load scenario\"——高负载下一个长 prompt 的 prefill 要几百毫秒，期间所有 decode 请求都在等，ITL 出现尖刺。",
+      "scenario": "长短请求混合的在线服务，TTFT 和 ITL 都有 SLA。",
+      "how": "0.4.0 automatic prefix caching 用 hash 自动识别可复用 block（`--enable-prefix-caching`）；0.4.2 chunked prefill 把 prompt 切块与 decode 混批并 \"prioritizes decode\"；spec decode 加 ngram proposer 和 logprobs；FlashInfer 成为可选 attention backend；0.4.3 MultiprocessingGPUExecutor 让单机 TP 不再依赖 Ray。",
+      "related": ["/inference/batching-scheduling", "/inference/speculative-decoding"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.4.0", "https://github.com/vllm-project/vllm/releases/tag/v0.4.2"]
+    },
+    {
+      "version": "v0.5",
+      "date": "2024-06-11",
+      "headline": "FP8 1.5x；pipeline parallelism (0.5.1)；ZMQ 分离 API server (0.5.4)；multi-step scheduling (0.5.5)",
+      "tags": ["quantization", "parallel", "serving", "scheduling"],
+      "milestone": true,
+      "era": "2024h1-feature",
+      "observation": "单机 8 卡 TP 放不下更大的模型，TP 跨机通信太贵；另一端，API server 和引擎跑在同一个进程里争 GIL，小模型高 QPS 时互相拖累。",
+      "scenario": "70B+ 多机部署；单卡小模型高 QPS。",
+      "how": "0.5.0 FP8 权重 \"1.5x boost\"；0.5.1 pipeline parallelism（`--pipeline-parallel-size`）；0.5.4 用 zeromq 把 HTTP 处理和推理循环分成两个进程，\"20% speedup over time to first token and 2x speedup over inter token latency\"；0.5.5 multi-step scheduling（`--num-scheduler-steps 8`）一次调度跑多步，8B/30B QPS +20%。",
+      "related": ["/parallel/parallelism-overview", "/framework/request-lifecycle"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.5.0", "https://github.com/vllm-project/vllm/releases/tag/v0.5.1", "https://github.com/vllm-project/vllm/releases/tag/v0.5.4", "https://github.com/vllm-project/vllm/releases/tag/v0.5.5"]
+    },
+    {
+      "version": "v0.6",
+      "date": "2024-09-04",
+      "headline": "CPU overhead 大修：8B 2.7x 吞吐 / 5x TPOT；async output processor；0.6.4 V1 refactor 启动",
+      "tags": ["architecture", "scheduling", "serving", "models"],
+      "milestone": true,
+      "era": "2024h2-cpu",
+      "observation": "博客原文：Llama 3 8B 在单张 H100 上，\"The HTTP API server takes 33% of the total execution time. 29% of the total execution time is spent on scheduling... only 38% of the time was spent on the actual GPU execution\"。",
+      "scenario": "快 GPU + 小模型：GPU 每步不到 10 ms，Python 调度、detokenize、HTTP 与之同量级。70B 只有 1.8x，模型越大 CPU 占比越低。",
+      "how": "三件事打包：API server 与引擎进程分离（ZMQ，消除 GIL 争抢）；multi-step scheduling 一次调度 N 步摊薄 CPU 开销；async output processor 把输出结构构造与下一步 GPU 执行 overlap（+12%）。另有 object caching、non-blocking H2D、简单采样 fast path。0.6.2 MQLLMEngine 再 +30%；0.6.3 block manager V2 默认；0.6.4 \"Significant progress in V1 engine core refactor\"。",
+      "related": ["/framework/request-lifecycle", "/basics/system-design-llm-serving"],
+      "sources": ["https://vllm.ai/blog/2024-09-05-perf-update", "https://github.com/vllm-project/vllm/releases/tag/v0.6.0"]
+    },
+    {
+      "version": "v0.7",
+      "date": "2025-01-27",
+      "headline": "V1 engine alpha (VLLM_USE_V1=1)；torch.compile 全面集成；DeepSeek MLA kernel (0.7.1)、MTP (0.7.3)",
+      "tags": ["architecture", "kernel", "models"],
+      "milestone": true,
+      "era": "2025h1-v1",
+      "observation": "V1 博客原文：\"Features were often developed independently, making it difficult to combine them effectively and cleanly. Over time, technical debt accumulated.\" prefill/decode 双路径、各 feature 各自 flag、CPU 开销日益突出。",
+      "scenario": "所有文本和多模态模型；文本模型 vs V0 \"up to 1.7x higher throughput\"（不开 multi-step），VLM 提升更大。",
+      "how": "独立 EngineCore 进程跑执行循环；调度器不再区分 prefill/decode，用 `{request_id: num_tokens}` 的 token budget 统一表达 chunked prefill / prefix caching / spec decode；零开销 prefix caching（0% 命中率时损耗 <1%，因此默认开）；TP worker 缓存请求状态只传 diff；persistent batch；torch.compile + piecewise CUDA graph；多模态预处理独立进程 + encoder cache。0.7.1 MLA kernel 让 DeepSeek 生成吞吐 ~3x、token 容量 ~10x；0.7.3 MTP 低 QPS 下 1.69x。",
+      "related": ["/framework/vllm-v1-architecture", "/inference/attention-variants"],
+      "sources": ["https://vllm.ai/blog/2025-01-27-v1-alpha-release", "https://github.com/vllm-project/vllm/releases/tag/v0.7.0", "https://github.com/vllm-project/vllm/releases/tag/v0.7.1"]
+    },
+    {
+      "version": "v0.8",
+      "date": "2025-03-18",
+      "headline": "V1 成为默认引擎；FlashMLA、EP/DP、MTP；KV Connector API V1 + LMCache、EAGLE-3 (0.8.5)",
+      "tags": ["architecture", "parallel", "kernel", "hardware"],
+      "milestone": true,
+      "era": "2025h1-v1",
+      "observation": "V1 补齐 structured outputs、LoRA、PP、ngram spec decode 等 V0 特性后可以翻转默认；DeepSeek R1 的 MoE + MLA 把 EP/DP 和专用 attention kernel 变成刚需。",
+      "scenario": "DeepSeek R1 级 MoE 的多卡部署；需要 KV 跨实例传输的 PD 分离和多轮缓存。",
+      "how": "\"enabled V1 engine by default\"（`VLLM_USE_V1=0` 回退）；FlashMLA 集成、MLA 进入 V1 并支持 chunked prefill；EP/TP MoE + DP attention；MTP 支持 k > n_predict；Blackwell nvfp4 CUTLASS；0.8.3 V1 原生 sliding window + hybrid memory allocator；0.8.5 KV Connector API V1、LMCache connector、EAGLE-3。",
+      "related": ["/framework/vllm-v1-architecture", "/inference/speculative-decoding"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.8.0", "https://github.com/vllm-project/vllm/releases/tag/v0.8.5"]
+    },
+    {
+      "version": "v0.9",
+      "date": "2025-05-15",
+      "headline": "PyTorch 2.7 + Blackwell；初始 DP/EP/PD 大规模推理支持；full CUDA graph；0.9.2 是 V0 最后完整版",
+      "tags": ["parallel", "hardware", "architecture"],
+      "milestone": true,
+      "era": "2025h1-v1",
+      "observation": "大规模 MoE 单机放不下也跑不满，需要 expert 跨机分布、attention 多副本、prefill/decode 分池这一整套基础设施。",
+      "scenario": "多机 DeepSeek 部署；PD 分离。",
+      "how": "\"Initial DP, EP, PD support for large scale inference\"：EP 用 PPLX kernel 并为 DeepEP 做准备，DP 解耦引擎进程管理与通信，PD 集成 NIXL 并支持多个 KV connector；V1 full CUDA graph；async TP compilation pass；0.9.1 DeepEP dispatch-combine、hybrid memory allocator 完整支持；0.9.2 EPLB、原生 xPyD P2P NCCL 传输，并声明 \"the last version where V0 engine code and features stay intact\"。",
+      "related": ["/parallel/parallelism-overview", "/inference/batching-scheduling"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.9.0", "https://github.com/vllm-project/vllm/releases/tag/v0.9.2"]
+    },
+    {
+      "version": "v0.10",
+      "date": "2025-07-24",
+      "headline": "开始清理 V0；experimental --async-scheduling；Responses API；GPT-OSS + MXFP4 (0.10.1)；DCP for MLA (0.10.2)",
+      "tags": ["architecture", "scheduling", "quantization", "hardware"],
+      "milestone": true,
+      "era": "2025h2-v0gone",
+      "observation": "V1 里 scheduler（CPU）和 model runner（GPU）仍是串行的：每步 GPU 跑完要等 CPU 调度下一步，调度期间 GPU 空闲。",
+      "scenario": "decode 密集、高 QPS 的中小模型，每步 CPU 开销占比高。",
+      "how": "`--async-scheduling` \"overlap engine core scheduling with GPU runner\"：GPU 执行第 N 步时 CPU 先调度第 N+1 步（假定每请求产 1 token），采样结果异步回填。同时 \"begins the cleanup of V0 engine codebase\"，删除 V0 CPU/XPU/TPU 后端和 spec decode worker；0.10.2 Decode Context Parallel for MLA、aarch64/GB200。",
+      "related": ["/framework/vllm-v1-architecture", "/framework/request-lifecycle"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.10.0", "https://github.com/vllm-project/vllm/releases/tag/v0.10.2"]
+    },
+    {
+      "version": "v0.11",
+      "date": "2025-10-02",
+      "headline": "V0 移除完成；FULL_AND_PIECEWISE CUDA graph 默认；CPU KV offloading；DBO；0.11.1 async scheduling 稳定",
+      "tags": ["architecture", "scheduling", "memory", "serving"],
+      "milestone": true,
+      "era": "2025h2-v0gone",
+      "observation": "DP+EP 的 MoE 部署里 DeepEP all-to-all 通信占比高，计算等通信；fine-grained MoE 的 piecewise graph 仍有大量小 kernel launch；多轮对话 KV 放不进 GPU。",
+      "scenario": "DeepSeek 类 MoE 的大规模 DP+EP 部署；长多轮会话。",
+      "how": "\"V1 is the only engine in the codebase now\"；CUDA graph 默认改为 FULL_AND_PIECEWISE，\"particularly fine-grained MoEs\"；Dual-Batch Overlap 把 batch 拆成两个 microbatch，一个做 expert 通信时另一个做计算；CPU KV offloading 带 LRU 管理；DeepGEMM 默认开；0.11.1 \"Robust async scheduling\"，修复与 chunked prefill、structured outputs、MTP、DeepEP/DCP 组合的正确性问题。",
+      "related": ["/framework/vllm-v1-architecture", "/gpu/cuda-graph-fusion", "/inference/kv-cache-paged-attention"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.11.0", "https://github.com/vllm-project/vllm/releases/tag/v0.11.1"]
+    },
+    {
+      "version": "v0.12",
+      "date": "2025-12-03",
+      "headline": "GPU Model Runner V2 实验版；Prefill Context Parallel 预备；batch-invariant BMM +18%",
+      "tags": ["architecture", "parallel", "kernel"],
+      "milestone": true,
+      "era": "2026-mrv2",
+      "observation": "release note 列出的 V1 model runner 痛点：persistent batch 需要 \"reordering\" 与复杂 bookkeeping；CPU 侧 block table 随 `max_model_len` 和 `num_kv_groups` 扩展性差；sampler 有 \"-1 temperature hack\"。",
+      "scenario": "长上下文、多 KV group 的 hybrid 模型、DP、结构化输出与 spec decode 混合的负载。",
+      "how": "\"Complete refactoring of model execution pipeline\"：移除 persistent batch 的重排逻辑，block table 常驻 GPU，Triton 原生 sampler（高效 per-request seed、省内存的 prompt logprobs），简化 DP 和 CUDA graph 路径。PCP 把 prefill 的序列维度切分，补足 DCP。",
+      "related": ["/framework/vllm-v1-architecture", "/framework/request-lifecycle"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.12.0"]
+    },
+    {
+      "version": "v0.13",
+      "date": "2025-12-19",
+      "headline": "compile_ranges 条件编译；DeepEP HT CUDA graph 默认 (+5.3%)；--attention-backend 取代 env var；Mooncake connector；GB300",
+      "tags": ["kernel", "serving", "hardware", "parallel"],
+      "milestone": false,
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.13.0"]
+    },
+    {
+      "version": "v0.14",
+      "date": "2026-01-20",
+      "headline": "Async scheduling 默认开启；gRPC server；--max-model-len auto；XBO",
+      "tags": ["scheduling", "serving", "parallel"],
+      "milestone": true,
+      "era": "2026-mrv2",
+      "observation": "async scheduling 自 0.10 实验、0.11.1 修复稳定性后，收益已不依赖用户手动调参；REST + JSON 在高并发短请求下序列化和连接开销可观。",
+      "scenario": "默认配置下的所有部署；对协议开销和接口契约敏感的内部服务。",
+      "how": "\"Async scheduling is now enabled by default\"（`--no-async-scheduling` 关闭，暂不含 PP、CPU 后端和非 MTP/Eagle 的 spec decode），并兼容 spec decode 与 structured outputs；gRPC entrypoint 提供二进制协议和 HTTP/2 多路复用；`--max-model-len auto` 按剩余显存自动定上下文长度；XBO 扩展 DBO。",
+      "related": ["/framework/request-lifecycle", "/basics/system-design-llm-serving"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.14.0"]
+    },
+    {
+      "version": "v0.15",
+      "date": "2026-01-29",
+      "headline": "Async scheduling + PP；Mamba block-aligned prefix caching (~2x)；session-based streaming input；FlashInfer MLA 为 Blackwell 默认",
+      "tags": ["scheduling", "memory", "kernel", "serving"],
+      "milestone": false,
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.15.0"]
+    },
+    {
+      "version": "v0.16",
+      "date": "2026-02-25",
+      "headline": "Async scheduling + PP 完整支持（吞吐 +30.8%）；WebSocket Realtime API；Unified Parallel Drafting；RLHF 权重同步 API",
+      "tags": ["scheduling", "parallel", "serving", "hardware"],
+      "milestone": false,
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.16.0"]
+    },
+    {
+      "version": "v0.17",
+      "date": "2026-03-07",
+      "headline": "PyTorch 2.10；FlashAttention 4 backend；MRV2 获得 PP/DCP/Eagle3 CUDA graph；Qwen3.5 (GDN)；--performance-mode；weight offloading 预取",
+      "tags": ["kernel", "architecture", "memory", "models"],
+      "milestone": false,
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.17.0"]
+    },
+    {
+      "version": "v0.18",
+      "date": "2026-03-20",
+      "headline": "vllm serve --grpc；GPU-less vllm launch render；NGram spec decode 上 GPU 并兼容 async scheduler；smart CPU offloading + FlexKV；Ray 不再默认依赖",
+      "tags": ["serving", "scheduling", "memory"],
+      "milestone": false,
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.18.0"]
+    },
+    {
+      "version": "v0.19",
+      "date": "2026-04-03",
+      "headline": "Gemma 4；zero-bubble async scheduling + spec decode；ViT full CUDA graph；通用 CPU KV offloading（可插拔策略）；DBO 泛化到一般模型",
+      "tags": ["scheduling", "memory", "kernel", "models"],
+      "milestone": false,
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.19.0"]
+    },
+    {
+      "version": "v0.20",
+      "date": "2026-04-27",
+      "headline": "DeepSeek V4 初始支持；CUDA 13 + PyTorch 2.11 默认；FA4 成为 MLA prefill 默认；TurboQuant 2-bit KV cache；vLLM IR 骨架",
+      "tags": ["models", "kernel", "memory", "architecture", "hardware"],
+      "milestone": true,
+      "era": "2026-mrv2",
+      "observation": "DeepSeek V4 的 DSA（sparse attention）+ MTP + MegaMoE 让 attention 不再是「对全部 KV 做 dense 计算」，现有 MLA 路径和 KV 布局都不够用；超长上下文下 KV 容量仍是硬约束。",
+      "scenario": "DeepSeek V4 这类 sparse-MLA MoE 的超长上下文 decode。",
+      "how": "0.20 初始模型支持与 DSML token 泄漏修复；FlashAttention 4 重新成为 MLA prefill 默认（head-dim 512 + paged KV）；TurboQuant 2-bit KV cache 把容量提到 4x；vLLM IR 以 rms_norm 起步，为后续 kernel 工作打底。后续 0.22 独立 `deepseek_v4` 包与融合 kernel（MegaMoE、indexer、sparse MLA）、0.23 sparse MLA metadata 与 V3.2 解耦、0.28 sparse MLA 对 decode/MTP/DSpark 端到端打通。",
+      "related": ["/inference/attention-variants", "/inference/memory-accounting"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.20.0", "https://github.com/vllm-project/vllm/releases/tag/v0.22.0", "https://github.com/vllm-project/vllm/releases/tag/v0.28.0"]
+    },
+    {
+      "version": "v0.21",
+      "date": "2026-05-15",
+      "headline": "transformers v4 弃用、C++20 要求；KV offload + Hybrid Memory Allocator；spec decode 尊重 thinking budget；TOKENSPEED_MLA (Blackwell)",
+      "tags": ["memory", "kernel", "scheduling"],
+      "milestone": false,
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.21.0"]
+    },
+    {
+      "version": "v0.22",
+      "date": "2026-05-29",
+      "headline": "DeepSeek V4 hardening；MRV2 成为 Qwen3 dense 默认；experimental Rust frontend；multi-tier KV cache offloading 框架",
+      "tags": ["models", "architecture", "serving", "memory"],
+      "milestone": true,
+      "era": "2026-mrv2",
+      "observation": "0.11 的 CPU offloading 只有一层：主机内存满了就没有下一级；多轮对话、长 system prompt 和 PD 分离场景的 KV 总量远超单机 GPU + CPU 内存。",
+      "scenario": "多轮 agent 会话、共享长前缀的 RAG、跨实例复用 KV 的 PD 分离集群。",
+      "how": "\"A new multi-tier KV cache offloading framework\" 把 offload 抽象成可插拔的多级 tier，首发 Python 文件系统二级 tier 和 Mooncake 磁盘 offloading，\"extends offloading beyond CPU memory\"。后续 0.23 object-store tier、HMA 对 connector 默认开、per-request offloading 策略；0.28 disk offloading、树外 secondary tier manager；0.30 HiSparse 把 sparse-MLA 的 KV 页溢出到 pinned host memory。同版 MRV2 对 Qwen3 dense 默认开启，不支持的特性回退 MRV1。",
+      "related": ["/inference/kv-cache-paged-attention", "/inference/batching-scheduling"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.22.0", "https://github.com/vllm-project/vllm/releases/tag/v0.23.0", "https://github.com/vllm-project/vllm/releases/tag/v0.28.0"]
+    },
+    {
+      "version": "v0.23",
+      "date": "2026-06-15",
+      "headline": "MRV2 默认扩展到 Llama/Mistral dense；DSV4 sparse MLA metadata 解耦、TRTLLM-gen kernel；object-store KV tier；统一 Parser.parse()",
+      "tags": ["architecture", "kernel", "memory", "serving"],
+      "milestone": false,
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.23.0"]
+    },
+    {
+      "version": "v0.24",
+      "date": "2026-06-29",
+      "headline": "MiniMax-M3；MRV2 默认支持量化模型；Streaming Parser Engine；DiffusionGemma；DeepEP v2 (WideEP)；不再内部设置 CUDA_VISIBLE_DEVICES",
+      "tags": ["models", "architecture", "parallel", "serving"],
+      "milestone": false,
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.24.0"]
+    },
+    {
+      "version": "v0.25",
+      "date": "2026-07-11",
+      "headline": "MRV2 成为所有 dense 模型默认；legacy PagedAttention kernel 删除；Transformers backend 追平原生速度；TLI 异构词表 spec decode",
+      "tags": ["architecture", "kernel", "models"],
+      "milestone": true,
+      "era": "2026-mrv2",
+      "observation": "V1 早已通过 FlashAttention / FlashInfer / Triton 等 backend 做 paged attention，自研的 PagedAttention V1/V2 kernel 只剩 V0 遗留路径在用；MRV2 覆盖量化模型后已是所有 dense 模型的标准路径。",
+      "scenario": "所有 dense 模型的默认执行路径；维护成本而非性能驱动。",
+      "how": "\"Model Runner V2 is now the default for all dense models\"；\"PagedAttention has been removed\"，\"The legacy attention implementation is deleted now that V1/MRv2 backends are the standard path\"——PagedAttention 的思想留在 block table 里，kernel 由各 attention backend 实现。Transformers 建模后端 \"as fast as native vLLM\"；TLI 让 draft 和 target 可以用不同词表。",
+      "related": ["/inference/kv-cache-paged-attention", "/framework/add-model-vllm-sglang"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.25.0"]
+    },
+    {
+      "version": "v0.26",
+      "date": "2026-07-27",
+      "headline": "Inkling 模型族；DSV4 kernel 优化；fp32 lm_head via head_dtype；attention backend 可按 KV-cache group 选择；KV offloading 指标与对象存储 tier 成熟",
+      "tags": ["models", "kernel", "memory", "architecture"],
+      "milestone": false,
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.26.0"]
+    },
+    {
+      "version": "v0.27",
+      "date": "2026-08-10",
+      "headline": "Kimi K3 全栈落地；PyTorch 2.13；FA4 on SM100 FP8 KV cache；MRV2 扩展到 encoder/pooling；DP+EP 容错框架；sm_107 Rubin 早期启用",
+      "tags": ["models", "kernel", "architecture", "hardware"],
+      "milestone": false,
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.27.0"]
+    },
+    {
+      "version": "v0.28",
+      "date": "2026-08-26",
+      "headline": "Kimi-K3 性能冲刺（DCP、FlashKDA）；DSV4 sparse MLA 端到端；DFlash2；MRV2 E/P/D 分离；tiered KV offloading 支持 disk；max_num_batched_tokens 8192→16384",
+      "tags": ["kernel", "scheduling", "memory", "architecture"],
+      "milestone": false,
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.28.0"]
+    },
+    {
+      "version": "v0.29",
+      "date": "2026-09-09",
+      "headline": "MRV2 成为所有模型默认，MRV1 标记 deprecated（目标 v0.32 删除）；Hy4-preview、Qwen3.8-Flash-Next；Mamba prefix checkpoints；FlashInfer all-reduce 默认",
+      "tags": ["architecture", "models", "memory", "parallel"],
+      "milestone": true,
+      "era": "2026-mrv2",
+      "observation": "MRV2 从 0.12 实验版起经 Qwen3 dense (0.22) → Llama/Mistral (0.23) → 量化模型 (0.24) → 所有 dense (0.25) → pooling 分步验证，剩余缺口已收敛到少数 ROCm 模型和特性。",
+      "scenario": "所有模型的默认执行路径；MRV1 只为 sequence parallelism、DBO、elastic EP、自定义 logits processor 等少数未迁移特性保留。",
+      "how": "\"Model Runner V2 is now the default for all models\"，并引入 batch-sharded sampling 把每步 logits 内存降到 1/TP；\"we are considering Model Runner V1 deprecated and are targeting v0.32 for its removal\"。同版 Mamba 内部 prefill checkpoint 让 TTFT 降 9–25%，新增 `--max-num-queued-reqs` 准入控制。",
+      "related": ["/framework/vllm-v1-architecture", "/inference/batching-scheduling"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.29.0"]
+    },
+    {
+      "version": "v0.30",
+      "date": "2026-09-22",
+      "headline": "DeepSeek-V4.1-Flash（MXFP8 KV）；Fast Start 权重缓存 daemon；Gumbel-max watermarking；HiSparse host-resident sparse-MLA tier；MRV2 支持 DBO 与 PP 下 spec decode",
+      "tags": ["models", "memory", "serving", "architecture"],
+      "milestone": true,
+      "era": "2026-mrv2",
+      "observation": "引擎每次重启都要从磁盘重新加载权重、再做一遍量化和 TP 切分，大模型冷启动以分钟计；RL rollout 和滚动升级会频繁重建引擎。",
+      "scenario": "频繁重启或滚动升级的生产集群、RL 训练中反复重建的 rollout 引擎、FP4 与多机 TP 的大模型部署。",
+      "how": "\"a persistent per-GPU weight-cache daemon holds post-quantized, TP-sharded weights in GPU memory so restarting engines map them over CUDA IPC with `--load-format ipc_cache` instead of reloading from disk\"，覆盖 FP4 checkpoint 与 multi-node TP。同版 HiSparse 为 sparse-MLA decode 把 KV 页溢出到 pinned host memory、top-k miss 由每请求 GPU hot buffer 服务；CUDA graph 捕获期间冻结 gc，H200 上引擎初始化从 28.9 s 降到 8.2 s。",
+      "related": ["/inference/memory-accounting", "/framework/request-lifecycle"],
+      "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.30.0"]
+    }
+  ]
+}
