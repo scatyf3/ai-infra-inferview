@@ -55,3 +55,18 @@ describe('leetgpu', () => {
     expect(urlOf(challengeById.get(50)!)).toBe('https://leetgpu.com/challenges/rms-normalization')
   })
 })
+
+describe('leetgpu roadmap', () => {
+  it('题号都在清单里、组内不重复、impl 非空', async () => {
+    const { roadmap } = await import('@data/leetgpu-roadmap')
+    for (const stage of roadmap)
+      for (const g of stage.groups) {
+        const ids = g.items.map((i) => i.id)
+        expect(new Set(ids).size, g.key).toBe(ids.length)
+        for (const it of g.items) {
+          expect(challengeById.has(it.id), `${g.key} #${it.id}`).toBe(true)
+          expect(it.impl.length, `${g.key} #${it.id}`).toBeGreaterThan(0)
+        }
+      }
+  })
+})

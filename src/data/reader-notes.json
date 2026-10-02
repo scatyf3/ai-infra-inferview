@@ -1,1 +1,12 @@
-{}
+{
+  "/ai-infra-inferview/handson/torch-primitives": [
+    {
+      "id": "murkt2qtx8ou",
+      "exact": "比如 transpose 后把 (N, h, dk) 合成 (N, d_model)，h 和 dk 在内存里已经不相邻",
+      "prefix": "e + stride。现有内存排列表达不成目标 shape 时（",
+      "suffix": "），只能报 \"view size is not compatib",
+      "note": "",
+      "created": 1790982615845
+    }
+  ]
+}

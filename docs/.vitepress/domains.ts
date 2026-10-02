@@ -15,6 +15,7 @@ export const domains: Domain[] = [
   { dir: 'posttrain', label: 'Post-train / Efficient', short: '训练', color: '#ec4899', order: 5 },
   { dir: 'basics', label: '基础不能挂', short: '基础', color: '#64748b', order: 6 },
   { dir: 'handson', label: '手撕高频', short: '手撕', color: '#eab308', order: 7 },
+  { dir: 'leetgpu', label: 'LeetGPU 题解', short: 'LeetGPU', color: '#06b6d4', order: 8 },
 ]
 
 export const domainByDir = Object.fromEntries(domains.map((d) => [d.dir, d])) as Record<string, Domain>

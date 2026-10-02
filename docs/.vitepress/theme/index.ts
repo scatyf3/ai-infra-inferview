@@ -7,6 +7,8 @@ import ParallelismViz from './components/ParallelismViz.vue'
 import PagedKV from './components/PagedKV.vue'
 import ReleaseTimeline from './components/ReleaseTimeline.vue'
 import HandsonProgress from './components/HandsonProgress.vue'
+import LeetGPUBoard from './components/LeetGPUBoard.vue'
+import LeetGPURoadmap from './components/LeetGPURoadmap.vue'
 import StackFigure from './components/StackFigure.vue'
 import RoadmapFigure from './components/RoadmapFigure.vue'
 import StackPageExtras from './components/StackPageExtras.vue'
@@ -29,6 +31,8 @@ export default {
     app.component('PagedKV', PagedKV)
     app.component('ReleaseTimeline', ReleaseTimeline)
     app.component('HandsonProgress', HandsonProgress)
+    app.component('LeetGPUBoard', LeetGPUBoard)
+    app.component('LeetGPURoadmap', LeetGPURoadmap)
     app.component('StackFigure', StackFigure)
     app.component('RoadmapFigure', RoadmapFigure)
   },

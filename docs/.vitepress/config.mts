@@ -26,6 +26,7 @@ export default defineConfig({
       { text: '并行', link: '/parallel/' },
       { text: '框架', link: '/framework/' },
       { text: '手撕', link: '/handson/' },
+      { text: 'LeetGPU', link: '/leetgpu/' },
     ],
     sidebar: buildSidebar(),
     search: { provider: 'local', options: { detailedView: true } },

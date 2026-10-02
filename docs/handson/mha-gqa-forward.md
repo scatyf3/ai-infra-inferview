@@ -93,11 +93,7 @@ out = F.scaled_dot_product_attention(
 
 ### 常见错误
 
-1. **忘了 `contiguous()`**：`transpose` 只改 stride，`view` 会报 "view size is not compatible"。用 `reshape` 可以绕过但会隐式拷贝。
-2. **mask 加错方向**：causal mask 是 `triu(1)`（严格上三角为 -inf），`triu(0)` 会把对角线也 mask 掉，token 看不到自己。
-3. **softmax 在 fp16 下溢出**：score 最大值可能到几十，`exp` 之后超过 fp16 的 65504。转 fp32 再 softmax，或者依赖 kernel 内部的 max-subtraction。
-4. **缩放用错**：除的是 $\sqrt{d_h}$（单 head 维度）不是 $\sqrt{d}$。
-5. **GQA 的 repeat 方向**：必须是 `repeat_interleave` 的语义（同组的 Q head 相邻），不是 `repeat`（整体重复）。写成后者时 head 和 KV 的对应关系全错，但 loss 还能降，很难查。
+LeetGPU 上 MHA / GQA 两道题的题解和踩坑单独整理在 [LeetGPU · Multi-Head Attention](/leetgpu/multi-head-attention) 和 [LeetGPU · Grouped Query Attention](/leetgpu/grouped-query-attention)。
 
 ## 面试追问
 

@@ -19,7 +19,7 @@ interface Card extends Topic { oj: LeetGPUChallenge[] }
 
 const items = computed<Card[]>(() =>
   topics
-    .filter((t) => t.domain === 'handson' && !t.isIndex)
+    .filter((t) => t.domain === 'handson' && !t.isIndex && !t.tags.includes('guide'))
     .map((t) => ({ ...t, oj: t.leetgpu.map((id) => challengeById.get(id)!) })),
 )
 
