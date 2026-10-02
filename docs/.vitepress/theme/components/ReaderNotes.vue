@@ -2,10 +2,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onContentUpdated, useRoute } from 'vitepress'
 import { locateQuote, makeQuote, type TextQuote } from '@lib/annotate'
+import bundled from '@data/reader-notes.json'
 
 /**
  * 读者侧划词高亮 + 批注。选中正文 → 浮动工具条；点高亮 → 编辑批注；右下角按钮看本页笔记、导入导出。
- * 数据只存在本机 localStorage，用文本锚点（原文 + 前后文）定位，文档小改后仍能找回。
+ * 用文本锚点（原文 + 前后文）定位，文档小改后仍能找回。
+ * 存储：dev 时读写仓库里的 src/data/reader-notes.json（见 readerNotesStore.ts），随 git 跨设备同步；
+ * 线上该文件打包进站点只读，本机新增/修改存 localStorage，按 id 覆盖文件里的。
  * 交互 widget（.widget）里的 DOM 由 Vue 管理，不往里插 mark。
  */
 
@@ -17,6 +20,7 @@ interface Note extends TextQuote {
 type Store = Record<string, Note[]>
 
 const KEY = 'inferview:reader-notes:v1'
+const ENDPOINT = '/__reader-notes'
 const ROOT = '.vp-doc'
 const SKIP = '.widget, .rn-ui, .anno-note, .header-anchor, script, style'
 
@@ -24,6 +28,8 @@ const route = useRoute()
 const ready = ref(false)
 const hasDoc = ref(false)
 const store = ref<Store>({})
+// 是否以仓库文件为数据源（dev 且 dev server 可达）
+const fileMode = ref(import.meta.env.DEV)
 const orphans = ref<Set<string>>(new Set())
 const order = ref<string[]>([])
 
@@ -34,7 +40,7 @@ const sortedNotes = computed(() => {
 })
 
 // ---------- 持久化 ----------
-function load(): Store {
+function loadLocal(): Store {
   try {
     return JSON.parse(localStorage.getItem(KEY) || '{}')
   } catch {
@@ -42,10 +48,67 @@ function load(): Store {
   }
 }
 
-function persist() {
+function saveLocal(s: Store) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(store.value))
+    localStorage.setItem(KEY, JSON.stringify(s))
   } catch {}
+}
+
+/** 按 id 合并，over 覆盖 base；顺带丢掉格式不对的条目 */
+function merge(base: Store, over: Store): Store {
+  const out: Store = { ...base }
+  for (const [path, list] of Object.entries(over)) {
+    if (!Array.isArray(list)) continue
+    const byId = new Map((out[path] ?? []).map((n) => [n.id, n]))
+    for (const n of list) if (n?.id && typeof n.exact === 'string') byId.set(n.id, n)
+    out[path] = [...byId.values()]
+  }
+  return out
+}
+
+async function putFile(s: Store) {
+  const res = await fetch(ENDPOINT, { method: 'PUT', body: JSON.stringify(s) })
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
+}
+
+async function load(): Promise<Store> {
+  if (!fileMode.value) return merge(bundled as Store, loadLocal())
+  try {
+    const res = await fetch(ENDPOINT)
+    if (!res.ok) throw new Error(`${res.status}`)
+    const file = (await res.json()) as Store
+    // 浏览器里的旧笔记（或之前写文件失败暂存的）并入文件，成功后清掉本地副本
+    const local = loadLocal()
+    if (!Object.keys(local).length) return file
+    const merged = merge(file, local)
+    await putFile(merged)
+    localStorage.removeItem(KEY)
+    return merged
+  } catch (e) {
+    console.error('[reader-notes] 读不到笔记文件，退回 localStorage', e)
+    fileMode.value = false
+    return merge(bundled as Store, loadLocal())
+  }
+}
+
+// 写文件串行，保证落盘顺序和操作顺序一致
+let saving: Promise<void> = Promise.resolve()
+
+function persist() {
+  const snapshot = store.value
+  if (!fileMode.value) return saveLocal(snapshot)
+  saving = saving
+    .then(() => putFile(snapshot))
+    .catch((e) => {
+      console.error('[reader-notes] 写笔记文件失败，暂存到 localStorage', e)
+      saveLocal(snapshot)
+    })
+}
+
+async function reload() {
+  await saving
+  store.value = await load()
+  applyAll()
 }
 
 function setNotes(list: Note[]) {
@@ -257,15 +320,7 @@ async function importFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
   try {
-    const incoming = JSON.parse(await file.text()) as Store
-    const next = { ...store.value }
-    for (const [path, list] of Object.entries(incoming)) {
-      if (!Array.isArray(list)) continue
-      const byId = new Map((next[path] ?? []).map((n) => [n.id, n]))
-      for (const n of list) if (n?.id && typeof n.exact === 'string') byId.set(n.id, n)
-      next[path] = [...byId.values()]
-    }
-    store.value = next
+    store.value = merge(store.value, JSON.parse(await file.text()) as Store)
     persist()
     applyAll()
   } catch {
@@ -283,9 +338,13 @@ function clearPage() {
 
 // ---------- 生命周期 ----------
 function onStorage(e: StorageEvent) {
-  if (e.key !== KEY) return
-  store.value = load()
-  applyAll()
+  if (e.key !== KEY || fileMode.value) return
+  reload()
+}
+
+// 文件模式下回到窗口就重读：其他标签页的修改、git pull 进来的笔记都会生效
+function onFocus() {
+  if (fileMode.value && !editing.value) reload()
 }
 
 onContentUpdated(() => {
@@ -294,14 +353,15 @@ onContentUpdated(() => {
   nextTick(applyAll)
 })
 
-onMounted(() => {
-  store.value = load()
-  ready.value = true
-  applyAll()
+onMounted(async () => {
   document.addEventListener('mouseup', onSelectionEnd)
   document.addEventListener('keyup', onSelectionEnd)
   document.addEventListener('click', onDocClick)
   window.addEventListener('storage', onStorage)
+  window.addEventListener('focus', onFocus)
+  store.value = await load()
+  ready.value = true
+  applyAll()
 })
 
 onBeforeUnmount(() => {
@@ -309,6 +369,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('keyup', onSelectionEnd)
   document.removeEventListener('click', onDocClick)
   window.removeEventListener('storage', onStorage)
+  window.removeEventListener('focus', onFocus)
 })
 </script>
 
@@ -355,7 +416,11 @@ onBeforeUnmount(() => {
       <aside v-if="panelOpen" class="rn-ui rn-panel">
         <header>
           <b>本页笔记</b>
-          <span class="rn-muted">选中正文即可高亮 / 批注，仅保存在本浏览器</span>
+          <span class="rn-muted">
+            选中正文即可高亮 / 批注，{{
+              fileMode ? '自动写入 src/data/reader-notes.json，提交到 git 即可同步' : '新增内容仅保存在本浏览器'
+            }}
+          </span>
         </header>
         <p v-if="!notes.length" class="rn-muted rn-empty">还没有高亮。</p>
         <ol v-else>

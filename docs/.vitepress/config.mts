@@ -2,6 +2,7 @@ import { defineConfig } from 'vitepress'
 import { fileURLToPath } from 'node:url'
 import { buildSidebar } from './sidebar'
 import { markPlugin } from './markdown/mark'
+import { readerNotesStore } from './readerNotesStore'
 
 export default defineConfig({
   lang: 'zh-CN',
@@ -37,6 +38,7 @@ export default defineConfig({
     socialLinks: [{ icon: 'github', link: 'https://github.com/scatyf3/ai-infra-inferview' }],
   },
   vite: {
+    plugins: [readerNotesStore()],
     resolve: {
       alias: {
         '@lib': fileURLToPath(new URL('../../src/lib', import.meta.url)),
