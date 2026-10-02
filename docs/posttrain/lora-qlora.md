@@ -5,6 +5,7 @@ tags: [lora, qlora]
 difficulty: 3
 order: 2
 related: []
+stack: [f-runner]
 ---
 
 # LoRA / QLoRA 原理与显存账

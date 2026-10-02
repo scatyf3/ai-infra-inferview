@@ -5,6 +5,7 @@ tags: [kv-cache, paged-attention, prefix-caching]
 difficulty: 4
 order: 3
 related: [/inference/memory-accounting, /inference/batching-scheduling, /framework/vllm-v1-architecture]
+stack: [kv-paged, kv-prefix, kv-quant]
 ---
 
 # KV Cache 与 PagedAttention

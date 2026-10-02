@@ -10,6 +10,12 @@ title: 手撕高频
 面试官真正在考的是：你是否真的写过这些东西，能否边写边解释每一行为什么这样写。
 :::
 
+## 进度
+
+左边方块是**熟练度**（各题 frontmatter 的 `familiarity`，0 最熟 → 4 不会，不写 = 未评，阶梯和隔壁 leetcode 看板同一套），小标签直达 LeetGPU 对应的题（`leetgpu: [题号]`）。练完一遍改一下 `familiarity` 就会自动更新。
+
+<HandsonProgress />
+
 ## 本领域主题
 
 - [手写 MHA / GQA Forward](./mha-gqa-forward) — shape 与 mask 处理

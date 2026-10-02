@@ -5,6 +5,7 @@ tags: [scheduler, batching, pd-disaggregation]
 difficulty: 4
 order: 6
 related: [/inference/prefill-decode-roofline, /inference/kv-cache-paged-attention, /framework/request-lifecycle]
+stack: [s-cb, s-chunked, s-preempt, d-pd]
 ---
 
 # Continuous Batching、Chunked Prefill 与 PD 分离

@@ -5,6 +5,7 @@ tags: [attention, gqa, mla]
 difficulty: 3
 order: 4
 related: [/inference/memory-accounting, /inference/kv-cache-paged-attention, /handson/mha-gqa-forward]
+stack: [f-model]
 ---
 
 # Attention 变体：MHA / MQA / GQA / MLA

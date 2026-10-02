@@ -5,6 +5,7 @@ tags: [lifecycle, end-to-end]
 difficulty: 4
 order: 6
 related: [/framework/vllm-v1-architecture, /inference/batching-scheduling, /basics/system-design-llm-serving]
+stack: [3, 4, 5, 7, 8]
 ---
 
 # 一个 Request 的全链路

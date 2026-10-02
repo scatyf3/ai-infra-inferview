@@ -5,6 +5,7 @@ tags: [speculative-decoding, eagle, mtp]
 difficulty: 4
 order: 7
 related: [/inference/prefill-decode-roofline, /inference/metrics-benchmark]
+stack: [f-runner, o-sampling]
 ---
 
 # Speculative Decoding

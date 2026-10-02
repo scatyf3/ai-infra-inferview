@@ -5,6 +5,7 @@ tags: [memory, kv-cache]
 difficulty: 3
 order: 2
 related: [/inference/prefill-decode-roofline, /inference/attention-variants, /parallel/parallelism-overview]
+stack: [ld-dtype, 4]
 ---
 
 # 显存账：权重 / KV cache / 激活

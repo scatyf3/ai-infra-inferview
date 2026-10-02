@@ -5,6 +5,8 @@ tags: [softmax, numerics, handson]
 difficulty: 2
 order: 3
 related: [/handson/triton-softmax, /inference/flash-attention, /handson/mha-gqa-forward]
+stack: [k-attn]
+leetgpu: [5]
 ---
 
 # 数值稳定 Softmax

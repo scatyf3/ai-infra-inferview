@@ -5,6 +5,7 @@ tags: [distillation, pruning, kv-pruning]
 difficulty: 3
 order: 6
 related: []
+stack: [4]
 ---
 
 # 蒸馏、剪枝、稀疏（含 KV Pruning）

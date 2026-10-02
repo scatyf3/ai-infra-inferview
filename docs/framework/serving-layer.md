@@ -5,6 +5,7 @@ tags: [serving, asyncio, routing]
 difficulty: 3
 order: 5
 related: []
+stack: [sv-api, sv-stream, d-route]
 ---
 
 # 服务层：异步请求、Batching 队列、Streaming、多副本路由

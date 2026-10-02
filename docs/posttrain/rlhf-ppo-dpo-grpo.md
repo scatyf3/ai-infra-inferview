@@ -5,6 +5,7 @@ tags: [rlhf, ppo, dpo, grpo]
 difficulty: 4
 order: 3
 related: []
+stack: []
 ---
 
 # RLHF 全家桶：PPO / DPO / GRPO

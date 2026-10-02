@@ -5,6 +5,8 @@ tags: [kv-cache, decode, handson]
 difficulty: 3
 order: 2
 related: [/handson/mha-gqa-forward, /inference/kv-cache-paged-attention, /inference/memory-accounting]
+stack: [f-model, 4]
+leetgpu: [115]
 ---
 
 # 带 KV Cache 的 Decode Step

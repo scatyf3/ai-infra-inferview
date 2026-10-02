@@ -5,6 +5,7 @@ tags: [tp, megatron]
 difficulty: 3
 order: 2
 related: [/parallel/parallelism-overview, /parallel/collective-comm, /inference/memory-accounting]
+stack: [d-intra]
 ---
 
 # Megatron Tensor Parallel

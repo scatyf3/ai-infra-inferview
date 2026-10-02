@@ -5,6 +5,7 @@ tags: [nccl, all-reduce, nvlink]
 difficulty: 3
 order: 4
 related: []
+stack: [d-comm, hw-link]
 ---
 
 # 集合通信原语与 NCCL

@@ -5,6 +5,7 @@ tags: [torch-compile, dynamo, inductor]
 difficulty: 4
 order: 2
 related: []
+stack: [f-graph]
 ---
 
 # torch.compile：Dynamo / AOTAutograd / Inductor

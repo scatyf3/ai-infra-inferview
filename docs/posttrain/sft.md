@@ -5,6 +5,7 @@ tags: [sft, packing]
 difficulty: 2
 order: 1
 related: []
+stack: []
 ---
 
 # SFT：Packing、Loss Mask、长上下文

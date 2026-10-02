@@ -5,6 +5,7 @@ tags: [overlap]
 difficulty: 3
 order: 6
 related: []
+stack: [d-comm]
 ---
 
 # 计算通信 Overlap

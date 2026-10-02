@@ -5,6 +5,7 @@ tags: [rl-infra, verl, openrlhf]
 difficulty: 4
 order: 4
 related: []
+stack: [ld-load]
 ---
 
 # RL Infra：Rollout 与 Training 分离

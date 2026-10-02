@@ -5,6 +5,7 @@ tags: [vllm, release-history, architecture, scheduler]
 difficulty: 3
 order: 7
 related: [/framework/vllm-v1-architecture, /framework/request-lifecycle, /inference/kv-cache-paged-attention, /inference/batching-scheduling]
+stack: []
 ---
 
 # vLLM 版本演进

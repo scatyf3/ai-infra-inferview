@@ -5,6 +5,7 @@ tags: [tensor-core, gemm]
 difficulty: 3
 order: 2
 related: []
+stack: [k-gemm, hw-gpu]
 ---
 
 # Tensor Core 与 GEMM Tiling

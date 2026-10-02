@@ -5,6 +5,8 @@ tags: [triton, softmax, handson]
 difficulty: 3
 order: 7
 related: []
+stack: [k-lang, k-fused]
+leetgpu: [5]
 ---
 
 # Triton 版 Softmax

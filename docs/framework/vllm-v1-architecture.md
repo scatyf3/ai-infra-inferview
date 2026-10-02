@@ -5,6 +5,7 @@ tags: [vllm, sglang, architecture]
 difficulty: 4
 order: 4
 related: []
+stack: [f-runner, s-cb, kv-prefix, sv-api]
 ---
 
 # vLLM V1 架构与 SGLang

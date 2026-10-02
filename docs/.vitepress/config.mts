@@ -21,7 +21,7 @@ export default defineConfig({
   },
   themeConfig: {
     nav: [
-      { text: '知识图谱', link: '/' },
+      { text: '首页', link: '/' },
       { text: '推理', link: '/inference/' },
       { text: '并行', link: '/parallel/' },
       { text: '框架', link: '/framework/' },

@@ -5,6 +5,7 @@ tags: [profiling, nsys, ncu]
 difficulty: 2
 order: 5
 related: []
+stack: [k-lang]
 ---
 
 # Profiling：nsys / ncu / torch profiler

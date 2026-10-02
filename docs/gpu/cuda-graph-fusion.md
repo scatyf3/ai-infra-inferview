@@ -5,6 +5,7 @@ tags: [cuda-graph, fusion]
 difficulty: 3
 order: 4
 related: []
+stack: [f-graph, k-fused]
 ---
 
 # CUDA Graph 与 Kernel Fusion

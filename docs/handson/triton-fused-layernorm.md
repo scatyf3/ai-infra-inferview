@@ -5,6 +5,8 @@ tags: [triton, layernorm, handson]
 difficulty: 3
 order: 8
 related: []
+stack: [k-fused, k-lang]
+leetgpu: [113]
 ---
 
 # Triton 版 Fused LayerNorm

@@ -5,6 +5,8 @@ tags: [beam-search, handson]
 difficulty: 2
 order: 6
 related: []
+stack: [o-sampling]
+leetgpu: [98]
 ---
 
 # Simple Beam Search

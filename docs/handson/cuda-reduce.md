@@ -5,6 +5,8 @@ tags: [cuda, reduce, handson]
 difficulty: 3
 order: 9
 related: []
+stack: [k-lang]
+leetgpu: [4]
 ---
 
 # CUDA Reduce

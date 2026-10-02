@@ -5,6 +5,8 @@ tags: [rmsnorm, handson]
 difficulty: 2
 order: 4
 related: []
+stack: [k-fused]
+leetgpu: [50, 83]
 ---
 
 # RMSNorm

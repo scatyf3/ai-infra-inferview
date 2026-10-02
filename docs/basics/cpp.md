@@ -5,6 +5,7 @@ tags: [cpp, raii]
 difficulty: 2
 order: 2
 related: []
+stack: []
 ---
 
 # C++：RAII、智能指针、移动语义、虚函数表

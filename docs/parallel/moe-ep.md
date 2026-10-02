@@ -5,6 +5,7 @@ tags: [moe, ep, all-to-all]
 difficulty: 4
 order: 5
 related: []
+stack: [d-intra, f-model]
 ---
 
 # MoE 与 Expert Parallel

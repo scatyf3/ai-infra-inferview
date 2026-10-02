@@ -5,6 +5,7 @@ tags: [flash-attention, kernel]
 difficulty: 4
 order: 5
 related: []
+stack: [k-attn]
 ---
 
 # FlashAttention v1 / v2 / v3

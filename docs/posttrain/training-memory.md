@@ -5,6 +5,7 @@ tags: [mixed-precision, checkpointing, optimizer]
 difficulty: 3
 order: 5
 related: []
+stack: []
 ---
 
 # 混合精度、Grad Checkpointing 与优化器状态显存账

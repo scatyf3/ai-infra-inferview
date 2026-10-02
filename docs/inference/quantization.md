@@ -5,6 +5,7 @@ tags: [quantization, fp8]
 difficulty: 3
 order: 8
 related: []
+stack: [ld-format, ld-dtype, k-gemm]
 ---
 
 # 量化：GPTQ / AWQ / SmoothQuant / FP8

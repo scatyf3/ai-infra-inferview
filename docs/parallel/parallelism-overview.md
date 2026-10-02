@@ -5,6 +5,7 @@ tags: [tp, pp, dp, ep, sp]
 difficulty: 3
 order: 1
 related: [/parallel/megatron-tp, /parallel/collective-comm, /inference/memory-accounting]
+stack: [d-intra]
 ---
 
 # TP / PP / DP / EP / SP / CP 总览

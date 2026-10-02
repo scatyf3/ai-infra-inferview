@@ -5,6 +5,7 @@ tags: [roofline, arithmetic-intensity]
 difficulty: 3
 order: 1
 related: [/inference/memory-accounting, /inference/batching-scheduling, /gpu/tensor-core-gemm]
+stack: [hw-mem, k-gemm]
 ---
 
 # Prefill vs Decode 与 Roofline

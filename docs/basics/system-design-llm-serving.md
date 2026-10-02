@@ -5,6 +5,7 @@ tags: [system-design, serving]
 difficulty: 4
 order: 4
 related: [/inference/batching-scheduling, /framework/request-lifecycle, /inference/metrics-benchmark]
+stack: [d-route, d-scale, sv-sla, sv-ft]
 ---
 
 # 系统设计：设计一个 LLM 推理服务

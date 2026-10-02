@@ -5,6 +5,10 @@ tags: []
 difficulty: 3           # 1–5
 order: 99
 related: []             # 绝对路径，不含 base，如 /inference/memory-accounting
+stack: []               # 分层图位置：小主题 id（如 kv-paged）或整层号（0–8），见 docs/.vitepress/layers.ts；空 = 不在图上
+# 手撕题才需要下面两项：
+# familiarity: 3        # 0 | 1 | 1.5 | 2 | 3 | 3.5 | 4（0 最熟），不写 = 未评
+# leetgpu: [5]          # LeetGPU 题号，见 src/data/leetgpu-challenges.json
 ---
 
 # {{ $frontmatter.title }}

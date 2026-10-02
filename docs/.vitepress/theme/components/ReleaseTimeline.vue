@@ -33,7 +33,7 @@ const activeGroup = ref<FilterGroup | 'all'>(props.group)
 const milestoneOnly = ref(props.onlyMilestones)
 const open = ref<string | null>(props.initialOpen ?? null)
 
-// 与 domains.ts 的领域色板对齐，和知识图谱视觉一致
+// 与 domains.ts 的领域色板对齐，和全站领域色一致
 const GROUP_COLOR: Record<FilterGroup, string> = {
   memory: '#3b82f6',
   parallel: '#8b5cf6',

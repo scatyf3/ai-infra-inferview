@@ -5,6 +5,8 @@ tags: [attention, gqa, handson]
 difficulty: 3
 order: 1
 related: [/inference/attention-variants, /handson/decode-step-kv-cache, /handson/stable-softmax]
+stack: [f-model]
+leetgpu: [80, 12, 53]
 ---
 
 # 手写 MHA / GQA Forward

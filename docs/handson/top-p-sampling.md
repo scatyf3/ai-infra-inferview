@@ -5,6 +5,8 @@ tags: [sampling, handson]
 difficulty: 2
 order: 5
 related: []
+stack: [o-sampling]
+leetgpu: [60]
 ---
 
 # Top-p 采样

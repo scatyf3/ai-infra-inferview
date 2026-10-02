@@ -5,6 +5,7 @@ tags: [metrics, benchmark, sla]
 difficulty: 2
 order: 9
 related: []
+stack: [sv-sla]
 ---
 
 # 指标与 Benchmark：TTFT / TPOT / ITL / Goodput

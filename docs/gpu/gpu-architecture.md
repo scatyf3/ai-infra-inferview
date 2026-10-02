@@ -5,6 +5,7 @@ tags: [cuda, sm, warp]
 difficulty: 3
 order: 1
 related: []
+stack: [hw-gpu, hw-mem]
 ---
 
 # GPU 执行模型：SM / Warp / Shared Memory

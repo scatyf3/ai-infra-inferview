@@ -5,6 +5,7 @@ tags: [python, gil, asyncio]
 difficulty: 2
 order: 1
 related: []
+stack: [sv-api]
 ---
 
 # Python：GIL、asyncio、多进程 vs 多线程

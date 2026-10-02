@@ -5,6 +5,7 @@ tags: [vllm, sglang]
 difficulty: 4
 order: 3
 related: []
+stack: [ld-load, f-model, f-runner, k-attn, sv-tokenize]
 ---
 
 # 给 vLLM / SGLang 加一个新模型

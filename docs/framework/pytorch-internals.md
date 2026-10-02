@@ -5,6 +5,7 @@ tags: [pytorch, autograd, allocator]
 difficulty: 4
 order: 1
 related: []
+stack: [3]
 ---
 
 # PyTorch 内部机制

@@ -5,6 +5,7 @@ tags: [os, network, grpc]
 difficulty: 2
 order: 3
 related: []
+stack: [sv-api]
 ---
 
 # OS 与网络：进程线程、虚拟内存、锁与原子操作、TCP / RPC / gRPC

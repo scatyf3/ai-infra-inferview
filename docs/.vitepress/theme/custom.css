@@ -10,6 +10,11 @@
   --st-draft: #f59e0b;
   --st-reviewed: #22c55e;
 
+  /* 熟练度 L0–L4，和 leetcode 看板同一套 */
+  --fam0: #14a090; --fam1: #2f9e6a; --fam15: #2b9bb5; --fam2: #3b7cf0;
+  --fam3: #c98a14; --fam35: #d9773f; --fam4: #d6455d;
+  --lg-easy: #2f9e6a; --lg-medium: #c98a14; --lg-hard: #d6455d;
+
   /* widget 通用 */
   --wg-bg: var(--vp-c-bg-soft);
   --wg-border: var(--vp-c-divider);
@@ -20,6 +25,9 @@
 
 .dark {
   --vp-home-hero-name-background: linear-gradient(120deg, #60a5fa 30%, #a78bfa);
+  --fam0: #22b8a6; --fam1: #54c78b; --fam15: #5fbcd0; --fam2: #6ea8fe;
+  --fam3: #e2b04a; --fam35: #e48f5c; --fam4: #e06c75;
+  --lg-easy: #54c78b; --lg-medium: #e2b04a; --lg-hard: #e06c75;
 }
 
 /* 所有 widget 共用外框 */

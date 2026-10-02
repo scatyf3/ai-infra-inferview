@@ -5,6 +5,7 @@ tags: [triton]
 difficulty: 3
 order: 3
 related: []
+stack: [k-lang]
 ---
 
 # Triton 编程模型
