@@ -11,6 +11,7 @@ import LeetGPUBoard from './components/LeetGPUBoard.vue'
 import LeetGPURoadmap from './components/LeetGPURoadmap.vue'
 import StackFigure from './components/StackFigure.vue'
 import RoadmapFigure from './components/RoadmapFigure.vue'
+import TritonProgramViz from './components/TritonProgramViz.vue'
 import StackPageExtras from './components/StackPageExtras.vue'
 import ReaderNotes from './components/ReaderNotes.vue'
 import './custom.css'
@@ -35,5 +36,6 @@ export default {
     app.component('LeetGPURoadmap', LeetGPURoadmap)
     app.component('StackFigure', StackFigure)
     app.component('RoadmapFigure', RoadmapFigure)
+    app.component('TritonProgramViz', TritonProgramViz)
   },
 } satisfies Theme

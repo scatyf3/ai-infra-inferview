@@ -28,52 +28,74 @@ stack: []
 | 读写 | `x[i]` | `tl.load(x_ptr + offs, mask=mask)` / `tl.store(...)` |
 | shared memory、`__syncthreads`、合并访存 | 手写 | 编译器处理 |
 
+<TritonProgramViz mode="vector" />
+
 ### 最小例子：向量加法
 
-```python
-import torch
-import triton
-import triton.language as tl
+上面这张表落到代码上，就是 [Vector Add](./vector-add)：题解、N = 4 的逐行取值、`tl.load` 读多少个，都在那一页。
 
-
-@triton.jit
-def add_kernel(x_ptr, y_ptr, out_ptr, n, BLOCK: tl.constexpr):
-    pid = tl.program_id(axis=0)                  # 我是第几个 program ≈ blockIdx.x
-    offs = pid * BLOCK + tl.arange(0, BLOCK)     # 本 program 负责的 BLOCK 个下标
-    mask = offs < n                              # 最后一块可能越界
-    x = tl.load(x_ptr + offs, mask=mask)         # 一次读一整块
-    y = tl.load(y_ptr + offs, mask=mask)
-    tl.store(out_ptr + offs, x + y, mask=mask)
-
-
-def add(x, y):
-    out = torch.empty_like(x)
-    n = x.numel()
-    grid = lambda meta: (triton.cdiv(n, meta['BLOCK']),)   # grid 可以依赖 BLOCK
-    add_kernel[grid](x, y, out, n, BLOCK=1024)
-    return out
-```
-
-- torch tensor 传进 kernel 自动变成指向首元素的指针，`x_ptr + offs` 是一个**指针向量**
-- `BLOCK` 必须标 `tl.constexpr`，且是 2 的幂；编译期确定，换值就重新编译一份 kernel
-- grid 写成 lambda，launch 时会把 `BLOCK` 等 meta 参数传进去，autotune 换 BLOCK 时 grid 跟着变
 
 ### 二维：stride 和广播直接搬过来
 
 triton 不认识 shape，只认指针，地址用 stride 自己算（[torch 原语 · tensor itself](./torch-primitives#tensor-itself)）。
 
 ```python
+# 例子：x = [[0., 0., 0.],
+#            [1., 2., 3.]]
+# shape (2, 3)，行优先连续存，内存里是 [0, 0, 0, 1, 2, 3]
+# n_rows = 2，n_cols = 3，stride_row = 3，BLOCK = 4（>= 3 的最小 2 的幂）
+# 注释里的值都是 row = 1 这个 program 看到的
+
+
 @triton.jit
 def softmax_kernel(x_ptr, out_ptr, stride_row, n_cols, BLOCK: tl.constexpr):
-    row = tl.program_id(0)                       # 一个 program 处理一行
+    # 一个 program 处理一行
+    # row = 1
+    row = tl.program_id(0)
+
+    # 这一行里的列下标；BLOCK 是 2 的幂，比 n_cols 多出来的要 mask 掉
+    # cols = [0, 1, 2, 3]
     cols = tl.arange(0, BLOCK)
+
+    # [0, 1, 2, 3] < 3 = [T, T, T, F]
     mask = cols < n_cols
+
+    # 地址 = x_ptr + 1 * 3 + [0, 1, 2, 3] = x_ptr + [3, 4, 5, 6]
+    # 即内存里第 3、4、5 个元素（x[1, 0..2]），第 6 个越界被 mask
+    # 越界位置填 -inf：max 不会选它，exp(-inf) = 0，sum 也不受影响
+    # x = [1., 2., 3., -inf]
     x = tl.load(x_ptr + row * stride_row + cols, mask=mask, other=-float('inf'))
+
+    # 减掉行最大值防止 exp 溢出，softmax 结果不变
+    # max = 3 -> x = [-2., -1., 0., -inf]
     x = x - tl.max(x, axis=0)
+
+    # num = [e^-2, e^-1, e^0, 0] = [0.135, 0.368, 1., 0.]
     num = tl.exp(x)
+
+    # sum = 1.503
+    # num / sum = [0.090, 0.245, 0.665, 0.]
+    # 只写前 3 个：out[1] = [0.090, 0.245, 0.665]
     tl.store(out_ptr + row * stride_row + cols, num / tl.sum(num, axis=0), mask=mask)
 
-# launch：grid = (n_rows,)，stride_row 传 x.stride(0)
+
+def softmax(x):
+    # 2 x 3 的空 tensor，和 x 一样连续，所以 out 的 stride_row 也是 3
+    out = torch.empty_like(x)
+
+    # n_rows = 2，n_cols = 3
+    n_rows, n_cols = x.shape
+
+    # 一整行要装进一个 program，BLOCK 取 >= n_cols 的 2 的幂
+    # next_power_of_2(3) = 4
+    BLOCK = triton.next_power_of_2(n_cols)
+
+    # grid = (2,)：row 0 写 out[0] = [0.333, 0.333, 0.333]
+    #              row 1 写 out[1] = [0.090, 0.245, 0.665]
+    # x.stride(0) = 3：跳到下一行要跨 3 个元素
+    softmax_kernel[(n_rows,)](x, out, x.stride(0), n_cols, BLOCK=BLOCK)
+
+    return out
 ```
 
 二维 tile（比如 matmul）的地址由两个下标向量[广播](./torch-primitives#broadcasting)拼出来：
