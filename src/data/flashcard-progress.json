@@ -61,15 +61,15 @@
   },
   "bagu-fa-why": {
     "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "difficulty": 2.11121424,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 2,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-04T23:50:10.805Z",
-    "last_review": "2026-10-04T23:40:10.805Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-06T23:53:46.497Z",
+    "last_review": "2026-10-04T23:53:46.497Z"
   },
   "bagu-flash-decoding": {
     "stability": 2.29815136,
