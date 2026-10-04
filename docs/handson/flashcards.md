@@ -12,7 +12,7 @@ stack: []
 
 [torch 原语](./torch-primitives)、[triton 原语](./triton_primitives)、[kernel mindset](./kernel-mindset) 和 [Triton softmax](./triton-softmax) 里的知识点，做成一问一答的卡片。先自己答，再翻面，按这次想起来的程度点 Again / Hard / Good / Easy，[FSRS](https://github.com/open-spaced-repetition/ts-fsrs) 据此安排下次复习的时间：记得牢的隔得越来越久，忘了的很快再出现。
 
-快捷键：<kbd>空格</kbd> 翻面（翻面后再按一次 = Good），<kbd>1</kbd>–<kbd>4</kbd> 对应 Again / Hard / Good / Easy，<kbd>→</kbd> 这轮跳过。
+快捷键：<kbd>空格</kbd> 翻面（翻面后再按一次 = Good），<kbd>1</kbd>–<kbd>4</kbd> 对应 Again / Hard / Good / Easy，<kbd>→</kbd> 跳过（排到这一轮最后）。不想再看到的卡点「暂停这张」，在「全部卡片」里可以恢复。
 
 <Flashcards />
 

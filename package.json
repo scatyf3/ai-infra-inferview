@@ -6,6 +6,7 @@
   "description": "AI Infra 面试知识库：VitePress 文档 + 交互式可视化插件",
   "scripts": {
     "docs:dev": "vitepress dev docs",
+    "docs:dev:lan": "vitepress dev docs --host",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "test": "vitest run",

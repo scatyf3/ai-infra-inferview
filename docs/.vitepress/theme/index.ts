@@ -15,18 +15,22 @@ import TritonProgramViz from './components/TritonProgramViz.vue'
 import Flashcards from './components/Flashcards.vue'
 import StackPageExtras from './components/StackPageExtras.vue'
 import ReaderNotes from './components/ReaderNotes.vue'
+import SyncControl from './components/SyncControl.vue'
+import { registerServiceWorker } from './pwa'
 import './custom.css'
 
 export default {
   extends: DefaultTheme,
-  // 全站挂载读者划词高亮 / 批注；/stack/<id> 页额外加上所在层和相关文章（其他页面渲染为空）
+  // 全站挂载读者划词高亮 / 批注和导航栏上的同步状态；/stack/<id> 页额外加上所在层和相关文章（其他页面渲染为空）
   Layout: () =>
     h(DefaultTheme.Layout, null, {
       'layout-bottom': () => h(ReaderNotes),
+      'nav-bar-content-after': () => h(SyncControl),
       'doc-before': () => h(StackPageExtras, { where: 'before' }),
       'doc-after': () => h(StackPageExtras, { where: 'after' }),
     }),
   enhanceApp({ app }) {
+    registerServiceWorker()
     app.component('MemoryCalculator', MemoryCalculator)
     app.component('ShapeFlow', ShapeFlow)
     app.component('ParallelismViz', ParallelismViz)

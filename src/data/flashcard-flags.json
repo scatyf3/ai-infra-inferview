@@ -1,0 +1,22 @@
+{
+  "triton-2d-ptrs": {
+    "suspended": true,
+    "at": 1791093916665
+  },
+  "triton-group-m": {
+    "suspended": true,
+    "at": 1791094297450
+  },
+  "triton-matmul-program": {
+    "suspended": true,
+    "at": 1791094294396
+  },
+  "triton-no-grid-sync": {
+    "suspended": true,
+    "at": 1791094019431
+  },
+  "triton-num-warps": {
+    "suspended": true,
+    "at": 1791093997190
+  }
+}

@@ -1,29 +1,34 @@
 import { describe, expect, it } from 'vitest'
 import {
-  LEARN_AHEAD_MS,
   Rating,
   State,
   bucketOf,
   countBuckets,
   fmtInterval,
   inlineMd,
+  isFlags,
   isNotes,
+  isSuspended,
   isProgress,
+  mergeFlags,
   mergeNotes,
   mergeProgress,
   noteOf,
   nextCard,
   preview,
   review,
+  serializeFlags,
   serializeNotes,
   serializeProgress,
   setNote,
+  setSuspended,
   type Card,
   type Progress,
 } from '@lib/flashcards'
 import { cards } from '@data/flashcards'
 import progressFile from '@data/flashcard-progress.json'
 import notesFile from '@data/flashcard-notes.json'
+import flagsFile from '@data/flashcard-flags.json'
 
 const card = (id: string): Card => ({ id, deck: 'torch', topic: 't', q: id, a: id })
 const T0 = new Date('2026-10-01T09:00:00Z')
@@ -42,8 +47,9 @@ describe('flashcard deck', () => {
   it('仓库里的记录、批注文件格式正确，且不引用已删除的卡片', () => {
     expect(isProgress(progressFile)).toBe(true)
     expect(isNotes(notesFile)).toBe(true)
+    expect(isFlags(flagsFile)).toBe(true)
     const ids = new Set(cards.map((c) => c.id))
-    for (const id of [...Object.keys(progressFile), ...Object.keys(notesFile)]) expect(ids.has(id)).toBe(true)
+    for (const id of [...Object.keys(progressFile), ...Object.keys(notesFile), ...Object.keys(flagsFile)]) expect(ids.has(id)).toBe(true)
   })
 })
 
@@ -86,35 +92,52 @@ describe('FSRS 调度', () => {
 
 describe('出题顺序', () => {
   const cs = ['a', 'b', 'c', 'd'].map(card)
-  const none = new Set<string>()
 
   it('先出到期的复习卡（按到期时间），再出新卡', () => {
     let p: Progress = {}
     p = review(p, 'c', Rating.Easy, T0) // 几天后到期
     p = review(p, 'b', Rating.Easy, after(1000))
     const later = new Date(Date.parse(p.c.due) + DAY * 30)
-    expect(nextCard(cs, p, later, none, 10)?.id).toBe('c')
-    expect(nextCard(cs, p, T0, none, 10)?.id).toBe('a')
+    expect(nextCard(cs, p, later, { newLeft: 10 })?.id).toBe('c')
+    expect(nextCard(cs, p, T0, { newLeft: 10 })?.id).toBe('a')
   })
 
-  it('新卡额度用完就不出新卡；学习中的卡可以提前 20 分钟出', () => {
-    const p = review({}, 'a', Rating.Again, T0) // 1 分钟后到期
-    expect(nextCard(cs, p, T0, none, 0)?.id).toBe('a')
-    expect(nextCard(cs, p, T0, none, 5)?.id).toBe('b') // 有新卡额度时先出新卡
-    const far = review({}, 'a', Rating.Easy, T0) // 复习卡，没到期不提前
-    expect(nextCard(cs, far, after(LEARN_AHEAD_MS), none, 0)).toBeUndefined()
+  it('新卡额度用完就不出新卡；没到期的学习中卡片不提前出', () => {
+    const p = review({}, 'a', Rating.Good, T0) // 10 分钟后到期
+    expect(nextCard(cs, p, T0, { newLeft: 0 })).toBeUndefined() // 刚评完不会马上再出
+    expect(nextCard(cs, p, after(10 * 60_000), { newLeft: 0 })?.id).toBe('a')
+    expect(nextCard(cs, p, T0, { newLeft: 5 })?.id).toBe('b')
   })
 
-  it('跳过的卡这一轮不再出', () => {
-    expect(nextCard(cs, {}, T0, new Set(['a', 'b']), 10)?.id).toBe('c')
+  it('跳过的卡排到最后：别的出完了，再按跳过的先后出', () => {
+    expect(nextCard(cs, {}, T0, { newLeft: 10, deferred: ['a', 'b'] })?.id).toBe('c')
+    const two = cs.slice(0, 2)
+    expect(nextCard(two, {}, T0, { newLeft: 10, deferred: ['b', 'a'] })?.id).toBe('b')
+    // 跳过的新卡不受新卡额度限制：这一轮已经出过一次，额度被别的新卡用完也要回来
+    expect(nextCard(two, {}, T0, { newLeft: 0, deferred: ['a', 'b'] })?.id).toBe('a')
+    // 跳过的卡也要到期才出
+    const learning = review({}, 'a', Rating.Good, T0)
+    expect(nextCard([cs[0]], learning, T0, { newLeft: 10, deferred: ['a'] })).toBeUndefined()
+    // 到期的复习卡被跳过，排在新卡后面
+    const p = review({}, 'a', Rating.Again, T0)
+    expect(nextCard(two, p, after(DAY), { newLeft: 10, deferred: ['a'] })?.id).toBe('b')
+    expect(nextCard(two, review(p, 'b', Rating.Easy, after(DAY)), after(DAY), { newLeft: 10, deferred: ['a'] })?.id).toBe('a')
+  })
+
+  it('暂停的卡不出，也不算进到期提示', () => {
+    const flags = setSuspended({}, 'a', true, 1)
+    expect(nextCard(cs, {}, T0, { newLeft: 10, flags })?.id).toBe('b')
+    expect(nextCard(cs, {}, T0, { newLeft: 10, flags: setSuspended(flags, 'a', false, 2) })?.id).toBe('a')
+    expect(nextCard([cs[0]], {}, T0, { newLeft: 10, flags, deferred: ['a'] })).toBeUndefined()
   })
 
   it('分桶计数', () => {
     let p = review({}, 'a', Rating.Again, T0)
     p = review(p, 'b', Rating.Easy, T0)
     expect(bucketOf(p.a, T0)).toBe('learning')
-    expect(countBuckets(cs, p, T0)).toEqual({ new: 2, learning: 1, due: 0, later: 1 })
+    expect(countBuckets(cs, p, T0)).toEqual({ new: 2, learning: 1, due: 0, later: 1, suspended: 0 })
     expect(countBuckets(cs, p, new Date(Date.parse(p.b.due) + 1)).due).toBe(1)
+    expect(countBuckets(cs, p, T0, setSuspended({}, 'a', true, 1))).toEqual({ new: 2, learning: 0, due: 0, later: 1, suspended: 1 })
   })
 })
 
@@ -153,11 +176,20 @@ describe('批注', () => {
     expect(noteOf({}, 'y')).toBe('')
   })
 
-  it('写文件时丢掉空批注、按 id 排序', () => {
+  it('写文件时按 id 排序，删除记录（空批注）也保留', () => {
     const n = setNote(setNote(setNote({}, 'b', 'B', 1), 'a', 'A', 1), 'c', '', 1)
     const parsed = JSON.parse(serializeNotes(n))
-    expect(Object.keys(parsed)).toEqual(['a', 'b'])
+    expect(Object.keys(parsed)).toEqual(['a', 'b', 'c'])
     expect(isNotes(parsed)).toBe(true)
+  })
+
+  it('另一台设备内存里的旧批注，不会把已删除的批注合并回来', () => {
+    const old = setNote({}, 'x', '旧批注', 100) // 设备 B 打开页面时读到的
+    const file = JSON.parse(serializeNotes(setNote(old, 'x', '', 200))) // 设备 A 删掉后写进文件
+    const fromB = setNote(old, 'y', '设备 B 新写的', 300) // 设备 B 写别的卡，带着旧的 x 一起发上来
+    const merged = mergeNotes(file, fromB)
+    expect(noteOf(merged, 'x')).toBe('')
+    expect(noteOf(merged, 'y')).toBe('设备 B 新写的')
   })
 
   it('校验', () => {
@@ -165,6 +197,22 @@ describe('批注', () => {
     expect(isNotes({ a: { text: 1, at: 1 } })).toBe(false)
     expect(isNotes({ a: { text: 'x' } })).toBe(false)
     expect(isNotes([])).toBe(false)
+  })
+})
+
+describe('暂停标记', () => {
+  it('恢复也留记录，合并时较新的切换胜出', () => {
+    const on = setSuspended({}, 'a', true, 100)
+    const off = setSuspended(on, 'a', false, 200)
+    expect(isSuspended(on, 'a')).toBe(true)
+    expect(isSuspended(mergeFlags(off, on), 'a')).toBe(false)
+    expect(JSON.parse(serializeFlags(off))).toEqual({ a: { suspended: false, at: 200 } })
+  })
+
+  it('校验', () => {
+    expect(isFlags({ a: { suspended: true, at: 1 } })).toBe(true)
+    expect(isFlags({ a: { suspended: 'yes', at: 1 } })).toBe(false)
+    expect(isFlags([])).toBe(false)
   })
 })
 

@@ -1,7 +1,7 @@
 // 原语闪卡：torch / triton 两组。直接改这个文件，页面自动更新。
 //
 // id 是复习记录的 key（src/data/flashcard-progress.json），改题面可以，改 id 会丢掉这张卡的记录。
-// a 支持行内 `code` 和 **加粗**；code 是答案下面的代码块；ref 是出处（站内链接，不含 base）。
+// a 支持行内 `code`、**加粗** 和 \n 换行；code 是答案下面的代码块；ref 是出处（站内链接，不含 base）。
 
 import type { Card } from '@lib/flashcards'
 
@@ -33,8 +33,8 @@ export const cards: Card[] = [
     deck: 'torch',
     topic: 'stride',
     q: '`y = x.t()` 做了什么？`y` 和 `x` 是什么关系？',
-    a: '只对调 shape 和 stride，**storage 不动**。`y` 和 `x` 共用同一块内存（`data_ptr` 相同），通过 `y` 写会改到 `x`；`y` 不再 contiguous。',
-    code: 'x = torch.arange(6).view(2, 3)   # stride (3, 1)\ny = x.t()                        # shape (3, 2), stride (1, 3)',
+    a: '只对调 shape 和 stride，**storage 不动**。`y` 和 `x` 共用同一块内存（`data_ptr` 相同），通过 `y` 写会改到 `x`；`y` 不再 contiguous。\n对调哪几维：`.t()` 只接受 ≤ 2 维的 tensor，2 维时对调的就是第 0、1 维，也就是仅有的两维。\n多维时：`transpose(d0, d1)` 指定对调哪两维；只换最后两维写 `transpose(-1, -2)`（或 `x.mT`）；`.T` 是把**全部维度倒过来**，多维用会有弃用警告。',
+    code: 'x = torch.arange(6).view(2, 3)   # stride (3, 1)\ny = x.t()                        # shape (3, 2), stride (1, 3)\n\nz = torch.empty(4, 5, 6)\nz.transpose(-1, -2).shape        # (4, 6, 5)：只换最后两维\nz.T.shape                        # (6, 5, 4)：全部倒过来',
     ref: `${TP}#tensor-itself`,
   },
   {
@@ -42,7 +42,8 @@ export const cards: Card[] = [
     deck: 'torch',
     topic: 'view / reshape',
     q: '为什么 transpose 之后 `view` 会报错？`reshape` 和 `.contiguous()` 各做什么？',
-    a: '`view` 只换一套 shape + stride，不动数据；内存排列表达不成目标 shape 时（比如 transpose 后把 `(N, h, dk)` 合成 `(N, d_model)`）只能报错。`reshape`：能 view 就 view，不能就先拷一份连续的；`.contiguous()`：手动做这次拷贝。',
+    a: '`view` 只换一套 shape + stride，不动数据；现有的内存排列表达不成目标 shape 时只能报错。\n例子：attention 输出 `out` 是 `(h, N, dk)`、连续，stride `(N·dk, dk, 1)`。`transpose(0, 1)` 后 shape `(N, h, dk)`，stride `(dk, N·dk, 1)`。\n合成 `(N, h·dk)` 要把 h、dk 两维并成一维。相邻两维能合并的条件是 `stride[h] == shape[dk] × stride[dk]`，这里应该是 `dk`，实际是 `N·dk`：同一个 token 的各个 head 在内存里隔着 N·dk 个元素，不是连着的一段，一个 stride 表达不出来。\n`reshape`：能 view 就 view，不能就先拷一份连续的；`.contiguous()`：手动做这次拷贝。',
+    code: 'out = torch.randn(h, N, dk)        # stride (N*dk, dk, 1)\nt = out.transpose(0, 1)            # (N, h, dk), stride (dk, N*dk, 1)\nt.view(N, h * dk)                  # RuntimeError: view size is not compatible ...\nt.reshape(N, h * dk)               # OK：内部先拷一份连续的\nt.contiguous().view(N, h * dk)     # 同上，手动拷',
     ref: `${TP}#tensor-itself`,
   },
   {
@@ -66,7 +67,8 @@ export const cards: Card[] = [
     deck: 'torch',
     topic: 'broadcasting',
     q: '广播规则是什么？被广播的维度在内存里怎么实现？',
-    a: '两个 shape **从右往左对齐**，每一维要么相等、要么有一边是 1；维度数不够的在左边补 1；结果取较大的那个。被拉长的维 stride 设成 0，和 `expand` 一样不拷贝。',
+    a: '两个 shape **从右往左对齐**，每一维要么相等、要么有一边是 1；维度数不够的在左边补 1；结果取较大的那个。被拉长的维 stride 设成 0，和 `expand` 一样不拷贝。\n报错的例子：`(3, 4)` 加 `(3,)`。右对齐后 4 对 3，既不相等也没有一边是 1，报错。想按行加，要先补成 `(3, 1)`。',
+    code: 'a = torch.ones(3, 4)\na + torch.ones(4)       # (3, 4)：(4,) 补成 (1, 4)，每行加同一个向量\na + torch.ones(3)       # RuntimeError: The size of tensor a (4) must match the size of tensor b (3) at non-singleton dimension 1\na + torch.ones(3, 1)    # (3, 4)：每行加一个数',
     ref: `${TP}#broadcasting`,
   },
   {
@@ -82,8 +84,8 @@ export const cards: Card[] = [
     deck: 'torch',
     topic: 'broadcasting',
     q: '`logits (B, V) - logits.max(dim=-1).values` 有什么问题？',
-    a: '减数是 `(B,)`，右对齐后对上的是 V 那一维：`B != V` 时报错，`B == V` 时**静默错**。归约后还要和原 tensor 运算的，一律 `keepdim=True`。',
-    code: 'logits - logits.max(dim=-1, keepdim=True).values   # (B, 1) 广播到 (B, V)',
+    a: '想做的是：每一行减去这一行的最大值。\n`logits.max(dim=-1).values` 的 shape 是 `(B,)`，被归约的那一维没了。广播从右往左对齐，`(B,)` 对上的是 `(B, V)` 的**最后一维 V**，而不是 B。\n结果：`B != V` 时直接报错；`B == V` 时不报错，但第 j 列减的是第 j 行的最大值，**算错了还不报错**。\n`keepdim=True` 让结果保留成 `(B, 1)`，对上的才是行，每行减自己的最大值。归约后还要和原 tensor 运算的，一律加 `keepdim=True`。',
+    code: 'logits = torch.randn(4, 4)                          # B == V == 4\nm = logits.max(dim=-1).values                       # (4,)\nlogits - m                                          # 不报错，但第 j 列减的是第 j 行的 max\nlogits - logits.max(dim=-1, keepdim=True).values    # (4, 1)：每行减自己的 max',
     ref: `${TP}#容易踩的坑`,
   },
   {
@@ -282,7 +284,7 @@ export const cards: Card[] = [
     deck: 'triton',
     topic: '跨 program',
     q: '为什么「要等全局结果」的地方都得切一个新 kernel？',
-    a: 'Triton 里不同 program 之间**没有全局同步**。唯一能保证「上一步所有 program 都写完了」的就是 kernel 边界（或者 atomic / 计数器）。',
+    a: 'Triton 里不同 program 之间**没有全局同步**。唯一能保证「上一步所有 program 都写完了」的就是 kernel 边界（或者 atomic / 计数器）。\nCUDA 呢：\n1. block 内：`__syncthreads()`，同一个 block 的线程互相等。\n2. 跨 block：普通 launch 也没有。cooperative groups 有 `cg::this_grid().sync()`，但要用 `cudaLaunchCooperativeKernel` 启动，而且所有 block 必须**同时驻留**在 GPU 上（grid 不能超过 SM 数 × 每个 SM 能放的 block 数），否则已经在跑的 block 等不到还没上去的 block，会死锁。所以实际也常拆 kernel 或用 atomic。\n3. Triton 的 program 内部：同步由编译器插，不用自己写（`tl.debug_barrier()` 只用于调试）。',
     ref: SM,
   },
   {
@@ -290,7 +292,7 @@ export const cards: Card[] = [
     deck: 'triton',
     topic: '跨 program',
     q: '连续 launch 三个有依赖的 kernel，要手动同步吗？Python 里 launch 那一行会等 GPU 算完吗？',
-    a: '不用。同一个 CUDA stream 里的 kernel **按提交顺序**执行。launch 是**异步**的，只是提交到 stream 就返回；CPU 要读 GPU 结果时（比如 `print`）才需要同步。',
+    a: '不用。同一个 CUDA stream 里的 kernel **按提交顺序**执行，前一个跑完后一个才开始。launch 是**异步**的，只是提交到 stream 就返回。\n1. 这不是「自动分析依赖」：GPU 不看谁读写了什么，只是同一个 stream 串行执行，所以有依赖的 kernel 放在同一个 stream 里就安全。放在**不同 stream** 就没有先后保证，要用 event 显式等（`cudaStreamWaitEvent` / `stream.wait_event`）。\n2. CUDA 也一样：`kernel<<<...>>>` 是异步提交，同一个 stream 自动排队，两个 kernel 之间**不用**手动 sync。只有 CPU 要读结果时才同步：`cudaDeviceSynchronize()` / `cudaStreamSynchronize()`；同步版的 `cudaMemcpy` 拷回 host 时也会隐式等。\n3. PyTorch 里 `.item()`、`.cpu()`、`print(tensor)` 会隐式同步；计时前后要 `torch.cuda.synchronize()`，否则量到的只是提交的时间。',
     ref: SM,
   },
   {
@@ -298,7 +300,7 @@ export const cards: Card[] = [
     deck: 'triton',
     topic: 'softmax',
     q: 'N = 500k 的 softmax，「先 max 再 sum」和 online 合并各要几个 kernel、读几遍 x？',
-    a: '先 max 再 sum：**3** 个 kernel（局部 max → 用全局 M 求局部 sum → 归一化），读 x **3** 遍。online：**2** 个 kernel（局部 `(m_b, d_b)` → 合并后归一化），读 **2** 遍。2MB 放得进 L2，差距主要是 launch 开销。',
+    a: '先 max 再 sum：**3** 个 kernel（局部 max → 用全局 M 求局部 sum → 归一化），读 x **3** 遍。online：**2** 个 kernel（局部 `(m_b, d_b)` → 合并后归一化），读 **2** 遍。\n选哪个：一般选 **online**，少读一遍、少一次 launch。数据超出 L2 时，多读的那一遍是实打实的 HBM 流量，差距更明显；FlashAttention 里 score 根本不写回 HBM，只能用 online。\n这道题 x 只有 2MB，放得进 L2，两种的实测差距主要就是一次 launch（几 µs），都能过。面试手写时可以先写三趟（好讲、不容易错），再说 online 怎么省掉一趟。',
     ref: SM,
   },
   {
@@ -306,7 +308,8 @@ export const cards: Card[] = [
     deck: 'triton',
     topic: 'softmax',
     q: '已知每块的 `(m_b, d_b)`，`d_b = Σ exp(x - m_b)`，全局 M、D 怎么得到？',
-    a: '`M = max(m_b)`，`D = Σ d_b · exp(m_b - M)`：把每块的和从「相对 m_b」换算成「相对 M」。修正因子 ≤ 1，不会溢出。流式版：`m\' = max(m, m_b)`，`d\' = d·exp(m - m\') + d_b·exp(m_b - m\')`。',
+    a: '每块先只看自己：\n`m_b = max_{i∈b} x_i`\n`d_b = Σ_{i∈b} exp(x_i − m_b)`\n合并：\n`M = max_b m_b`\n`D = Σ_b d_b · exp(m_b − M)`\n每块的和是相对 m_b 算的，乘 `exp(m_b − M)` 换算成相对 M。因为 m_b ≤ M，修正因子 ≤ 1，不会溢出。\n流式版（一块块扫，FlashAttention 用的就是这个）：\n`m_new = max(m, m_b)`\n`d = d · exp(m − m_new) + d_b · exp(m_b − m_new)`\n初值 `(m, d) = (−inf, 0)`。这个合并满足结合律，所以既能并行两两合并，也能串行一块块扫。',
+    code: "# 第 1 趟：每块的局部量\nm_b = tl.max(x, axis=0)\nd_b = tl.sum(tl.exp(x - m_b), axis=0)\n\n# 第 2 趟：合并（ms、ds 是所有块的 m_b、d_b，补齐的位置分别填 -inf、0）\nM = tl.max(ms, axis=0)\nD = tl.sum(ds * tl.exp(ms - M), axis=0)\n\n# 流式版：在一个 program 里一块块扫\nm = tl.full([], -float('inf'), tl.float32)   # 循环里会重新赋值，初值类型要和循环里一致\nd = tl.full([], 0.0, tl.float32)\nfor start in range(0, N, BLOCK):\n    x = tl.load(x_ptr + start + offs, mask=start + offs < N, other=-float('inf'))\n    m_new = tl.maximum(m, tl.max(x, axis=0))\n    d = d * tl.exp(m - m_new) + tl.sum(tl.exp(x - m_new), axis=0)\n    m = m_new",
     ref: `${SM}#大-n-先-max-再-sum-vs-online-合并`,
   },
   {
@@ -362,7 +365,7 @@ export const cards: Card[] = [
     deck: 'triton',
     topic: 'kernel mindset',
     q: '拿到一个 kernel，每个维度先判断什么？',
-    a: '是**并行维**还是**归约维**。并行维：输出沿它互不依赖，进 grid；归约维：多个输入合成一个输出，在 program 里循环 / 累加。softmax：行并行、列归约；matmul：M、N 并行，K 归约。',
+    a: '判断它是**并行维**还是**归约维**：\n1. 并行维：输出沿这个维度互不依赖 → 直接切开分给不同 program，进 **grid**。\n2. 归约维：多个输入合成一个输出 → 在 program 里**循环 / 累加**。\n3. 例子：softmax / rmsnorm 是行并行、列归约；matmul 是 M、N 并行（2D grid）、K 归约（循环）；attention 是 B、H、Q 并行，KV 长度归约。',
     ref: KM,
   },
   {
@@ -370,7 +373,7 @@ export const cards: Card[] = [
     deck: 'triton',
     topic: 'kernel mindset',
     q: '逐元素 kernel（add、relu、cast）为什么一定 memory-bound？能做的优化有哪些？',
-    a: '每个输入只读一次、算一次，算术强度极低。能做的只有两件事：**合并访存**，和**与前后 kernel 融合**（省掉中间结果写回显存）。',
+    a: '每个输入只读一次、算一次，算术强度极低。能做的只有两件事：**合并访存**，和**与前后 kernel 融合**（省掉中间结果写回显存）。\n和 LLM 的 decode 很像，原因相同：算术强度低。batch = 1 的 decode，每个权重只读一次、用一次（2 字节的 bf16 换 2 次 FLOP，约 1 FLOP/byte），远低于 GPU 的平衡点（H100 约 300 FLOP/byte）。\n区别在于能不能补救：decode 的权重是所有请求共享的，**加大 batch** 就能让一次读取被多个 token 用，算术强度跟着涨；逐元素 kernel 的每个输入本来就只对应一个输出，没有可复用的，只能靠融合、量化少搬字节。',
     ref: KM,
   },
   {
@@ -378,7 +381,7 @@ export const cards: Card[] = [
     deck: 'triton',
     topic: 'kernel mindset',
     q: '一个 program 装不下的 reduce，有哪几种跨 program 的做法？',
-    a: '**atomic**（简单，但浮点结果不可复现）、**两遍**（先写局部结果，再起一个 kernel 合并）、**split-K**（matmul 里 K 太长时）。本质都是需要一个全局同步点。',
+    a: '**atomic**（简单，但浮点结果不可复现）、**两遍**（先写局部结果，再起一个 kernel 合并）、**split-K**（matmul 里 K 太长时）。本质都是需要一个全局同步点。\nsplit-K：matmul `C (M×N) = A (M×K) · B (K×N)`，正常是一个 program 算 C 的一个 tile、沿 K 一路循环到底。M、N 小而 K 很长时（比如 decode 的小 batch GEMM），C 的 tile 太少，program 不够把 SM 喂满。\nsplit-K 把 K 也切成 S 段，每段交给一个 program，各自算出这一段的部分和，再合并：`atomic_add` 加进 C，或者写进 `(S, M, N)` 的临时数组、再起一个 kernel 求和。代价是多一次合并，换来 S 倍的并行度。',
     ref: KM,
   },
 ]

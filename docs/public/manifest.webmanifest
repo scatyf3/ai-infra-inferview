@@ -1,0 +1,20 @@
+{
+  "name": "AI Infra Inferview",
+  "short_name": "Inferview",
+  "description": "AI Infra 面试知识库：批注、闪卡复习随手可用",
+  "lang": "zh-CN",
+  "id": "/ai-infra-inferview/",
+  "start_url": "/ai-infra-inferview/",
+  "scope": "/ai-infra-inferview/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "闪卡复习", "short_name": "闪卡", "url": "/ai-infra-inferview/handson/flashcards", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

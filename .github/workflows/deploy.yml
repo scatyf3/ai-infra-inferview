@@ -26,6 +26,15 @@ jobs:
           node-version: 22
           cache: npm
       - uses: actions/configure-pages@v5
+      # 读者数据（批注、闪卡记录）由页面直接同步到 data 分支（见 src/lib/github.ts）；
+      # 构建前把那边最新的拷过来，打包进站点当初始数据。data 分支还没建时用 main 上的。
+      - name: Use reader data from the data branch
+        run: |
+          if git fetch --depth=1 origin data; then
+            for f in src/data/reader-notes.json src/data/flashcard-progress.json src/data/flashcard-notes.json src/data/flashcard-flags.json; do
+              git show "FETCH_HEAD:$f" > "$f.tmp" 2>/dev/null && mv "$f.tmp" "$f" || rm -f "$f.tmp"
+            done
+          fi
       - run: npm ci
       - run: npm test
       - run: npm run docs:build

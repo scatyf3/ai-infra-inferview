@@ -75,45 +75,62 @@ export function review(p: Progress, id: string, grade: Grade, now: Date): Progre
 
 const isLearning = (s: Sched) => s.state === State.Learning || s.state === State.Relearning
 
-/** 学习中的卡可以提前 20 分钟复习（Anki 的 learn ahead limit），否则「1 分钟后」的卡要干等 */
-export const LEARN_AHEAD_MS = 20 * 60_000
+export type Bucket = 'new' | 'learning' | 'due' | 'later' | 'suspended'
 
-export type Bucket = 'new' | 'learning' | 'due' | 'later'
-
-export function bucketOf(s: Sched | undefined, now: Date): Bucket {
+export function bucketOf(s: Sched | undefined, now: Date, suspended = false): Bucket {
+  if (suspended) return 'suspended'
   if (!s || s.state === State.New) return 'new'
   if (isLearning(s)) return 'learning'
   return Date.parse(s.due) <= now.getTime() ? 'due' : 'later'
 }
 
-export function countBuckets(cards: Card[], p: Progress, now: Date): Record<Bucket, number> {
-  const c: Record<Bucket, number> = { new: 0, learning: 0, due: 0, later: 0 }
-  for (const card of cards) c[bucketOf(p[card.id], now)]++
+export function countBuckets(cards: Card[], p: Progress, now: Date, flags: Flags = {}): Record<Bucket, number> {
+  const c: Record<Bucket, number> = { new: 0, learning: 0, due: 0, later: 0, suspended: 0 }
+  for (const card of cards) c[bucketOf(p[card.id], now, isSuspended(flags, card.id))]++
   return c
 }
 
-/**
- * 下一张：先出已到期的（学习中 + 复习，按到期时间），再出新卡（按文件顺序，受这一轮的新卡额度限制），
- * 最后才提前出 20 分钟内到期的学习中卡片。skipped 是这一轮跳过的。
- */
-export function nextCard(cards: Card[], p: Progress, now: Date, skipped: Set<string>, newLeft: number): Card | undefined {
-  const t = now.getTime()
-  const pool = cards.filter((c) => !skipped.has(c.id))
-  const byDue = (a: Card, b: Card) => Date.parse(p[a.id].due) - Date.parse(p[b.id].due)
-  const started = pool.filter((c) => p[c.id] && p[c.id].state !== State.New)
-
-  const due = started.filter((c) => Date.parse(p[c.id].due) <= t).sort(byDue)
-  if (due.length) return due[0]
-  if (newLeft > 0) {
-    const fresh = pool.find((c) => bucketOf(p[c.id], now) === 'new')
-    if (fresh) return fresh
-  }
-  return started.filter((c) => isLearning(p[c.id]) && Date.parse(p[c.id].due) <= t + LEARN_AHEAD_MS).sort(byDue)[0]
+export interface QueueOpts {
+  /** 这一轮还能出几张新卡 */
+  newLeft: number
+  /** 这一轮跳过的卡，按跳过的先后；它们排在所有别的卡后面 */
+  deferred?: string[]
+  flags?: Flags
 }
 
-/** 学过的卡里，最早到期的那张什么时候到期（给「复习完了」的提示用） */
-export function nextDueAt(cards: Card[], p: Progress): number | null {
-  const ts = cards.map((c) => p[c.id]).filter((s): s is Sched => !!s && s.state !== State.New).map((s) => Date.parse(s.due))
+/**
+ * 下一张：先出已到期的（学习中 + 复习，按到期时间），再出新卡（按文件顺序，受这一轮的新卡额度限制）。
+ * 没到期的不提前出：学习中的卡评完 Good 要 10 分钟后才到期，提前出会让人以为评分没生效。暂停的卡不出。
+ * 跳过的卡不是丢掉，而是排到最后：别的都出完了，再按跳过的先后出它们。
+ * 它们这一轮已经出过一次，所以不再受新卡额度限制，否则额度被别的新卡用完后，跳过的新卡就回不来了。
+ */
+export function nextCard(cards: Card[], p: Progress, now: Date, { newLeft, deferred = [], flags = {} }: QueueOpts): Card | undefined {
+  const t = now.getTime()
+  const byDue = (a: Card, b: Card) => Date.parse(p[a.id].due) - Date.parse(p[b.id].due)
+  const pick = (pool: Card[], allowNew: boolean): Card | undefined => {
+    const due = pool.filter((c) => p[c.id] && p[c.id].state !== State.New && Date.parse(p[c.id].due) <= t).sort(byDue)
+    if (due.length) return due[0]
+    return allowNew ? pool.find((c) => bucketOf(p[c.id], now) === 'new') : undefined
+  }
+
+  const active = cards.filter((c) => !isSuspended(flags, c.id))
+  const later = new Set(deferred)
+  const first = pick(active.filter((c) => !later.has(c.id)), newLeft > 0)
+  if (first) return first
+  for (const id of deferred) {
+    const c = active.find((x) => x.id === id)
+    if (c && pick([c], true)) return c
+  }
+  return undefined
+}
+
+/** 学过、没暂停的卡里，最早到期的那张什么时候到期（给「复习完了」的提示用） */
+export function nextDueAt(cards: Card[], p: Progress, flags: Flags = {}): number | null {
+  const ts = cards
+    .filter((c) => !isSuspended(flags, c.id))
+    .map((c) => p[c.id])
+    .filter((s): s is Sched => !!s && s.state !== State.New)
+    .map((s) => Date.parse(s.due))
   return ts.length ? Math.min(...ts) : null
 }
 
@@ -179,12 +196,21 @@ export function setNote(n: Notes, id: string, text: string, now = Date.now()): N
   return { ...n, [id]: { text: text.trim(), at: now } }
 }
 
-/** 两份批注按卡片合并，较新的修改（at 更大）胜出 */
-export function mergeNotes(a: Notes, b: Notes): Notes {
-  const out: Notes = { ...a }
-  for (const [id, note] of Object.entries(b)) if (!out[id] || note.at > out[id].at) out[id] = note
+/** 按卡片合并，较新的修改（at 更大）胜出；批注和暂停标记都用它 */
+function mergeByAt<T extends { at: number }>(a: Record<string, T>, b: Record<string, T>): Record<string, T> {
+  const out = { ...a }
+  for (const [id, x] of Object.entries(b)) if (!out[id] || x.at > out[id].at) out[id] = x
   return out
 }
+
+/** 按 id 排序后输出，保证 diff 稳定 */
+function serializeById(v: Record<string, unknown>): string {
+  const out: Record<string, unknown> = {}
+  for (const id of Object.keys(v).sort()) out[id] = v[id]
+  return JSON.stringify(out, null, 2) + '\n'
+}
+
+export const mergeNotes: (a: Notes, b: Notes) => Notes = mergeByAt
 
 export function isNotes(v: unknown): v is Notes {
   return (
@@ -195,11 +221,39 @@ export function isNotes(v: unknown): v is Notes {
   )
 }
 
-/** 写文件时按 id 排序，丢掉空批注（文件是 dev 时唯一的数据源，删掉就是删掉） */
-export function serializeNotes(n: Notes): string {
-  const out: Notes = {}
-  for (const id of Object.keys(n).sort()) if (n[id].text) out[id] = n[id]
-  return JSON.stringify(out, null, 2) + '\n'
+/**
+ * 写文件时按 id 排序。空批注（删除记录）也要留着：多台设备合并时，
+ * 它靠更新的 at 盖过别的设备内存里的旧批注，删掉的话旧批注会被合并回来。
+ */
+export const serializeNotes: (n: Notes) => string = serializeById
+
+// ---------- 暂停 ----------
+
+export interface Flag {
+  /** 暂停的卡不出现在复习里，直到恢复 */
+  suspended: boolean
+  /** 最近一次切换的时间戳（ms）；恢复也留一条 suspended: false，理由同空批注 */
+  at: number
+}
+
+export type Flags = Record<string, Flag>
+
+export const isSuspended = (f: Flags, id: string): boolean => !!f[id]?.suspended
+
+export function setSuspended(f: Flags, id: string, suspended: boolean, now = Date.now()): Flags {
+  return { ...f, [id]: { suspended, at: now } }
+}
+
+export const mergeFlags: (a: Flags, b: Flags) => Flags = mergeByAt
+export const serializeFlags: (f: Flags) => string = serializeById
+
+export function isFlags(v: unknown): v is Flags {
+  return (
+    !!v &&
+    typeof v === 'object' &&
+    !Array.isArray(v) &&
+    Object.values(v).every((x) => !!x && typeof x.suspended === 'boolean' && isNum(x.at))
+  )
 }
 
 const escapeHtml =(s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')

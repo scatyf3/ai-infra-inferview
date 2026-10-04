@@ -1,120 +1,51 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onContentUpdated, useRoute } from 'vitepress'
-import { locateQuote, makeQuote, type TextQuote } from '@lib/annotate'
-import bundled from '@data/reader-notes.json'
+import { locateQuote, makeQuote } from '@lib/annotate'
+import {
+  addNote,
+  editNote,
+  isReaderNotes,
+  liveNotes,
+  mergeReaderNotes,
+  removeNotes,
+  type ReaderNote as Note,
+} from '@lib/readerNotes'
+import { readerNotesSpec } from '@lib/syncDocs'
+import { syncState, useSyncedDoc } from '../sync'
 
 /**
  * 读者侧划词高亮 + 批注。选中正文 → 浮动工具条；点高亮 → 编辑批注；右下角按钮看本页笔记、导入导出。
  * 用文本锚点（原文 + 前后文）定位，文档小改后仍能找回。
- * 存储：dev 时读写仓库里的 src/data/reader-notes.json（见 readerNotesStore.ts），随 git 跨设备同步；
- * 线上该文件打包进站点只读，本机新增/修改存 localStorage，按 id 覆盖文件里的。
+ * 存储：src/data/reader-notes.json，改动先存本机，再在设备间同步（GitHub / 本机仓库文件，见 ../sync.ts）。
+ * 删除留删除记录，合并时才盖得过别的设备上的旧副本（见 src/lib/readerNotes.ts）。
  * 交互 widget（.widget）里的 DOM 由 Vue 管理，不往里插 mark。
  */
 
-interface Note extends TextQuote {
-  id: string
-  note: string
-  created: number
-}
-type Store = Record<string, Note[]>
-
-const KEY = 'inferview:reader-notes:v1'
-const ENDPOINT = '/__reader-notes'
 const ROOT = '.vp-doc'
 const SKIP = '.widget, .rn-ui, .anno-note, .header-anchor, script, style'
 
 const route = useRoute()
 const ready = ref(false)
 const hasDoc = ref(false)
-const store = ref<Store>({})
-// 是否以仓库文件为数据源（dev 且 dev server 可达）
-const fileMode = ref(import.meta.env.DEV)
+const { data: store, persist } = useSyncedDoc(readerNotesSpec)
 const orphans = ref<Set<string>>(new Set())
 const order = ref<string[]>([])
 
-const notes = computed(() => store.value[route.path] ?? [])
+const notes = computed(() => liveNotes(store.value[route.path]))
 const sortedNotes = computed(() => {
   const rank = new Map(order.value.map((id, i) => [id, i]))
   return [...notes.value].sort((a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9))
 })
+const storageText = computed(() =>
+  syncState.mode === 'github'
+    ? '先存在这台设备上，再自动同步到 GitHub'
+    : syncState.mode === 'file'
+      ? '自动写入 src/data/reader-notes.json，提交到 git 即可同步'
+      : '只保存在本浏览器；右上角 ☁ 连上 GitHub 后可在设备间同步',
+)
 
-// ---------- 持久化 ----------
-function loadLocal(): Store {
-  try {
-    return JSON.parse(localStorage.getItem(KEY) || '{}')
-  } catch {
-    return {}
-  }
-}
-
-function saveLocal(s: Store) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(s))
-  } catch {}
-}
-
-/** 按 id 合并，over 覆盖 base；顺带丢掉格式不对的条目 */
-function merge(base: Store, over: Store): Store {
-  const out: Store = { ...base }
-  for (const [path, list] of Object.entries(over)) {
-    if (!Array.isArray(list)) continue
-    const byId = new Map((out[path] ?? []).map((n) => [n.id, n]))
-    for (const n of list) if (n?.id && typeof n.exact === 'string') byId.set(n.id, n)
-    out[path] = [...byId.values()]
-  }
-  return out
-}
-
-async function putFile(s: Store) {
-  const res = await fetch(ENDPOINT, { method: 'PUT', body: JSON.stringify(s) })
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
-}
-
-async function load(): Promise<Store> {
-  if (!fileMode.value) return merge(bundled as Store, loadLocal())
-  try {
-    const res = await fetch(ENDPOINT)
-    if (!res.ok) throw new Error(`${res.status}`)
-    const file = (await res.json()) as Store
-    // 浏览器里的旧笔记（或之前写文件失败暂存的）并入文件，成功后清掉本地副本
-    const local = loadLocal()
-    if (!Object.keys(local).length) return file
-    const merged = merge(file, local)
-    await putFile(merged)
-    localStorage.removeItem(KEY)
-    return merged
-  } catch (e) {
-    console.error('[reader-notes] 读不到笔记文件，退回 localStorage', e)
-    fileMode.value = false
-    return merge(bundled as Store, loadLocal())
-  }
-}
-
-// 写文件串行，保证落盘顺序和操作顺序一致
-let saving: Promise<void> = Promise.resolve()
-
-function persist() {
-  const snapshot = store.value
-  if (!fileMode.value) return saveLocal(snapshot)
-  saving = saving
-    .then(() => putFile(snapshot))
-    .catch((e) => {
-      console.error('[reader-notes] 写笔记文件失败，暂存到 localStorage', e)
-      saveLocal(snapshot)
-    })
-}
-
-async function reload() {
-  await saving
-  store.value = await load()
-  applyAll()
-}
-
-function setNotes(list: Note[]) {
-  const next = { ...store.value }
-  if (list.length) next[route.path] = list
-  else delete next[route.path]
+function update(next: typeof store.value) {
   store.value = next
   persist()
 }
@@ -232,7 +163,11 @@ function onSelectionEnd(e: Event) {
     if (!off) return
     pending = off
     const rect = range.getBoundingClientRect()
-    toolbar.value = { top: rect.top + window.scrollY - 44, left: rect.left + window.scrollX + rect.width / 2 }
+    // 手机上系统的「拷贝 / 查询」菜单在选区上方，工具条放到下方，别挡住它
+    const top = coarse ? rect.bottom + window.scrollY + 12 : rect.top + window.scrollY - 44
+    const half = 64
+    const left = Math.min(Math.max(rect.left + rect.width / 2, half), document.documentElement.clientWidth - half)
+    toolbar.value = { top, left: left + window.scrollX }
   })
 }
 
@@ -245,8 +180,9 @@ function addHighlight(withNote: boolean) {
     ...makeQuote(idx.full, pending.start, pending.end),
     note: '',
     created: Date.now(),
+    at: Date.now(),
   }
-  setNotes([...notes.value, n])
+  update(addNote(store.value, route.path, n))
   window.getSelection()?.removeAllRanges()
   toolbar.value = null
   pending = null
@@ -273,13 +209,14 @@ function openEditor(id: string) {
 function saveNote() {
   if (!editing.value) return
   const id = editing.value.id
-  setNotes(notes.value.map((n) => (n.id === id ? { ...n, note: draft.value.trim() } : n)))
+  const n = notes.value.find((x) => x.id === id)
+  if (n && n.note !== draft.value.trim()) update(editNote(store.value, route.path, id, draft.value.trim()))
   editing.value = null
   applyAll()
 }
 
 function removeNote(id: string) {
-  setNotes(notes.value.filter((n) => n.id !== id))
+  update(removeNotes(store.value, route.path, [id]))
   if (editing.value?.id === id) editing.value = null
   applyAll()
 }
@@ -320,8 +257,9 @@ async function importFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
   try {
-    store.value = merge(store.value, JSON.parse(await file.text()) as Store)
-    persist()
+    const data = JSON.parse(await file.text())
+    if (!isReaderNotes(data)) throw new Error('bad notes')
+    update(mergeReaderNotes(store.value, data))
     applyAll()
   } catch {
     alert('导入失败：不是有效的笔记 JSON')
@@ -331,21 +269,25 @@ async function importFile(e: Event) {
 
 function clearPage() {
   if (confirm(`删除本页全部 ${notes.value.length} 条高亮？`)) {
-    setNotes([])
+    update(removeNotes(store.value, route.path, notes.value.map((n) => n.id)))
     applyAll()
   }
 }
 
 // ---------- 生命周期 ----------
-function onStorage(e: StorageEvent) {
-  if (e.key !== KEY || fileMode.value) return
-  reload()
-}
+// 别的设备同步过来的改动：重画高亮（编辑框开着时等它关了再画，免得锚点元素被换掉）
+watch(notes, () => {
+  if (!editing.value) nextTick(applyAll)
+})
 
-// 文件模式下回到窗口就重读：其他标签页的修改、git pull 进来的笔记都会生效
-function onFocus() {
-  if (fileMode.value && !editing.value) reload()
+// 手机上长按选字、拖动选区手柄不会触发 mouseup，只能听 selectionchange；停下来一会儿再弹工具条
+let selTimer: ReturnType<typeof setTimeout> | undefined
+function onSelectionChange() {
+  if (!coarse) return
+  clearTimeout(selTimer)
+  selTimer = setTimeout(() => onSelectionEnd(new Event('selectionchange')), 350)
 }
+const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
 
 onContentUpdated(() => {
   editing.value = null
@@ -353,13 +295,11 @@ onContentUpdated(() => {
   nextTick(applyAll)
 })
 
-onMounted(async () => {
+onMounted(() => {
   document.addEventListener('mouseup', onSelectionEnd)
   document.addEventListener('keyup', onSelectionEnd)
   document.addEventListener('click', onDocClick)
-  window.addEventListener('storage', onStorage)
-  window.addEventListener('focus', onFocus)
-  store.value = await load()
+  document.addEventListener('selectionchange', onSelectionChange)
   ready.value = true
   applyAll()
 })
@@ -368,8 +308,8 @@ onBeforeUnmount(() => {
   document.removeEventListener('mouseup', onSelectionEnd)
   document.removeEventListener('keyup', onSelectionEnd)
   document.removeEventListener('click', onDocClick)
-  window.removeEventListener('storage', onStorage)
-  window.removeEventListener('focus', onFocus)
+  document.removeEventListener('selectionchange', onSelectionChange)
+  clearTimeout(selTimer)
 })
 </script>
 
@@ -417,9 +357,7 @@ onBeforeUnmount(() => {
         <header>
           <b>本页笔记</b>
           <span class="rn-muted">
-            选中正文即可高亮 / 批注，{{
-              fileMode ? '自动写入 src/data/reader-notes.json，提交到 git 即可同步' : '新增内容仅保存在本浏览器'
-            }}
+            选中正文即可高亮 / 批注，{{ storageText }}
           </span>
         </header>
         <p v-if="!notes.length" class="rn-muted rn-empty">还没有高亮。</p>

@@ -1,4 +1,16 @@
 {
+  "kernel-cross-program-reduce": {
+    "text": "splitk 解释下",
+    "at": 1791094403472
+  },
+  "kernel-elementwise-bound": {
+    "text": "感觉类似llm的decode阶段",
+    "at": 1791094385899
+  },
+  "kernel-parallel-vs-reduce": {
+    "text": "格式不好看，写下1.2.3",
+    "at": 1791094319751
+  },
   "torch-broadcast-rule": {
     "text": "加个错误例子",
     "at": 1791092925886
@@ -14,5 +26,21 @@
   "torch-view-vs-reshape": {
     "text": "ranspose 后把 (N, h, dk) 合成 (N, d_model) 为啥达不成",
     "at": 1791092869505
+  },
+  "triton-no-grid-sync": {
+    "text": "CUDA 有吗，如果有的话咋同步来着",
+    "at": 1791094016398
+  },
+  "triton-online-merge": {
+    "text": "写下both数学公式和代码",
+    "at": 1791094178560
+  },
+  "triton-softmax-largeN": {
+    "text": "max还是online好啊",
+    "at": 1791094128428
+  },
+  "triton-stream-order": {
+    "text": "1. 依赖肯定自动sync了呗\n2. cuda要手动sync对吧",
+    "at": 1791094060879
   }
 }

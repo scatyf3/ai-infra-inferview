@@ -9,54 +9,43 @@ import {
   countBuckets,
   fmtInterval,
   inlineMd,
-  isNotes,
-  isProgress,
-  mergeNotes,
-  mergeProgress,
+  isSuspended,
   nextCard,
   nextDueAt,
   noteOf,
   preview,
   review,
   setNote,
+  setSuspended,
   type Bucket,
   type Deck,
   type Grade,
-  type Notes,
-  type Progress,
 } from '@lib/flashcards'
 import { cards } from '@data/flashcards'
-import bundled from '@data/flashcard-progress.json'
-import notesBundled from '@data/flashcard-notes.json'
-import { useFileStore } from '../fileStore'
+import { cardNotesSpec, flagsSpec, progressSpec } from '@lib/syncDocs'
+import { syncState, useSyncedDoc } from '../sync'
 
 /**
- * 原语闪卡：FSRS 间隔重复（Again / Hard / Good / Easy）+ 每张卡的批注 + 全部卡片列表。
- * 复习记录和批注各存一个 json（src/data/flashcard-progress.json、flashcard-notes.json，见 flashcardStore.ts）：
- * dev 时读写仓库文件，随 git 同步；线上文件只读，本机改动存 localStorage（见 fileStore.ts）。
+ * 原语闪卡：FSRS 间隔重复（Again / Hard / Good / Easy）+ 每张卡的批注和暂停 + 全部卡片列表。
+ * 复习记录、批注、暂停标记各存一个 json（src/data/flashcard-{progress,notes,flags}.json），
+ * 改动先存本机，再在设备间同步（GitHub / 本机仓库文件，见 ../sync.ts）。
  */
 
 const NEW_PER_ROUND = 20
 
-const progressStore = useFileStore<Progress>({
-  label: 'flashcards',
-  endpoint: '/__flashcards',
-  localKey: 'inferview:flashcards:v2',
-  bundled: bundled as Progress,
-  validate: isProgress,
-  merge: mergeProgress,
-})
-const notesStore = useFileStore<Notes>({
-  label: 'flashcard-notes',
-  endpoint: '/__flashcard-notes',
-  localKey: 'inferview:flashcard-notes:v1',
-  bundled: notesBundled as Notes,
-  validate: isNotes,
-  merge: mergeNotes,
-})
+const progressStore = useSyncedDoc(progressSpec)
+const notesStore = useSyncedDoc(cardNotesSpec)
+const flagsStore = useSyncedDoc(flagsSpec)
 const progress = progressStore.data
 const notes = notesStore.data
-const fileMode = progressStore.fileMode
+const flags = flagsStore.data
+const storageText = computed(() =>
+  syncState.mode === 'github'
+    ? '先存在这台设备上，再自动同步到 GitHub，手机和电脑共用一份'
+    : syncState.mode === 'file'
+      ? '写进仓库的 src/data/flashcard-*.json，随 git 同步'
+      : '存在这台设备的浏览器里（右上角 ☁ 连上 GitHub 后可在设备间同步）',
+)
 
 // ---------- 筛选与统计 ----------
 type DeckFilter = Deck | 'all'
@@ -75,29 +64,38 @@ const BUCKETS: { key: Bucket; label: string }[] = [
   { key: 'learning', label: '学习中' },
   { key: 'new', label: '新卡' },
   { key: 'later', label: '未到期' },
+  { key: 'suspended', label: '已暂停' },
 ]
-const buckets = computed(() => countBuckets(deckCards.value, progress.value, now.value))
+const buckets = computed(() => countBuckets(deckCards.value, progress.value, now.value, flags.value))
+const bucketOfCard = (id: string) => bucketOf(progress.value[id], now.value, isSuspended(flags.value, id))
 const segments = computed(() => {
   const n = deckCards.value.length || 1
   return BUCKETS.filter((b) => buckets.value[b.key]).map((b) => ({ key: b.key, w: (100 * buckets.value[b.key]) / n }))
 })
 
 // ---------- 复习 ----------
-const skipped = ref<Set<string>>(new Set())
+// 这一轮跳过的卡，按跳过的先后；它们排到最后，别的出完了再出
+const deferred = ref<string[]>([])
 const newLimit = ref(NEW_PER_ROUND)
 const newSeen = ref(0)
 const reviewed = ref(0)
 const flipped = ref(false)
 
-const cur = computed(() => nextCard(deckCards.value, progress.value, now.value, skipped.value, newLimit.value - newSeen.value))
+const cur = computed(() =>
+  nextCard(deckCards.value, progress.value, now.value, {
+    newLeft: newLimit.value - newSeen.value,
+    deferred: deferred.value,
+    flags: flags.value,
+  }),
+)
 const curSched = computed(() => (cur.value ? progress.value[cur.value.id] : undefined))
 watch(() => cur.value?.id, () => { flipped.value = false; editing.value = null })
 const pv = computed(() => (cur.value && flipped.value ? preview(curSched.value, now.value) : null))
 const newLeft = computed(() => Math.min(buckets.value.new, Math.max(0, newLimit.value - newSeen.value)))
-const nextDue = computed(() => nextDueAt(deckCards.value, progress.value))
+const nextDue = computed(() => nextDueAt(deckCards.value, progress.value, flags.value))
 
 function restart() {
-  skipped.value = new Set()
+  deferred.value = []
   newLimit.value = NEW_PER_ROUND
   newSeen.value = 0
   reviewed.value = 0
@@ -106,7 +104,13 @@ function restart() {
 watch(deck, restart)
 
 function flip() { if (cur.value) flipped.value = true }
-function skip() { if (cur.value) skipped.value = new Set([...skipped.value, cur.value.id]) }
+/** 排到这一轮最后；再跳一次就再排到最后 */
+function skip() {
+  const c = cur.value
+  if (!c) return
+  saveNote()
+  deferred.value = [...deferred.value.filter((id) => id !== c.id), c.id]
+}
 function give(g: Grade) {
   const c = cur.value
   if (!c || !flipped.value) return
@@ -114,9 +118,16 @@ function give(g: Grade) {
   const t = new Date()
   if (bucketOf(progress.value[c.id], t) === 'new') newSeen.value++
   progress.value = review(progress.value, c.id, g, t)
+  deferred.value = deferred.value.filter((id) => id !== c.id)
   now.value = t
   reviewed.value++
   progressStore.persist()
+}
+/** 暂停：不再出现在复习里，直到恢复；复习记录原样保留 */
+function suspend(id: string, on: boolean) {
+  saveNote()
+  flags.value = setSuspended(flags.value, id, on)
+  flagsStore.persist()
 }
 
 function onKey(e: KeyboardEvent) {
@@ -167,14 +178,21 @@ function dueText(id: string) {
   return ms <= 0 ? '已到期' : `${fmtInterval(ms)}后`
 }
 
-onMounted(async () => {
+// 切回来时更新「现在」，到期的卡才会出来；别的设备的改动由 ../sync.ts 拉过来
+function onVisible() {
+  if (document.visibilityState === 'visible') now.value = new Date()
+}
+
+onMounted(() => {
   window.addEventListener('keydown', onKey)
+  document.addEventListener('visibilitychange', onVisible)
   ticker = window.setInterval(() => { now.value = new Date() }, 30_000)
-  await Promise.all([progressStore.load(), notesStore.load()])
+  // useSyncedDoc 的 onMounted 先跑，这时本机缓存已经并进来了
   restart()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
+  document.removeEventListener('visibilitychange', onVisible)
   clearInterval(ticker)
 })
 </script>
@@ -249,7 +267,9 @@ onBeforeUnmount(() => {
           </div>
         </template>
         <div class="fc-foot">
-          <button class="btn" @click="skip">这轮跳过 <kbd>→</kbd></button>
+          <button class="btn" title="不再出现在复习里，直到在「全部卡片」里恢复" @click="suspend(cur.id, true)">暂停这张</button>
+          <button class="btn" title="排到这一轮最后，别的卡出完了再出" @click="skip">跳过 <kbd>→</kbd></button>
+          <span v-if="deferred.length" class="muted fc-deferred">已跳过 {{ deferred.length }} 张，排在最后</span>
         </div>
       </div>
 
@@ -258,16 +278,17 @@ onBeforeUnmount(() => {
           这一轮没有要复习的卡了<template v-if="reviewed">，复习了 <b>{{ reviewed }}</b> 次</template>。
           <template v-if="nextDue && nextDue > now.getTime()">下一张 <b>{{ fmtInterval(nextDue - now.getTime()) }}</b>后到期。</template>
         </p>
+        <p v-if="buckets.suspended" class="muted">已暂停 {{ buckets.suspended }} 张，在「全部卡片」里可以恢复。</p>
         <div class="fc-done-btns">
           <button v-if="buckets.new && !newLeft" class="btn" @click="newLimit += 10">再学 10 张新卡</button>
-          <button v-if="skipped.size" class="btn" @click="skipped = new Set()">把跳过的 {{ skipped.size }} 张放回来</button>
         </div>
       </div>
 
       <p class="muted fc-note">
         FSRS 按你的每次评分估计记忆的衰减，算出下次该复习的时间：先出到期的卡，再出新卡（每轮 {{ NEW_PER_ROUND }} 张）。
         按钮上方是选它之后多久再出现。翻面后按 <kbd>N</kbd> 给这张卡写批注。
-        复习记录和批注{{ fileMode ? '写进仓库的 src/data/flashcard-progress.json、flashcard-notes.json，随 git 同步' : '存在这台设备的浏览器里' }}。
+        跳过的卡排到这一轮最后；暂停的卡不再出现，直到在「全部卡片」里恢复。
+        复习记录、批注和暂停{{ storageText }}。
       </p>
     </template>
 
@@ -277,7 +298,11 @@ onBeforeUnmount(() => {
       <tbody>
         <template v-for="c in deckCards" :key="c.id">
           <tr class="fc-row" @click="toggleOpen(c.id)">
-            <td><span class="fc-state" :class="'b-' + bucketOf(progress[c.id], now)">{{ STATE_LABEL[progress[c.id]?.state ?? State.New] }}</span></td>
+            <td>
+              <span class="fc-state" :class="'b-' + bucketOfCard(c.id)">{{
+                isSuspended(flags, c.id) ? '已暂停' : STATE_LABEL[progress[c.id]?.state ?? State.New]
+              }}</span>
+            </td>
             <td><span class="fc-deck" :class="c.deck">{{ c.deck }}</span></td>
             <td><span class="muted fc-topic">{{ c.topic }}</span> <span v-html="inlineMd(c.q)" /><span v-if="noteOf(notes, c.id)" class="fc-has-note" title="有批注"> ✎</span></td>
             <td class="muted fc-num">{{ dueText(c.id) }}</td>
@@ -285,9 +310,12 @@ onBeforeUnmount(() => {
           </tr>
           <tr v-if="open.has(c.id)" class="fc-ans">
             <td colspan="5">
-              <div v-html="inlineMd(c.a)" />
+              <div class="fc-ans-a" v-html="inlineMd(c.a)" />
               <pre v-if="c.code" class="fc-code"><code>{{ c.code }}</code></pre>
               <a v-if="c.ref" class="fc-ref" :href="withBase(c.ref)">出处 →</a>
+              <button class="btn fc-suspend" @click="suspend(c.id, !isSuspended(flags, c.id))">
+                {{ isSuspended(flags, c.id) ? '恢复复习' : '暂停这张' }}
+              </button>
               <div class="fc-notebox">
                 <div v-if="editing === c.id" class="fc-note-edit">
                   <textarea
@@ -319,6 +347,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .b-due { --c: var(--fam4); } .b-learning { --c: var(--fam3); } .b-new { --c: var(--st-todo); } .b-later { --c: var(--fam1); }
+.b-suspended { --c: var(--vp-c-text-3); }
 .g1 { --c: var(--fam4); } .g2 { --c: var(--fam3); } .g3 { --c: var(--fam1); } .g4 { --c: var(--fam2); }
 
 .fc-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
@@ -339,6 +368,8 @@ onBeforeUnmount(() => {
 .fc-state { padding: 1px 7px; border-radius: 4px; font-size: 11px; line-height: 1.6; white-space: nowrap; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
 .fc-q { font-size: 16px; font-weight: 600; line-height: 1.7; }
 .fc-a { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--wg-border); line-height: 1.8; }
+/* 答案里的 \n 显示成换行，方便写 1. 2. 3. 和多行公式 */
+.fc-a, .fc-ans-a { white-space: pre-line; }
 .fc-q :deep(code), .fc-a :deep(code), .fc-table :deep(code) { font-size: 0.88em; padding: 1px 5px; border-radius: 4px; background: var(--vp-c-bg-soft); }
 .fc-code { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--vp-code-block-bg); font-size: 12.5px; line-height: 1.6; overflow-x: auto; }
 .fc-code code { font-family: var(--vp-font-family-mono); color: var(--vp-code-block-color); }
@@ -365,7 +396,9 @@ kbd { padding: 0 5px; border: 1px solid var(--wg-border); border-radius: 4px; fo
 .fc-note-edit textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--vp-c-yellow-1); border-radius: 6px; background: var(--vp-c-bg); color: var(--wg-text); font: inherit; font-size: 13px; line-height: 1.6; resize: vertical; }
 .fc-note-actions { display: flex; gap: 6px; margin-top: 4px; }
 .fc-has-note { color: var(--vp-c-yellow-1); }
-.fc-foot { display: flex; justify-content: flex-end; margin-top: 12px; }
+.fc-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.fc-deferred { order: -1; margin-right: auto; font-size: 12px; }
+.fc-suspend { margin: 8px 0 0 12px; padding: 2px 10px; font-size: 12px; }
 .fc-done { padding: 22px; text-align: center; border: 1px dashed var(--wg-border); border-radius: 10px; }
 .fc-done p { margin: 0 0 10px; }
 .fc-done-btns { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
