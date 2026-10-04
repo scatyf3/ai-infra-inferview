@@ -71,6 +71,18 @@
     "due": "2026-10-12T15:27:22.626Z",
     "last_review": "2026-10-04T15:27:22.626Z"
   },
+  "bagu-radix": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-12T23:26:26.886Z",
+    "last_review": "2026-10-04T23:26:26.886Z"
+  },
   "bagu-ridge-point": {
     "stability": 2.3065,
     "difficulty": 2.11121424,
