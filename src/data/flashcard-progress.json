@@ -109,15 +109,15 @@
   },
   "bagu-gqa-tp": {
     "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "difficulty": 2.11121424,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 2,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-04T23:49:57.884Z",
-    "last_review": "2026-10-04T23:39:57.884Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-06T23:53:10.310Z",
+    "last_review": "2026-10-04T23:53:10.310Z"
   },
   "bagu-how-many-gpus": {
     "stability": 3.94605407,
