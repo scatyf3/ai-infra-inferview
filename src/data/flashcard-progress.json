@@ -1,4 +1,16 @@
 {
+  "bagu-ridge-point": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-04T15:29:55.189Z",
+    "last_review": "2026-10-04T15:19:55.189Z"
+  },
   "kernel-cross-program-reduce": {
     "stability": 2.3065,
     "difficulty": 2.11810397,
