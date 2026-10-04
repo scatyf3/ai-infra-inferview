@@ -36,16 +36,16 @@
     "last_review": "2026-10-04T06:13:09.673Z"
   },
   "torch-broadcast-rule": {
-    "stability": 0.212,
-    "difficulty": 6.4133,
+    "stability": 0.08335672,
+    "difficulty": 8.80630447,
     "elapsed_days": 0,
     "scheduled_days": 0,
-    "reps": 1,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 1,
-    "due": "2026-10-04T05:49:47.226Z",
-    "last_review": "2026-10-04T05:48:47.226Z"
+    "due": "2026-10-04T15:04:52.712Z",
+    "last_review": "2026-10-04T15:03:52.712Z"
   },
   "torch-broadcast-trap": {
     "stability": 0.42437996,
