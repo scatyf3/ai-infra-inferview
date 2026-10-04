@@ -155,6 +155,18 @@
     "due": "2026-10-12T15:27:22.626Z",
     "last_review": "2026-10-04T15:27:22.626Z"
   },
+  "bagu-pd-disagg": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-04T23:53:55.144Z",
+    "last_review": "2026-10-04T23:43:55.144Z"
+  },
   "bagu-preempt-swap-recompute": {
     "stability": 8.2956,
     "difficulty": 1,
