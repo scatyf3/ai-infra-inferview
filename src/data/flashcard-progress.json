@@ -1,4 +1,16 @@
 {
+  "bagu-long-context-prefill": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-12T15:21:45.432Z",
+    "last_review": "2026-10-04T15:21:45.432Z"
+  },
   "bagu-ridge-point": {
     "stability": 2.3065,
     "difficulty": 2.11810397,
