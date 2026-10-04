@@ -108,16 +108,16 @@
     "last_review": "2026-10-04T05:41:11.419Z"
   },
   "torch-transpose-meta": {
-    "stability": 0.212,
-    "difficulty": 6.4133,
+    "stability": 0.42437996,
+    "difficulty": 5.20002037,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 1,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
-    "state": 1,
-    "due": "2026-10-04T05:42:26.622Z",
-    "last_review": "2026-10-04T05:41:26.622Z"
+    "state": 2,
+    "due": "2026-10-05T15:01:58.776Z",
+    "last_review": "2026-10-04T15:01:58.776Z"
   },
   "triton-arange-pow2": {
     "stability": 2.36913529,
