@@ -23,6 +23,18 @@
     "due": "2026-10-12T23:43:38.686Z",
     "last_review": "2026-10-04T23:43:38.686Z"
   },
+  "bagu-chunked-vs-pd": {
+    "stability": 1.2931,
+    "difficulty": 5.11217071,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-04T23:50:02.232Z",
+    "last_review": "2026-10-04T23:44:02.232Z"
+  },
   "bagu-continuous-batching": {
     "stability": 8.2956,
     "difficulty": 1,
