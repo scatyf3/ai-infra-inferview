@@ -47,6 +47,18 @@
     "due": "2026-10-12T23:37:53.058Z",
     "last_review": "2026-10-04T23:37:53.058Z"
   },
+  "bagu-gqa-tp": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-04T23:49:57.884Z",
+    "last_review": "2026-10-04T23:39:57.884Z"
+  },
   "bagu-how-many-gpus": {
     "stability": 3.94605407,
     "difficulty": 1,
