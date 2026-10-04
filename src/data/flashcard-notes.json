@@ -19,6 +19,10 @@
     "text": "b是啥，size of bf16吗",
     "at": 1791127399612
   },
+  "bagu-kv-quant": {
+    "text": "per tensor啥意思，2解释下",
+    "at": 1791156878088
+  },
   "bagu-prefill-ai": {
     "text": "为啥一次乘加，而且符号也不清楚",
     "at": 1791127240217
