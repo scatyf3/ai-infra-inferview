@@ -35,6 +35,18 @@
     "due": "2026-10-04T23:50:10.805Z",
     "last_review": "2026-10-04T23:40:10.805Z"
   },
+  "bagu-flash-decoding": {
+    "stability": 1.2931,
+    "difficulty": 5.11217071,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-04T23:48:09.148Z",
+    "last_review": "2026-10-04T23:42:09.148Z"
+  },
   "bagu-gqa": {
     "stability": 8.2956,
     "difficulty": 1,
