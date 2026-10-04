@@ -335,7 +335,8 @@ const primitiveCards: Card[] = [
     deck: 'triton',
     topic: 'atomic',
     q: '用 `tl.atomic_max` / `tl.atomic_add` 合并全局 M、D 时，初值怎么给？结果可复现吗？',
-    a: 'M 用 `torch.full((1,), -inf)`，D 用 `torch.zeros(1)`，**不能用 `torch.empty`**。max 和顺序无关，可复现；sum 的 `atomic_add` 先后顺序每次不同，最后几位会变。',
+    a: '初值要取**单位元**：和任何数合并都不改变那个数。\n1. max 的单位元是 −inf：`max(−inf, x) = x`。所以 M 用 `torch.full((1,), float("-inf"))`。\n2. 加法的单位元是 0：`0 + x = x`。所以 D 用 `torch.zeros(1)`。注意这里的 `(1)` 是 **shape**，意思是只有一个元素，值是 **0** 不是 1；写成 `torch.full((1,), 0.0)` 更不容易看错。\n3. **不能用 `torch.empty`**：它的内容是显存里残留的任意值，合并进去结果就错了。\n可复现吗：max 和合并顺序无关，每次一样；`atomic_add` 的先后顺序每次不同，浮点加法不满足结合律，最后几位会变。',
+    code: 'M = torch.full((1,), float("-inf"), device="cuda")   # max 的单位元\nD = torch.zeros(1, device="cuda")                     # shape (1,)，值是 0\nD = torch.full((1,), 0.0, device="cuda")              # 同上，写法更直观',
     ref: SM,
   },
   {
