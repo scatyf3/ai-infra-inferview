@@ -1,4 +1,8 @@
 {
+  "bagu-activation-small": {
+    "text": "这对吗，为了graph化，中间结果的内存地址也要固定吧",
+    "at": 1791156154485
+  },
   "bagu-decode-ai": {
     "text": "同prefill的评价",
     "at": 1791127259991
