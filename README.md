@@ -84,13 +84,15 @@ leetgpu: [50, 83]   # LeetGPU 题号，链接按 src/data/leetgpu-challenges.jso
 
 ## 批注、闪卡在设备间同步
 
-读者批注和闪卡的复习记录 / 批注 / 暂停存在 `src/data/` 下四个 json 里（清单见 `src/lib/syncDocs.ts`）。每次改动先存进浏览器，界面立刻更新、离线也不丢，再按下面的模式同步：
+读者批注和闪卡的复习记录 / 批注 / 暂停存在 `src/data/` 下四个 json 里（清单见 `src/lib/syncDocs.ts`）。每次改动先存进浏览器，界面立刻更新、离线也不丢，再同步。数据一律以 GitHub 上的 `data` 分支为准：
 
-| 模式 | 什么时候 | 存到哪 |
-|---|---|---|
-| GitHub | 导航栏 ☁ 里连上了 GitHub token | 仓库的 `data` 分支，手机电脑在任何网络下共用 |
-| 仓库文件 | 没连 token 的 `docs:dev` | 本机仓库里的 json，靠 git 同步 |
-| 本机 | 没连 token 的线上站点 | 只在这台设备的浏览器里 |
+| 在哪打开 | 怎么同步 |
+|---|---|
+| 任何设备，导航栏 ☁ 里连了 token | 页面直接读写 `data` 分支 |
+| 本地 `docs:dev`，没连 token | dev server 用电脑上的 GitHub 登录代为读写 `data` 分支（依次找 `GH_TOKEN` / `GITHUB_TOKEN`、`gh auth token`、git 凭据管理器）；都没有才退回本机仓库里的 json |
+| 线上站点，没连 token | 从公开地址只读拉取 `data` 分支（CDN 可能晚几分钟），改动只存在这台设备上 |
+
+本机仓库 main 上的这几个 json 只是初始数据，不会再更新；要看最新的用 `git show origin/data:src/data/flashcard-notes.json`。
 
 - **连 GitHub**：点导航栏的 ☁，按提示建一个 fine-grained token，只授权这个仓库、Contents 选 Read and write。token 只存在那台设备上。
 - **同步怎么做**：读远端 → 按条目合并（较新的胜出，删除留删除记录）→ 有变化就提交。停手 2 秒、切到后台、重新联网时同步一次，同一轮的几份数据合成一个 commit。提交时带上期望的分支 head，别的设备抢先提交了就重读重合并（`src/lib/sync.ts`、`src/lib/github.ts`）。

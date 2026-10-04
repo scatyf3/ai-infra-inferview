@@ -24,7 +24,7 @@ import {
 } from '@lib/flashcards'
 import { cards } from '@data/flashcards'
 import { cardNotesSpec, flagsSpec, progressSpec } from '@lib/syncDocs'
-import { syncState, useSyncedDoc } from '../sync'
+import { syncState, syncsToGitHub, useSyncedDoc } from '../sync'
 
 /**
  * 原语闪卡：FSRS 间隔重复（Again / Hard / Good / Easy）+ 每张卡的批注和暂停 + 全部卡片列表。
@@ -44,11 +44,11 @@ const progress = progressStore.data
 const notes = notesStore.data
 const flags = flagsStore.data
 const storageText = computed(() =>
-  syncState.mode === 'github'
-    ? '先存在这台设备上，再自动同步到 GitHub，手机和电脑共用一份'
-    : syncState.mode === 'file'
-      ? '写进仓库的 src/data/flashcard-*.json，随 git 同步'
-      : '存在这台设备的浏览器里（右上角 ☁ 连上 GitHub 后可在设备间同步）',
+  syncsToGitHub.value
+    ? '先存在这台设备上，再自动同步到 GitHub 的 data 分支，手机和电脑共用一份'
+    : syncState.mode === 'server'
+      ? '写进本机仓库的 src/data/flashcard-*.json（电脑上没有 GitHub 登录）'
+      : '只存在这台设备的浏览器里；显示的是 data 分支上的数据，右上角 ☁ 连上 GitHub 后改动才会同步',
 )
 
 // ---------- 筛选与统计 ----------

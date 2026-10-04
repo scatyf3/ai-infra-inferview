@@ -12,7 +12,7 @@ import {
   type ReaderNote as Note,
 } from '@lib/readerNotes'
 import { readerNotesSpec } from '@lib/syncDocs'
-import { syncState, useSyncedDoc } from '../sync'
+import { syncState, syncsToGitHub, useSyncedDoc } from '../sync'
 
 /**
  * 读者侧划词高亮 + 批注。选中正文 → 浮动工具条；点高亮 → 编辑批注；右下角按钮看本页笔记、导入导出。
@@ -38,11 +38,11 @@ const sortedNotes = computed(() => {
   return [...notes.value].sort((a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9))
 })
 const storageText = computed(() =>
-  syncState.mode === 'github'
-    ? '先存在这台设备上，再自动同步到 GitHub'
-    : syncState.mode === 'file'
-      ? '自动写入 src/data/reader-notes.json，提交到 git 即可同步'
-      : '只保存在本浏览器；右上角 ☁ 连上 GitHub 后可在设备间同步',
+  syncsToGitHub.value
+    ? '先存在这台设备上，再自动同步到 GitHub 的 data 分支'
+    : syncState.mode === 'server'
+      ? '写进本机仓库的 src/data/reader-notes.json（电脑上没有 GitHub 登录）'
+      : '只保存在本浏览器；右上角 ☁ 连上 GitHub 后才会同步到别的设备',
 )
 
 function update(next: typeof store.value) {

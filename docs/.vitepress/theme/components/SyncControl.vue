@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { DATA_REPO } from '@lib/github'
-import { DATA_BRANCH_URL, connectGitHub, disconnectGitHub, syncNow, syncState } from '../sync'
+import { DATA_BRANCH_URL, connectGitHub, disconnectGitHub, syncNow, syncState, syncsToGitHub } from '../sync'
 
 /**
  * 导航栏上的同步状态 + 设置面板：连 / 断 GitHub、立即同步、装到手机桌面的提示。
@@ -21,7 +21,7 @@ const label = computed(() => {
   if (syncState.status === 'offline') return syncState.pending ? '离线·待同步' : '离线'
   if (syncState.status === 'error') return '同步失败'
   if (syncState.pending) return '待同步'
-  return syncState.mode === 'file' ? '仓库文件' : '已同步'
+  return syncsToGitHub.value ? '已同步' : '仓库文件'
 })
 const tone = computed(() => {
   if (syncState.mode === 'local') return 'muted'
@@ -130,11 +130,11 @@ onBeforeUnmount(() => {
             页面上的批注、闪卡复习记录 / 批注 / 暂停，每次改动先存在这台设备上，再自动同步。
           </p>
 
-          <!-- 已连 GitHub -->
-          <template v-if="syncState.mode === 'github'">
+          <!-- 已同步到 GitHub：这台设备的 token，或者 dev server 用电脑上的 GitHub 登录 -->
+          <template v-if="syncsToGitHub">
             <dl class="sc-kv">
               <dt>账号</dt>
-              <dd>{{ syncState.login || '—' }}</dd>
+              <dd>{{ syncState.mode === 'server' ? '电脑上的 GitHub 登录（dev server 代为同步）' : syncState.login || '—' }}</dd>
               <dt>状态</dt>
               <dd :class="tone">{{ label }}</dd>
               <dt>上次同步</dt>
@@ -146,15 +146,15 @@ onBeforeUnmount(() => {
             <div class="sc-row">
               <button class="sc-primary" :disabled="syncState.status === 'syncing'" @click="syncNow">立即同步</button>
               <span class="sc-spacer" />
-              <button class="sc-plain" @click="disconnect">断开</button>
+              <button v-if="syncState.mode === 'github'" class="sc-plain" @click="disconnect">断开</button>
             </div>
           </template>
 
           <!-- 没连 -->
           <template v-else>
             <p>
-              现在：<b>{{ syncState.mode === 'file' ? '写进本机仓库的文件，靠 git 同步' : '只存在这台设备的浏览器里' }}</b>。
-              连上 GitHub 后，手机和电脑在任何网络下都同步同一份数据。
+              现在：<b>{{ syncState.mode === 'server' ? '写进本机仓库的文件，靠 git 同步' : '显示 data 分支上的数据，但改动只存在这台设备上' }}</b>。
+              连上 GitHub 后，改动会同步到 data 分支，手机和电脑在任何网络下共用同一份。
             </p>
             <ol class="sc-steps">
               <li>
@@ -170,8 +170,8 @@ onBeforeUnmount(() => {
             </form>
             <p v-if="formError" class="sc-err">{{ formError }}</p>
             <p v-else-if="syncState.error" class="sc-err">{{ syncState.error }}</p>
-            <p v-if="syncState.mode === 'file'" class="sc-muted">
-              提示：电脑上也连上之后，数据以 GitHub 上的 {{ DATA_REPO.branch }} 分支为准，本机仓库里的这几个 json 不再更新。
+            <p v-if="syncState.mode === 'server'" class="sc-muted">
+              dev server 没找到电脑上的 GitHub 登录。在终端运行 <code>gh auth login</code>（或设置 GH_TOKEN）后重启 dev server，就会直接读写 {{ DATA_REPO.branch }} 分支，不用在这里粘贴 token。
             </p>
           </template>
 

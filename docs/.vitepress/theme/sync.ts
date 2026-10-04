@@ -1,7 +1,7 @@
-import { onMounted, reactive, shallowRef, type Ref } from 'vue'
+import { computed, onMounted, reactive, shallowRef, type Ref } from 'vue'
 import { SYNC_DOCS, type DocSpec } from '@lib/syncDocs'
-import { InvalidRemoteError, syncDocs, type Remote, type SyncTarget } from '@lib/sync'
-import { AuthError, DATA_REPO, canWrite, checkToken, githubRemote } from '@lib/github'
+import { InvalidRemoteError, StaleError, syncDocs, type Remote, type SyncTarget } from '@lib/sync'
+import { AuthError, DATA_REPO, canWrite, checkToken, githubRemote, rawRemote } from '@lib/github'
 import readerNotesBundled from '@data/reader-notes.json'
 import progressBundled from '@data/flashcard-progress.json'
 import cardNotesBundled from '@data/flashcard-notes.json'
@@ -10,17 +10,18 @@ import flagsBundled from '@data/flashcard-flags.json'
 /**
  * 读者数据（批注、闪卡复习记录 / 批注 / 暂停）在设备间的同步，全站共用一份。
  *
- * 三种模式：
- * - github：配了 token。直接和 GitHub 上 data 分支里的 json 同步，手机出门也能用（见 src/lib/github.ts）。
- * - file：没配 token 的 dev server。读写本机仓库里的 json，靠 git 同步（见 ../dataStore.ts）。
- * - local：没配 token 的线上站点。只存在这台设备的浏览器里。
+ * 三种模式，数据都以 GitHub 上的 data 分支为准：
+ * - github：这台设备配了 token。直接和 data 分支同步，手机出门也能用（见 src/lib/github.ts）。
+ * - server：没配 token 的 dev server。dev server 用电脑上的 GitHub 登录代为读写 data 分支；
+ *   电脑上没登录时才退回读写本机仓库里的 json（见 ../dataStore.ts，backend 字段说明是哪种）。
+ * - local：没配 token 的线上站点。从公开地址只读拉取 data 分支，改动只存在这台设备的浏览器里。
  *
  * 不管哪种模式，每次改动都先写进 localStorage，界面立刻更新、离线也不丢；
  * 停手一会儿、切到后台、重新联网时再同步。同步就是「读远端 → 按条目合并 → 有变化就写回」，
  * 合并规则见各数据的 merge（都是较新的胜出，删除留记录），所以本地副本随时整份并进去都安全。
  */
 
-export type SyncMode = 'github' | 'file' | 'local'
+export type SyncMode = 'github' | 'server' | 'local'
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'error'
 
 export const syncState = reactive({
@@ -33,17 +34,24 @@ export const syncState = reactive({
   error: '',
   /** github 模式下的 GitHub 用户名 */
   login: '',
+  /** server 模式下 dev server 实际读写的地方：data 分支，还是本机仓库文件 */
+  backend: '' as '' | 'github' | 'files',
 })
+
+/** 改动会不会同步到 GitHub 的 data 分支（给页面上的说明文字用） */
+export const syncsToGitHub = computed(
+  () => syncState.mode === 'github' || (syncState.mode === 'server' && syncState.backend !== 'files'),
+)
 
 export const DATA_BRANCH_URL = `https://github.com/${DATA_REPO.owner}/${DATA_REPO.name}/tree/${DATA_REPO.branch}/src/data`
 
 const TOKEN_KEY = 'inferview:gh-token'
 const LOGIN_KEY = 'inferview:gh-login'
 const PENDING_KEY = 'inferview:sync-pending'
-const FILE_ENDPOINT = '/__data'
+const SERVER_ENDPOINT = '/__data'
 
-/** 停手多久后同步：GitHub 上每次同步是一个 commit，攒一攒；本机文件便宜，快一点 */
-const DEBOUNCE = { github: 2000, file: 300, local: 0 }
+/** 停手多久后同步：GitHub 上每次同步是一个 commit，攒一攒 */
+const DEBOUNCE = { github: 2000, server: 2000, local: 0 }
 /** 出错后多久重试 */
 const RETRY_MS = 30_000
 /** 前台时多久拉一次别的设备的改动 */
@@ -117,31 +125,36 @@ function deviceName(): string {
   return '桌面'
 }
 
-/** dev server 上的本机仓库文件；没有版本号，服务端写入时自己合并 */
-const fileRemote: Remote = {
+/** dev server 上没有数据接口（比如 vitepress preview）：退回只存本机 */
+class NoServerError extends Error {}
+
+/** dev server 代为读写（见 ../dataStore.ts）；接口和 GitHub 一个形状，版本对不上回 409 */
+const serverRemote: Remote = {
   async read(paths) {
-    const texts: Record<string, string | null> = {}
-    await Promise.all(
-      SYNC_DOCS.filter((s) => paths.includes(s.path)).map(async (s) => {
-        const res = await fetch(`${FILE_ENDPOINT}/${s.key}`)
-        if (!res.ok) throw new Error(`dev server 返回 ${res.status}`)
-        texts[s.path] = await res.text()
-      }),
-    )
-    return { texts, version: null }
+    const res = await fetch(SERVER_ENDPOINT, { cache: 'no-store' })
+    if (res.status === 404) throw new NoServerError('dev server 上没有数据接口')
+    if (!res.ok) throw new Error(`dev server 返回 ${res.status}：${await res.text()}`)
+    const body = (await res.json()) as { backend: 'github' | 'files'; texts: Record<string, string | null>; version: string | null }
+    syncState.backend = body.backend
+    return { texts: Object.fromEntries(paths.map((p) => [p, body.texts[p] ?? null])), version: body.version }
   },
-  async write(files) {
-    for (const f of files) {
-      const s = SYNC_DOCS.find((d) => d.path === f.path)!
-      const res = await fetch(`${FILE_ENDPOINT}/${s.key}`, { method: 'PUT', body: f.text })
-      if (!res.ok) throw new Error(`写 ${f.path} 失败：${res.status} ${await res.text()}`)
-    }
+  async write(files, version, summary) {
+    const res = await fetch(SERVER_ENDPOINT, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files, version, summary, device: deviceName() }),
+    })
+    if (res.ok) return
+    const msg = ((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? res.statusText
+    if (res.status === 409) throw new StaleError(msg)
+    if (res.status === 401) throw new AuthError(`dev server 上的 GitHub 登录不能用：${msg}`)
+    throw new Error(`dev server 写入失败：${res.status} ${msg}`)
   },
 }
 
 function makeRemote(keepalive: boolean): Remote | null {
-  if (syncState.mode === 'file') return fileRemote
-  if (syncState.mode !== 'github') return null
+  if (syncState.mode === 'server') return serverRemote
+  if (syncState.mode === 'local') return rawRemote()
   const token = ls.get(TOKEN_KEY)
   if (!token) return null
   const r = githubRemote({ token, device: deviceName() })
@@ -202,10 +215,10 @@ async function runSync(keepalive = false): Promise<void> {
       console.error('[sync]', e)
       syncState.status = 'error'
       syncState.error = (e as Error).message
-      if (syncState.mode === 'file' && !(e instanceof InvalidRemoteError)) {
-        // dev server 上没有数据接口（比如 vitepress preview）：退回只存本机
+      if (e instanceof NoServerError) {
         syncState.mode = 'local'
         syncState.status = 'idle'
+        schedule(0)
       } else if (!(e instanceof AuthError || e instanceof InvalidRemoteError)) {
         schedule(RETRY_MS)
       }
@@ -240,7 +253,7 @@ function start() {
   }
 
   const token = ls.get(TOKEN_KEY)
-  syncState.mode = token ? 'github' : import.meta.env.DEV ? 'file' : 'local'
+  syncState.mode = token ? 'github' : import.meta.env.DEV ? 'server' : 'local'
   syncState.login = token ? ls.get(LOGIN_KEY) ?? '' : ''
   syncState.pending = ls.get(PENDING_KEY) === '1'
 
@@ -313,6 +326,6 @@ export function disconnectGitHub() {
   syncState.login = ''
   syncState.error = ''
   syncState.status = 'idle'
-  syncState.mode = import.meta.env.DEV ? 'file' : 'local'
-  if (syncState.mode === 'file') schedule(0)
+  syncState.mode = import.meta.env.DEV ? 'server' : 'local'
+  schedule(0)
 }

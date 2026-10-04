@@ -179,6 +179,38 @@ export function githubRemote({ token, repo = DATA_REPO, fetch: fetchFn = (u, i) 
   return remote
 }
 
+/**
+ * 没有 token 时用：从公开的 raw 地址只读拉取 data 分支（仓库是公开的，不用登录）。
+ * 写是空操作，改动只留在本机。raw 地址有约 5 分钟的 CDN 缓存，别的设备刚同步的改动可能晚几分钟才看到。
+ */
+export function rawRemote(repo: RepoConfig = DATA_REPO, fetchFn: Fetch = (u, i) => fetch(u, i)): Remote {
+  const base = `https://raw.githubusercontent.com/${repo.owner}/${repo.name}/${repo.branch}/`
+  return {
+    async read(paths: string[]): Promise<RemoteSnapshot> {
+      const texts: Record<string, string | null> = {}
+      await Promise.all(
+        paths.map(async (p) => {
+          let res: Response
+          try {
+            res = await fetchFn(base + p, { cache: 'no-store' })
+          } catch (e) {
+            throw new GitHubError(`连不上 GitHub：${(e as Error).message}`)
+          }
+          // data 分支还没建、或者文件还没有
+          if (res.status === 404) {
+            texts[p] = null
+            return
+          }
+          if (!res.ok) throw new GitHubError(`读 ${p} 失败：${res.status}`)
+          texts[p] = await res.text()
+        }),
+      )
+      return { texts, version: null }
+    },
+    async write() {},
+  }
+}
+
 export interface TokenInfo {
   login: string
   /** 对数据仓库的权限：WRITE / MAINTAIN / ADMIN 才能同步 */

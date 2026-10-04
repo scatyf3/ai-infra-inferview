@@ -12,7 +12,7 @@ import {
 } from '@lib/readerNotes'
 import { InvalidRemoteError, StaleError, syncDocs, type Remote, type RemoteFile, type SyncTarget } from '@lib/sync'
 import { SYNC_DOCS, cardNotesSpec, readerNotesSpec } from '@lib/syncDocs'
-import { AuthError, githubRemote, readQuery, toBase64, type RepoConfig } from '@lib/github'
+import { AuthError, githubRemote, rawRemote, readQuery, toBase64, type RepoConfig } from '@lib/github'
 import { setNote, type Notes } from '@lib/flashcards'
 import readerNotesFile from '@data/reader-notes.json'
 
@@ -215,5 +215,17 @@ describe('github remote', () => {
     await expect(githubRemote({ token: 't', repo, fetch: stale.fn }).write([{ path: 'a', text: 'b' }], 'd0', 'x')).rejects.toBeInstanceOf(StaleError)
     const auth = fakeFetch([{ status: 401, body: { message: 'Bad credentials' } }])
     await expect(githubRemote({ token: 't', repo, fetch: auth.fn }).read(paths)).rejects.toBeInstanceOf(AuthError)
+  })
+
+  it('没有 token 时从公开 raw 地址只读拉取 data 分支，404 当作文件不存在，写是空操作', async () => {
+    const urls: string[] = []
+    const fn = async (url: string) => {
+      urls.push(url)
+      return url.endsWith('a.json') ? new Response('{"x":1}') : new Response('404: Not Found', { status: 404 })
+    }
+    const r = rawRemote(repo, fn)
+    expect(await r.read(paths)).toEqual({ version: null, texts: { [paths[0]]: '{"x":1}', [paths[1]]: null } })
+    expect(urls[0]).toBe('https://raw.githubusercontent.com/o/r/data/src/data/a.json')
+    await expect(r.write([{ path: paths[0], text: '{}' }], null, 'x')).resolves.toBeUndefined()
   })
 })
