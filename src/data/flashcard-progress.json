@@ -1,15 +1,15 @@
 {
   "bagu-decode-step-time": {
     "stability": 2.3065,
-    "difficulty": 4.75285849,
+    "difficulty": 4.743334,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 2,
+    "scheduled_days": 2,
+    "reps": 3,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-04T23:20:30.624Z",
-    "last_review": "2026-10-04T23:14:30.624Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-06T23:21:39.340Z",
+    "last_review": "2026-10-04T23:21:39.340Z"
   },
   "bagu-kv-per-token": {
     "stability": 8.2956,
