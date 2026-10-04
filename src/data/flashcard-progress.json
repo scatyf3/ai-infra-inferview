@@ -349,27 +349,27 @@
   },
   "triton-stream-order": {
     "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "difficulty": 4.75285849,
     "elapsed_days": 0,
     "scheduled_days": 0,
-    "reps": 1,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 1,
     "state": 1,
-    "due": "2026-10-04T06:17:42.161Z",
-    "last_review": "2026-10-04T06:07:42.161Z"
+    "due": "2026-10-04T18:58:42.882Z",
+    "last_review": "2026-10-04T18:52:42.882Z"
   },
   "triton-why-one-program-no": {
-    "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "stability": 3.94605407,
+    "difficulty": 1,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 4,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-04T06:20:41.029Z",
-    "last_review": "2026-10-04T06:10:41.029Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-08T18:52:50.524Z",
+    "last_review": "2026-10-04T18:52:50.524Z"
   },
   "triton-you-vs-compiler": {
     "stability": 2.3065,
