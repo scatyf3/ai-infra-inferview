@@ -1,0 +1,18 @@
+{
+  "torch-broadcast-rule": {
+    "text": "加个错误例子",
+    "at": 1791092925886
+  },
+  "torch-keepdim": {
+    "text": "这啥意思",
+    "at": 1791092962831
+  },
+  "torch-transpose-meta": {
+    "text": "对调哪几个维度啊，最后俩吗",
+    "at": 1791092837609
+  },
+  "torch-view-vs-reshape": {
+    "text": "ranspose 后把 (N, h, dk) 合成 (N, d_model) 为啥达不成",
+    "at": 1791092869505
+  }
+}

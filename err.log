@@ -1,0 +1,5 @@
+[608768:700288:1004/011714.791:INFO:components\enterprise\browser\controller\chrome_browser_cloud_management_controller.cc:241] No machine level policy manager exists.
+[608768:558596:1004/011714.824:ERROR:chrome\browser\extensions\external_registry_loader_win.cc:147] Missing value path for key Software\Google\Chrome\Extensions\dngcpimnedloihjnnfngkgjoidhnaolf.
+[608768:558596:1004/011714.824:ERROR:chrome\browser\extensions\external_registry_loader_win.cc:147] Missing value path for key Software\Google\Chrome\Extensions\fcoeoabgfenejglbffodgkkbkcdhcgfn.
+[608768:700288:1004/011715.153:INFO:CONSOLE:495] "[vite] connecting...", source: http://localhost:5173/ai-infra-inferview/@vite/client (495)
+[608768:700288:1004/011715.171:INFO:CONSOLE:618] "[vite] connected.", source: http://localhost:5173/ai-infra-inferview/@vite/client (618)

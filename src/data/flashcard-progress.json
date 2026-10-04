@@ -1,0 +1,86 @@
+{
+  "torch-broadcast-rule": {
+    "stability": 0.212,
+    "difficulty": 6.4133,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-04T05:49:47.226Z",
+    "last_review": "2026-10-04T05:48:47.226Z"
+  },
+  "torch-broadcast-trap": {
+    "stability": 0.212,
+    "difficulty": 6.4133,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-04T05:50:08.741Z",
+    "last_review": "2026-10-04T05:49:08.741Z"
+  },
+  "torch-contiguous-stride": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-04T05:51:19.971Z",
+    "last_review": "2026-10-04T05:41:19.971Z"
+  },
+  "torch-expand-gqa": {
+    "stability": 0.42437996,
+    "difficulty": 5.20002037,
+    "elapsed_days": 0,
+    "scheduled_days": 1,
+    "reps": 2,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-05T05:49:35.698Z",
+    "last_review": "2026-10-04T05:49:35.698Z"
+  },
+  "torch-meta-vs-copy": {
+    "stability": 1.2931,
+    "difficulty": 5.11217071,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-04T05:54:06.493Z",
+    "last_review": "2026-10-04T05:48:06.493Z"
+  },
+  "torch-storage-index": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-04T05:51:11.419Z",
+    "last_review": "2026-10-04T05:41:11.419Z"
+  },
+  "torch-transpose-meta": {
+    "stability": 0.212,
+    "difficulty": 6.4133,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-04T05:42:26.622Z",
+    "last_review": "2026-10-04T05:41:26.622Z"
+  }
+}
