@@ -95,4 +95,4 @@ leetgpu: [50, 83]   # LeetGPU 题号，链接按 src/data/leetgpu-challenges.jso
 - **连 GitHub**：点导航栏的 ☁，按提示建一个 fine-grained token，只授权这个仓库、Contents 选 Read and write。token 只存在那台设备上。
 - **同步怎么做**：读远端 → 按条目合并（较新的胜出，删除留删除记录）→ 有变化就提交。停手 2 秒、切到后台、重新联网时同步一次，同一轮的几份数据合成一个 commit。提交时带上期望的分支 head，别的设备抢先提交了就重读重合并（`src/lib/sync.ts`、`src/lib/github.ts`）。
 - **为什么是单独的 data 分支**：手机上每次同步都是一个 commit，不混进 main 的历史，不触发部署，电脑上 `git push` 也不会因此被拒。部署时 workflow 会把 data 分支上最新的四个文件拷进来，当站点的初始数据。连上 GitHub 之后，本机仓库里的这几个 json 不再更新，以 data 分支为准。
-- **装到手机桌面**：站点是 PWA。iPhone 用 Safari 打开，分享 →「添加到主屏幕」；Android 用 Chrome 菜单里的「安装应用」。之后全屏打开，访问过的页面断网也能看（`docs/public/sw.js`）。
+- **装到手机桌面**：站点是 PWA。iPhone 用 Safari 打开，分享 →「添加到主屏幕」；Android 用 Chrome 菜单里的「安装应用」。之后全屏打开，访问过的页面断网也能看（`docs/public/sw.js`）。手机上刷卡用单独的闪卡页 `/flashcards`，首页有入口。

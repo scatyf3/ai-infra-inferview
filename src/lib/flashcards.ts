@@ -4,7 +4,14 @@
  */
 import { createEmptyCard, fsrs, generatorParameters, Rating, State, TypeConvert, type Card as FsrsCard, type Grade } from 'ts-fsrs'
 
-export type Deck = 'torch' | 'triton'
+export type Deck = 'torch' | 'triton' | 'bagu'
+
+/** 牌组：按钮上的名字和卡面徽章的颜色；新加牌组在这里登记 */
+export const DECKS: { id: Deck; label: string; color: string }[] = [
+  { id: 'torch', label: 'torch', color: '#ee4c2c' },
+  { id: 'triton', label: 'triton', color: '#6d28d9' },
+  { id: 'bagu', label: '八股', color: '#0e7490' },
+]
 
 export interface Card {
   /** 稳定 id，复习记录按它存；改题面不要改 id */

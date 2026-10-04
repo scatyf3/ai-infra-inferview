@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch, type Directive } from 'vue'
 import { withBase } from 'vitepress'
 import {
+  DECKS,
   GRADES,
   STATE_LABEL,
   State,
@@ -33,6 +34,9 @@ import { syncState, useSyncedDoc } from '../sync'
 
 const NEW_PER_ROUND = 20
 
+/** app：独立的闪卡页（/flashcards）用，去掉长说明，手机上评分按钮固定在屏幕底部，点题目即可翻面 */
+const props = defineProps<{ app?: boolean }>()
+
 const progressStore = useSyncedDoc(progressSpec)
 const notesStore = useSyncedDoc(cardNotesSpec)
 const flagsStore = useSyncedDoc(flagsSpec)
@@ -52,7 +56,9 @@ type DeckFilter = Deck | 'all'
 const deck = ref<DeckFilter>('all')
 const tab = ref<'review' | 'list'>('review')
 const deckCards = computed(() => cards.filter((c) => deck.value === 'all' || c.deck === deck.value))
-const deckLabel: Record<DeckFilter, string> = { all: '全部', torch: 'torch', triton: 'triton' }
+const deckFilters: DeckFilter[] = ['all', ...DECKS.map((d) => d.id)]
+const deckLabel = (d: DeckFilter) => (d === 'all' ? '全部' : DECKS.find((x) => x.id === d)!.label)
+const deckStyle = (d: Deck) => ({ background: DECKS.find((x) => x.id === d)?.color })
 const deckCount = (d: DeckFilter) => (d === 'all' ? cards.length : cards.filter((c) => c.deck === d).length)
 
 // 学习中的卡几分钟后到期，时间要跟着走
@@ -198,11 +204,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="widget fc">
+  <div class="widget fc" :class="{ 'fc-app': props.app }">
     <div class="fc-head">
       <div class="toggle-group">
-        <button v-for="d in (['all', 'torch', 'triton'] as DeckFilter[])" :key="d" :class="{ active: deck === d }" @click="deck = d">
-          {{ deckLabel[d] }} <span class="fc-n">{{ deckCount(d) }}</span>
+        <button v-for="d in deckFilters" :key="d" :class="{ active: deck === d }" @click="deck = d">
+          {{ deckLabel(d) }} <span class="fc-n">{{ deckCount(d) }}</span>
         </button>
       </div>
       <div class="toggle-group">
@@ -222,13 +228,13 @@ onBeforeUnmount(() => {
     <template v-if="tab === 'review'">
       <div v-if="cur" class="fc-card">
         <div class="fc-meta">
-          <span class="fc-deck" :class="cur.deck">{{ cur.deck }}</span>
+          <span class="fc-deck" :style="deckStyle(cur.deck)">{{ deckLabel(cur.deck) }}</span>
           <span class="muted">{{ cur.topic }}</span>
           <span class="fc-state" :class="'b-' + bucketOf(curSched, now)">{{ STATE_LABEL[curSched?.state ?? State.New] }}</span>
           <span v-if="curSched" class="fc-hist muted">复习 {{ curSched.reps }} 次 · 忘记 {{ curSched.lapses }} 次</span>
           <span class="fc-left muted">本轮还有新卡 {{ newLeft }}</span>
         </div>
-        <div class="fc-q" v-html="inlineMd(cur.q)" />
+        <div class="fc-q" :class="{ tappable: props.app && !flipped }" v-html="inlineMd(cur.q)" @click="props.app && flip()" />
 
         <button v-if="!flipped" class="fc-flip" @click="flip">翻面 <kbd>空格</kbd></button>
         <template v-else>
@@ -284,7 +290,10 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <p class="muted fc-note">
+      <p v-if="props.app" class="muted fc-note">
+        改动{{ storageText }}。<a :href="withBase('/handson/flashcards')">评分规则和快捷键 →</a>
+      </p>
+      <p v-else class="muted fc-note">
         FSRS 按你的每次评分估计记忆的衰减，算出下次该复习的时间：先出到期的卡，再出新卡（每轮 {{ NEW_PER_ROUND }} 张）。
         按钮上方是选它之后多久再出现。翻面后按 <kbd>N</kbd> 给这张卡写批注。
         跳过的卡排到这一轮最后；暂停的卡不再出现，直到在「全部卡片」里恢复。
@@ -303,7 +312,7 @@ onBeforeUnmount(() => {
                 isSuspended(flags, c.id) ? '已暂停' : STATE_LABEL[progress[c.id]?.state ?? State.New]
               }}</span>
             </td>
-            <td><span class="fc-deck" :class="c.deck">{{ c.deck }}</span></td>
+            <td><span class="fc-deck" :style="deckStyle(c.deck)">{{ deckLabel(c.deck) }}</span></td>
             <td><span class="muted fc-topic">{{ c.topic }}</span> <span v-html="inlineMd(c.q)" /><span v-if="noteOf(notes, c.id)" class="fc-has-note" title="有批注"> ✎</span></td>
             <td class="muted fc-num">{{ dueText(c.id) }}</td>
             <td class="muted fc-num" title="记忆稳定度：降到 90% 记得住所需的天数">{{ progress[c.id] && progress[c.id].state !== State.New ? `${progress[c.id].stability.toFixed(1)}天` : '—' }}</td>
@@ -364,7 +373,6 @@ onBeforeUnmount(() => {
 .fc-left { margin-left: auto; }
 .fc-hist, .fc-left { font-size: 11.5px; }
 .fc-deck { padding: 1px 7px; border-radius: 10px; font: 600 11px/1.6 var(--vp-font-family-mono); color: #fff; background: #ee4c2c; }
-.fc-deck.triton { background: #6d28d9; }
 .fc-state { padding: 1px 7px; border-radius: 4px; font-size: 11px; line-height: 1.6; white-space: nowrap; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
 .fc-q { font-size: 16px; font-weight: 600; line-height: 1.7; }
 .fc-a { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--wg-border); line-height: 1.8; }
@@ -410,4 +418,45 @@ kbd { padding: 0 5px; border: 1px solid var(--wg-border); border-radius: 4px; fo
 .fc-topic { font-size: 11.5px; }
 .fc-num { font-family: var(--vp-font-family-mono); font-size: 11.5px; white-space: nowrap; }
 .fc-ans td { background: var(--vp-c-bg); line-height: 1.75; }
+/* 手机上没有键盘，快捷键提示只占地方 */
+@media (pointer: coarse) { kbd { display: none; } }
+
+/* ---------- 独立页面（app） ---------- */
+.fc-app { border: none; background: transparent; padding: 0; margin: 0; }
+.fc-app .fc-card { display: flex; flex-direction: column; min-height: 52vh; padding: 20px 20px 16px; }
+.fc-app .fc-q { font-size: 18px; }
+.fc-app .fc-q.tappable { flex: 1; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.fc-app .fc-a { font-size: 15.5px; }
+.fc-app .fc-foot { margin-top: auto; padding-top: 12px; }
+.fc-app .fc-note a { color: var(--vp-c-brand-1); text-decoration: none; }
+.fc-app .fc-table th, .fc-app .fc-table td { padding: 8px 10px; border-bottom: 1px solid var(--wg-border); text-align: left; vertical-align: top; }
+.fc-app .fc-table th { font-size: 12px; color: var(--wg-muted); font-weight: 500; }
+@media (max-width: 640px) {
+  .fc-app .fc-card { padding: 16px 14px 12px; border-radius: 12px; }
+  /* 翻面和评分固定在屏幕底部，单手拇指够得着 */
+  .fc-app .fc-flip,
+  .fc-app .fc-rate {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-left: -14px;
+    margin-right: -14px;
+    width: auto;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    border: none;
+    border-top: 1px solid var(--wg-border);
+    border-radius: 0;
+    background: var(--vp-c-bg);
+  }
+  .fc-app .fc-flip { font-size: 15px; color: var(--vp-c-brand-1); }
+  .fc-app .fc-rate { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .fc-app .fc-rate button { padding: 8px 2px 10px; }
+  .fc-app .fc-hint { display: none; }
+  .fc-app .fc-meta .fc-hist, .fc-app .fc-meta .fc-left { display: none; }
+  /* 列表窄屏只留状态、题目、下次；题目里的长代码允许断行，不然整张表被撑出屏幕 */
+  .fc-app .fc-table td:nth-child(3), .fc-app .fc-table td:nth-child(3) :deep(code) { overflow-wrap: anywhere; word-break: break-word; }
+  .fc-app .fc-table th, .fc-app .fc-table td { padding: 8px 6px; }
+  .fc-app .fc-table th:nth-child(2), .fc-app .fc-table td:nth-child(2),
+  .fc-app .fc-table th:nth-child(5), .fc-app .fc-table td:nth-child(5) { display: none; }
+}
 </style>

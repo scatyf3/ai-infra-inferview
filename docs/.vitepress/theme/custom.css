@@ -259,3 +259,7 @@ mark.rn-hl.rn-flash { animation: rn-flash 1.2s ease-out; }
 @media print {
   .rn-fab, .rn-panel, .rn-toolbar, .rn-editor { display: none !important; }
 }
+
+/* 独立的闪卡页（docs/flashcards.md）：居中一栏，手机上留出底部安全区 */
+.fc-page { max-width: 720px; margin: 0 auto; padding: 20px 16px calc(32px + env(safe-area-inset-bottom)); }
+@media (max-width: 640px) { .fc-page { padding: 12px 12px 24px; } }

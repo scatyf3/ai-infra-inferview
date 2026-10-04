@@ -15,6 +15,6 @@
     { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "闪卡复习", "short_name": "闪卡", "url": "/ai-infra-inferview/handson/flashcards", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+    { "name": "闪卡复习", "short_name": "闪卡", "url": "/ai-infra-inferview/flashcards", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

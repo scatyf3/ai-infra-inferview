@@ -4,13 +4,14 @@
 // a 支持行内 `code`、**加粗** 和 \n 换行；code 是答案下面的代码块；ref 是出处（站内链接，不含 base）。
 
 import type { Card } from '@lib/flashcards'
+import { baguCards } from './flashcards-bagu'
 
 const TP = '/handson/torch-primitives'
 const TR = '/handson/triton_primitives'
 const KM = '/handson/kernel-mindset'
 const SM = '/handson/triton-softmax'
 
-export const cards: Card[] = [
+const primitiveCards: Card[] = [
   // ---------------- torch ----------------
   {
     id: 'torch-storage-index',
@@ -385,3 +386,6 @@ export const cards: Card[] = [
     ref: KM,
   },
 ]
+
+/** 原语卡（torch / triton）+ 八股卡（flashcards-bagu.ts） */
+export const cards: Card[] = [...primitiveCards, ...baguCards]

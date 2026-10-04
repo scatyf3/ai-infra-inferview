@@ -9,7 +9,7 @@ const VERSION = 1
 const CACHE = `inferview-v${VERSION}`
 const SCOPE = new URL(self.registration.scope).pathname
 // 装好就先缓存首页和闪卡页，第一次离线打开也有东西看
-const PRECACHE = [SCOPE, `${SCOPE}handson/flashcards`]
+const PRECACHE = [SCOPE, `${SCOPE}flashcards`, `${SCOPE}handson/flashcards`]
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
+  DECKS,
   Rating,
   State,
   bucketOf,
@@ -41,6 +44,17 @@ describe('flashcard deck', () => {
     for (const c of cards) {
       expect(c.q.trim() && c.a.trim()).toBeTruthy()
       if (c.ref) expect(c.ref.startsWith('/')).toBe(true)
+    }
+  })
+
+  it('每张卡的牌组都登记过，出处指向站内存在的页面', () => {
+    const decks = new Set(DECKS.map((d) => d.id))
+    const docs = fileURLToPath(new URL('../../../docs', import.meta.url))
+    for (const c of cards) {
+      expect(decks.has(c.deck), c.id).toBe(true)
+      if (!c.ref) continue
+      const page = c.ref.split('#')[0].replace(/\/$/, '/index')
+      expect(existsSync(`${docs}${page}.md`), `${c.id} → ${c.ref}`).toBe(true)
     }
   })
 
