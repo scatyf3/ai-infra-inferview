@@ -24,16 +24,16 @@
     "last_review": "2026-10-04T23:21:39.340Z"
   },
   "bagu-how-many-gpus": {
-    "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "stability": 3.94605407,
+    "difficulty": 1,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 4,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-04T23:31:59.918Z",
-    "last_review": "2026-10-04T23:21:59.918Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-08T23:34:02.185Z",
+    "last_review": "2026-10-04T23:34:02.185Z"
   },
   "bagu-kv-per-token": {
     "stability": 8.2956,
