@@ -103,6 +103,10 @@
     "text": "写个genral的公式呗，或者让我算，我不需要背诵这个吧",
     "at": 1791127192930
   },
+  "bagu-sd-routing": {
+    "text": "路由到持有这段 KV 的副\n1. 需要核心router吗\n2. 每个server都要维护自己有哪些prefix kv吗",
+    "at": 1791163010795
+  },
   "bagu-sft-packing": {
     "text": "mask可视化",
     "at": 1791162789427
