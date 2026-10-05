@@ -491,6 +491,18 @@
     "due": "2026-10-05T06:15:27.282Z",
     "last_review": "2026-10-04T06:15:27.282Z"
   },
+  "torch-causal-triu": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T01:45:43.293Z",
+    "last_review": "2026-10-05T01:45:43.293Z"
+  },
   "torch-contiguous-stride": {
     "stability": 3.94605407,
     "difficulty": 1,
