@@ -95,6 +95,18 @@
     "due": "2026-10-06T23:52:49.943Z",
     "last_review": "2026-10-04T23:52:49.943Z"
   },
+  "bagu-gptq-awq": {
+    "stability": 0.212,
+    "difficulty": 6.4133,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-05T00:18:12.321Z",
+    "last_review": "2026-10-05T00:17:12.321Z"
+  },
   "bagu-gqa": {
     "stability": 8.2956,
     "difficulty": 1,
