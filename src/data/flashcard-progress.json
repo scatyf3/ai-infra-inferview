@@ -517,15 +517,15 @@
   },
   "torch-meta-vs-copy": {
     "stability": 4.54602939,
-    "difficulty": 5.10228691,
-    "elapsed_days": 1,
-    "scheduled_days": 0,
-    "reps": 2,
+    "difficulty": 5.09241299,
+    "elapsed_days": 0,
+    "scheduled_days": 5,
+    "reps": 3,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-05T01:29:45.909Z",
-    "last_review": "2026-10-05T01:19:45.909Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-10T01:34:51.070Z",
+    "last_review": "2026-10-05T01:34:51.070Z"
   },
   "torch-storage-index": {
     "stability": 4.28567357,
