@@ -168,8 +168,8 @@
     "at": 1791092962831
   },
   "torch-meta-vs-copy": {
-    "text": "太粗粒度了",
-    "at": 1791133361585
+    "text": "x.unsqueeze(0)、x.expand(4, -1) 啥意思",
+    "at": 1791163183111
   },
   "torch-transpose-meta": {
     "text": "对调哪几个维度啊，最后俩吗",
