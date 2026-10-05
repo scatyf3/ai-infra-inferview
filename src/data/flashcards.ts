@@ -124,14 +124,18 @@ const primitiveCards: Card[] = [
     id: 'torch-masked-fill',
     deck: 'torch',
     topic: 'mask',
-    q: '`masked_fill` 的语义？`~allowed` 是什么？布尔版 causal mask 怎么写？',
-    a: '`x.masked_fill(mask, value)`：mask 为 True 的位置换成 value，其余保留 x 原来的值；mask 广播成 x 的 shape；返回新 tensor（原地版是 `masked_fill_`）。\n`~` 是布尔 tensor 的逐元素取反（True ↔ False）。`allowed` 是「能看」的位置（下三角），`~allowed` 就是「不能看」的位置，把它们填成 -inf。\n放在 softmax **之前**：$e^{-\infty} = 0$，不能看的位置概率就是 0。',
+    q: '`masked_fill` 的语义？布尔版 causal mask 怎么写？为什么有人写 `~tril()`，有人写 `triu(1)`？',
+    a: '`x.masked_fill(mask, value)`：mask 为 True 的位置换成 value，其余保留 x 原来的值；mask 广播成 x 的 shape；返回新 tensor（原地版是 `masked_fill_`）。\n所以给它的 mask 要是「**不能看**」的位置，直接用 `triu(1)`：主对角线右上方（key j > query i）是 True。\n`~tril()` 是同一个 mask：`~` 是布尔取反（True ↔ False），`tril()` 是「能看」的位置，取反就是「不能看」。会出现这种写法，是因为 `F.scaled_dot_product_attention` 的布尔 `attn_mask` 约定 **True = 能看**，手里是给它准备的 `allowed`，拿去 `masked_fill` 才要取反。\n记法：给 `masked_fill` 用 `triu(1)`（盖掉的），给 SDPA 用 `tril()`（留下的）。放在 softmax **之前**，$e^{-\infty} = 0$。',
     code: lines`
-      allowed = torch.ones(S, S, dtype=torch.bool, device=x.device).tril()   # S = 3 时：
-      # [[ True, False, False],      ~allowed: [[False,  True,  True],
-      #  [ True,  True, False],                 [False, False,  True],
-      #  [ True,  True,  True]]                 [False, False, False]]
-      attn = attn.masked_fill(~allowed, float('-inf'))
+      blocked = torch.ones(S, S, dtype=torch.bool, device=x.device).triu(1)   # True = 看不到
+      attn = attn.masked_fill(blocked, float('-inf'))
+      # S = 3 时 blocked:
+      # [[False,  True,  True],
+      #  [False, False,  True],
+      #  [False, False, False]]      和 ~tril() 完全一样
+
+      allowed = ~blocked             # = tril()，True = 能看，给 SDPA 的 attn_mask 用
+      out = F.scaled_dot_product_attention(q, k, v, attn_mask=allowed)
     `,
     ref: `${TP}#mask`,
   },
@@ -737,7 +741,7 @@ const primitiveCards: Card[] = [
     deck: 'torch',
     topic: 'tril · 写代码',
     q: '写代码：布尔 causal mask：`(S, S)`，`True` 表示 query i 能看 key j（j ≤ i）。要和 score `x` 在同一个 device。',
-    a: '`allowed = torch.ones(S, S, dtype=torch.bool, device=x.device).tril()`。之后用 `x.masked_fill(~allowed, float(\'-inf\'))` 把看不到的位置盖掉。',
+    a: '`allowed = torch.ones(S, S, dtype=torch.bool, device=x.device).tril()`。这是 `F.scaled_dot_product_attention` 的布尔 `attn_mask` 要的格式（True = 能看）。如果是给 `masked_fill` 用，要的是「看不到」的位置，直接写 `triu(1)`，不用 `~tril()`。',
     ref: `${TP}#mask`,
   },
   {
