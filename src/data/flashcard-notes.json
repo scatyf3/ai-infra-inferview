@@ -43,6 +43,10 @@
     "text": "粒度太醋了，不适合做闪卡，适合展示，给个code demo",
     "at": 1791156117897
   },
+  "bagu-kernel-fusion": {
+    "text": "这个在哪里啊，sa前，lm的第一个吗，直接norm+linear add？",
+    "at": 1791162053105
+  },
   "bagu-kv-per-token": {
     "text": "b是啥，size of bf16吗",
     "at": 1791127399612
