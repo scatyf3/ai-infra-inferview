@@ -1,4 +1,8 @@
 {
+  "bagu-dpo": {
+    "suspended": true,
+    "at": 1791162713851
+  },
   "bagu-fa-v2-v3": {
     "suspended": true,
     "at": 1791157219365
@@ -30,6 +34,10 @@
   "bagu-pp-bubble": {
     "suspended": true,
     "at": 1791161812259
+  },
+  "bagu-ppo-four-models": {
+    "suspended": true,
+    "at": 1791162712409
   },
   "bagu-ring-allreduce": {
     "suspended": true,
