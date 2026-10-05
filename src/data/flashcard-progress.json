@@ -551,6 +551,18 @@
     "due": "2026-10-05T15:01:58.776Z",
     "last_review": "2026-10-04T15:01:58.776Z"
   },
+  "torch-view-vs-reshape": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T01:38:13.649Z",
+    "last_review": "2026-10-05T01:38:13.649Z"
+  },
   "triton-arange-pow2": {
     "stability": 2.36913529,
     "difficulty": 3.4509278,
