@@ -59,6 +59,18 @@
     "due": "2026-10-06T23:21:39.340Z",
     "last_review": "2026-10-04T23:21:39.340Z"
   },
+  "bagu-eagle-medusa": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T00:02:13.424Z",
+    "last_review": "2026-10-05T00:02:13.424Z"
+  },
   "bagu-fa-why": {
     "stability": 2.3065,
     "difficulty": 2.11121424,
