@@ -539,6 +539,18 @@
     "due": "2026-10-05T05:49:35.698Z",
     "last_review": "2026-10-04T05:49:35.698Z"
   },
+  "torch-full-device": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T01:47:39.457Z",
+    "last_review": "2026-10-05T01:47:39.457Z"
+  },
   "torch-matmul-batch": {
     "stability": 8.2956,
     "difficulty": 1,
