@@ -203,6 +203,18 @@
     "due": "2026-10-13T00:50:47.394Z",
     "last_review": "2026-10-05T00:50:47.394Z"
   },
+  "bagu-moe-ep": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T00:57:43.453Z",
+    "last_review": "2026-10-05T00:57:43.453Z"
+  },
   "bagu-paged-why": {
     "stability": 8.2956,
     "difficulty": 1,
