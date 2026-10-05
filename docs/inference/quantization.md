@@ -118,8 +118,39 @@ KV cache 存的时候量化、读的时候反量化：
 <QuantGranularity />
 
 
-W8A8的quantize粒度非常直觉
-1. a'c'ti'vv'a'ti
+### 原生quantize计算
+W8A8，aka原生用quantize之后的数值进行计算， 的quantize粒度非常直觉
+1. activation per token
+2. weight per channel（输出通道）
+
+这就是gemm的聚合顺序问题，这样做方便些：
+
+$$
+Y_{ij} = \sum_k X_{ik} W_{kj} \approx s_x[i] \cdot s_w[j] \cdot \sum_k X_{q,ik} W_{q,kj}
+$$
+
+```python
+# 量化：X [M, K] 每行一个 scale，W [K, N] 每列一个 scale
+s_x = X.abs().amax(dim=1) / 127                         # [M]
+s_w = W.abs().amax(dim=0) / 127                         # [N]
+X_q = (X / s_x[:, None]).round().clamp(-127, 127).to(torch.int8)
+W_q = (W / s_w[None, :]).round().clamp(-127, 127).to(torch.int8)
+
+# GEMM：K 维求和全在整数里做
+for i in range(M):
+    for j in range(N):
+        acc = 0                                         # int32
+        for k in range(K):
+            acc += X_q[i, k] * W_q[k, j]                # int8 × int8
+        Y[i, j] = s_x[i] * s_w[j] * acc                 # epilogue：求和完只乘一次
+```
+
+$s_x[i]$ 和 $s_w[j]$ 都不随 $k$ 变，所以能挪到 $k$ 循环外面，循环里只剩整数乘加，正好交给 int8 Tensor Core。如果 scale 随 $k$ 变，就得在循环里每步乘，累加不再是纯整数。
+
+### 先dequantize再算
+
+这部分啥粒度都行，唯一care的就是dequantize的overhead了
+
 ### 为什么激活不能 per-channel
 
 整数 GEMM 要求 scale 能提到 $K$ 维求和外面。激活 per-token（scale $s_x[i]$）、权重 per-output-channel（scale $s_w[j]$）时：
