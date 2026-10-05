@@ -15,6 +15,10 @@
     "suspended": true,
     "at": 1791157149744
   },
+  "bagu-moe-batch": {
+    "suspended": true,
+    "at": 1791161879632
+  },
   "bagu-parallel-choice": {
     "suspended": true,
     "at": 1791161822488
@@ -38,6 +42,14 @@
   "bagu-tp-intra-node": {
     "suspended": true,
     "at": 1791161811321
+  },
+  "bagu-zero": {
+    "suspended": true,
+    "at": 1791161880803
+  },
+  "bagu-zero3-vs-tp": {
+    "suspended": true,
+    "at": 1791161881664
   },
   "triton-2d-ptrs": {
     "suspended": true,
