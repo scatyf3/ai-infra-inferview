@@ -743,6 +743,18 @@
     "due": "2026-10-13T01:38:13.649Z",
     "last_review": "2026-10-05T01:38:13.649Z"
   },
+  "torch-write-permute": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T03:26:10.409Z",
+    "last_review": "2026-10-05T03:26:10.409Z"
+  },
   "torch-write-reshape": {
     "stability": 8.2956,
     "difficulty": 1,
