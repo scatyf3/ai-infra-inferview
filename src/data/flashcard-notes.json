@@ -192,8 +192,8 @@
     "at": 1791094016398
   },
   "triton-online-merge": {
-    "text": "写下both数学公式和代码",
-    "at": 1791094178560
+    "text": "写下both数学公式和代码 ，删除流式，然后M和D咋allocate的写下",
+    "at": 1791165519945
   },
   "triton-softmax-largeN": {
     "text": "max还是online好啊",
