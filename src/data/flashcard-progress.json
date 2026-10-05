@@ -432,16 +432,16 @@
     "last_review": "2026-10-05T00:50:36.157Z"
   },
   "kernel-cross-program-reduce": {
-    "stability": 2.3065,
-    "difficulty": 2.11810397,
-    "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "stability": 7.31530068,
+    "difficulty": 2.11121424,
+    "elapsed_days": 1,
+    "scheduled_days": 7,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-04T06:23:24.367Z",
-    "last_review": "2026-10-04T06:13:24.367Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-12T02:03:45.420Z",
+    "last_review": "2026-10-05T02:03:45.420Z"
   },
   "kernel-elementwise-bound": {
     "stability": 11.6874828,
