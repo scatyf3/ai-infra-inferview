@@ -87,6 +87,10 @@
     "text": "浪费算力，换mem",
     "at": 1791158400374
   },
+  "bagu-ttft-parts": {
+    "text": "采样 + detokenize + 网络 啥意思",
+    "at": 1791161791836
+  },
   "bagu-weight-rule": {
     "text": "billion是10^？来这",
     "at": 1791127562489
