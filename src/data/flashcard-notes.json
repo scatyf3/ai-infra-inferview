@@ -164,8 +164,8 @@
     "at": 1791163300824
   },
   "torch-keepdim": {
-    "text": "这啥意思",
-    "at": 1791092962831
+    "text": "这个错我犯过了吗，感觉很怪啊",
+    "at": 1791164630748
   },
   "torch-meta-vs-copy": {
     "text": "x.unsqueeze(0)、x.expand(4, -1) 啥意思",
