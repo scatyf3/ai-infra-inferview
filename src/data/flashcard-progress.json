@@ -503,6 +503,18 @@
     "due": "2026-10-08T16:55:56.561Z",
     "last_review": "2026-10-04T16:55:56.561Z"
   },
+  "torch-copy-when": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T01:38:26.065Z",
+    "last_review": "2026-10-05T01:38:26.065Z"
+  },
   "torch-expand-gqa": {
     "stability": 0.42437996,
     "difficulty": 5.20002037,
