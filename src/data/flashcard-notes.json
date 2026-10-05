@@ -19,6 +19,10 @@
     "text": "flashdecoding是基于flashattn加了splitk吗",
     "at": 1791157327274
   },
+  "bagu-flat-input": {
+    "text": "padding的例子",
+    "at": 1791162299611
+  },
   "bagu-goodput": {
     "text": "看情况了，offline就看吞吐，online看sla",
     "at": 1791161501647
