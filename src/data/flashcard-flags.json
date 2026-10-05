@@ -15,6 +15,14 @@
     "suspended": true,
     "at": 1791157149744
   },
+  "bagu-ring-allreduce": {
+    "suspended": true,
+    "at": 1791161807436
+  },
+  "bagu-tp-comm-size": {
+    "suspended": true,
+    "at": 1791161806236
+  },
   "triton-2d-ptrs": {
     "suspended": true,
     "at": 1791093916665
