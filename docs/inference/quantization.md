@@ -56,6 +56,44 @@ $$
 - **W8A8（INT8 / FP8）**：权重和激活都是 8 bit，直接走 8 bit Tensor Core，吞吐是 bf16 的 2 倍。prefill 是 compute-bound，只有这类方案能加速。H100 原生支持 FP8，所以 FP8 W8A8 是现在的默认。
 - **W4A4（FP4）**：Blackwell 原生支持 FP4 Tensor Core。
 
+### 量化哪里、怎么用
+
+**量化哪里。** 只量化 Linear 层：attention 的 QKV 和 O 投影、FFN 的 gate / up / down、MoE 的专家。它们占了几乎全部的权重和 FLOPs。具体是三类张量：
+
+1. Linear 的权重 $W$
+2. 进 Linear 的激活 $X$（只有 W8A8、W4A4 才量化）
+3. KV cache
+
+一般保持 bf16 的：embedding、lm_head、RMSNorm、softmax、RoPE、MoE router。它们要么是逐元素运算、量化了也省不了多少，要么直接决定输出（logits、选哪个专家），对误差敏感。
+
+**怎么用 scale。** 记 Linear 为 $Y = XW$，$X \in \mathbb{R}^{M \times K}$，$W \in \mathbb{R}^{K \times N}$，$s_w$、$s_x$ 分别是权重和激活的 scale。
+
+W4A16 在 kernel 里先反量化、再乘：
+
+$$
+Y = X \cdot \hat{W}, \quad \hat{W} = s_w \cdot W_q
+$$
+
+kernel 从 HBM 读 int4 的 $W_q$ 和 $s_w$，在片上（寄存器 / shared memory）乘出 bf16 的 $\hat{W}$，再和 bf16 的 $X$ 做 GEMM。$\hat{W}$ 不写回 HBM，所以 HBM 上只读了 1/4 的权重字节。
+
+W8A8 先做整数乘加、最后乘 scale：
+
+$$
+Y_{ij} \approx s_x[i] \cdot s_w[j] \cdot \sum_k X_{q,ik} W_{q,kj}
+$$
+
+1. 离线：$W$ 量化成 $W_q$ 和 per-channel 的 $s_w[j]$，存进 checkpoint。
+2. 在线：$X$ 量化成 $X_q$，per-token 的 $s_x[i]$ 在每次 forward 时现算（dynamic）；这一步融进前一个 kernel（如 RMSNorm），不多读写一遍 $X$。也可以用校准集预先定一个 per-tensor 的 $s_x$（static），省掉求 max。
+3. GEMM：$\sum_k X_{q,ik} W_{q,kj}$ 在 Tensor Core 里累加，INT8 用 int32，FP8 用 fp32。
+4. epilogue：累加结果乘 $s_x[i] \cdot s_w[j]$，转成 bf16 写回 HBM。
+
+KV cache 存的时候量化、读的时候反量化：
+
+1. 写入：新 token 的 $K$、$V$ 算出来后量化成 FP8，连同 scale 存进 cache。
+2. 读出：attention kernel 从 HBM 读 FP8 的 $K_q$、$V_q$，在片上乘 scale 还原，再算 $QK^\top$ 和 $PV$。
+
+省的是 KV 的显存和 decode 时读 KV 的带宽，都是一半，见 [显存账](/inference/memory-accounting)。
+
 ## 2. 粒度
 
 粒度就是「多少个元素共用一个 $s$」。越细，每组的 $\max|x|$ 越贴近组内真实数值，误差越小，但 scale 越多。
