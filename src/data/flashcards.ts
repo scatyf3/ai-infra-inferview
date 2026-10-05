@@ -44,7 +44,8 @@ const primitiveCards: Card[] = [
     deck: 'torch',
     topic: 'view / reshape',
     q: '为什么 transpose 之后 `view` 会报错？`reshape` 和 `.contiguous()` 各做什么？',
-    a: '`view` 的本质：新建一个 tensor 对象，指向**同一块 storage**，只换一套 shape 和 stride（必要时还有 offset），一个字节都不拷。所以它只能表达「按某组步长去读同一块内存」读得出来的形状，读不出来就报错。\n例子：attention 输出 `out` 是 `(h, N, dk)`、连续，stride `(N·dk, dk, 1)`。`transpose(0, 1)` 后 shape `(N, h, dk)`，stride `(dk, N·dk, 1)`。\n合成 `(N, h·dk)` 要把 h、dk 两维并成一维。相邻两维能合并的条件是 `stride[h] == shape[dk] × stride[dk]`，这里应该是 `dk`，实际是 `N·dk`：同一个 token 的各个 head 在内存里隔着 N·dk 个元素，不是连着的一段，一个 stride 表达不出来。\n`reshape`：能 view 就 view，不能就先拷一份连续的；`.contiguous()`：手动做这次拷贝。',
+    a: '`view` 的本质：新建一个 tensor 对象，指向**同一块 storage**，只换一套 shape 和 stride（必要时还有 offset），一个字节都不拷。所以它只能表达「按某组步长去读同一块内存」读得出来的形状，读不出来就报错。\n例子：attention 输出 `out` 是 `(h, N, dk)`、连续，stride `(N·dk, dk, 1)`。`transpose(0, 1)` 后 shape `(N, h, dk)`，stride `(dk, N·dk, 1)`。\n合成 `(N, h·dk)` 要把 h、dk 两维并成一维。相邻两维能合并的条件是 `stride[h] == shape[dk] × stride[dk]`，这里应该是 `dk`，实际是 `N·dk`：同一个 token 的各个 head 在内存里隔着 N·dk 个元素，不是连着的一段，一个 stride 表达不出来。\n`reshape`：能 view 就 view，不能就先拷一份连续的；`.contiguous()`：手动做这次拷贝。
+**默认用 `reshape`**；只有要通过结果写回原 tensor 时用 `view`（比如 `output.view(N, h, dk).copy_(y)`）：`view` 保证不拷，`reshape` 可能拷一份，写进副本也不报错。',
     code: 'out = torch.randn(h, N, dk)        # stride (N*dk, dk, 1)\nt = out.transpose(0, 1)            # (N, h, dk), stride (dk, N*dk, 1)\nt.view(N, h * dk)                  # RuntimeError: view size is not compatible ...\nt.reshape(N, h * dk)               # OK：内部先拷一份连续的\nt.contiguous().view(N, h * dk)     # 同上，手动拷',
     ref: `${TP}#tensor-itself`,
   },

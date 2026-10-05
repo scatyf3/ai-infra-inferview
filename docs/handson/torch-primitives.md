@@ -38,6 +38,7 @@ y.is_contiguous()                # False
 2. **为什么 transpose 之后 `view` 报错**：`view` 不动数据，只换一套 shape + stride。现有内存排列表达不成目标 shape 时（比如 transpose 后把 `(N, h, dk)` 合成 `(N, d_model)`，`h` 和 `dk` 在内存里已经不相邻），只能报 "view size is not compatible with input tensor's size and stride"。
 - `reshape`：能 view 就 view，不能就先拷一份连续的再 view
 - `.contiguous()`：手动做这次拷贝
+- **默认用 `reshape`**。只有要通过结果写回原 tensor 时才用 `view`：`view` 保证不拷贝，做不到就报错；`reshape` 可能悄悄拷一份，写进去的是副本，原 tensor 没变也不报错
 
 #### 只改元数据 vs 会拷贝
 
