@@ -444,16 +444,16 @@
     "last_review": "2026-10-04T06:13:24.367Z"
   },
   "kernel-elementwise-bound": {
-    "stability": 2.3065,
-    "difficulty": 2.11810397,
-    "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "stability": 11.6874828,
+    "difficulty": 1,
+    "elapsed_days": 1,
+    "scheduled_days": 12,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-04T06:23:06.976Z",
-    "last_review": "2026-10-04T06:13:06.976Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-17T02:02:35.251Z",
+    "last_review": "2026-10-05T02:02:35.251Z"
   },
   "kernel-parallel-vs-reduce": {
     "stability": 0.42437996,
