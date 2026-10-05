@@ -107,23 +107,29 @@ KV cache 存的时候量化、读的时候反量化：
 
 记 GEMM 为 $Y = XW$，$X \in \mathbb{R}^{M \times K}$ 是激活（$M$ 个 token，$K$ 个输入通道），$W \in \mathbb{R}^{K \times N}$ 是权重（$N$ 个输出通道）。
 
-| 粒度          | 共用 scale 的范围                       | 典型用法                     |
-| ----------- | ---------------------------------- | ------------------------ |
-| per-tensor  | 整个 $X$ 或 $W$                       | FP8 W8A8 的静态 scale       |
-| per-token   | $X$ 的一行（一个 token）                  | W8A8 的激活                 |
-| per-channel | $W$ 的一列（一个输出通道）                    | W8A8 的权重                 |
-| per-group   | $W$ 一列里沿 $K$ 连续 $g$ 个元素，$g$ 常取 128 | W4A16 的权重                |
-| per-block   | 一个小块，如 MX 的 32 个元素                 | FP4、DeepSeek-V3 的 FP8 训练 |
+粒度能选多细，取决于量化后的数怎么参与计算。有两条路线：
+
+1. **低精度原生计算**：$X_q$、$W_q$ 直接进低精度 Tensor Core。约束是适配计算流，scale 必须能放进 GEMM 的累加顺序里。
+2. **先 dequantize 再算**：先还原成 bf16 再走 bf16 GEMM。计算流不受影响，约束是 accuracy 和转换 overhead。
+
+| 粒度          | 共用 scale 的范围                     | 路线       | 典型用法                       |
+| ----------- | -------------------------------- | -------- | -------------------------- |
+| per-tensor  | 整个 $X$ 或 $W$                     | 原生       | FP8 W8A8 的静态 scale         |
+| per-token   | $X$ 的一行（一个 token）                | 原生       | W8A8 的激活                   |
+| per-channel | $W$ 的一列（一个输出通道）                  | 原生 / 反量化 | W8A8 的权重、W8A16 的权重         |
+| per-group   | $W$ 一列里沿 $K$ 连续 $g$ 个元素，$g$ 常取 128 | 反量化      | W4A16 的权重                  |
+| per-block   | 沿 $K$ 连续 $b$ 个元素，如 MX 的 32 个      | 原生（硬件支持） | MXFP4 / NVFP4、DeepSeek-V3 FP8 |
 
 <QuantGranularity />
 
+### 路线一：低精度原生计算
 
-### 原生quantize计算
-W8A8，aka原生用quantize之后的数值进行计算， 的quantize粒度非常直觉
+W8A8 的粒度很直觉：
+
 1. activation per token
 2. weight per channel（输出通道）
 
-这就是gemm的聚合顺序问题，这样做方便些：
+这是 GEMM 的累加顺序决定的：
 
 $$
 Y_{ij} = \sum_k X_{ik} W_{kj} \approx s_x[i] \cdot s_w[j] \cdot \sum_k X_{q,ik} W_{q,kj}
@@ -145,13 +151,21 @@ for i in range(M):
         Y[i, j] = s_x[i] * s_w[j] * acc                 # epilogue：求和完只乘一次
 ```
 
-$s_x[i]$ 和 $s_w[j]$ 都不随 $k$ 变，所以能挪到 $k$ 循环外面，循环里只剩整数乘加，正好交给 int8 Tensor Core。如果 scale 随 $k$ 变，就得在循环里每步乘，累加不再是纯整数。
+$s_x[i]$ 和 $s_w[j]$ 都不随 $k$ 变，所以能挪到 $k$ 循环外面，循环里只剩整数乘加，正好交给 int8 Tensor Core。
 
-### 先dequantize再算
+**per-block 是放宽一步**：scale 沿 $K$ 变，但每 $b$ 个元素才变一次。把 $K$ 的求和按块拆开，块内照样纯低精度累加，每块结束乘一次这块的 scale：
 
-这部分啥粒度都行，唯一care的就是dequantize的overhead了
+$$
+Y_{ij} \approx \sum_{\text{块 } t} s_x[i, t] \cdot s_w[t, j] \cdot \sum_{k \in t} X_{q,ik} W_{q,kj}
+$$
 
-啥粒度都行，是因为反量化后 scale 已经乘进 bf16 的 $\hat{W}$ 里了，GEMM 本身不碰 scale，scale 随 $k$ 变也没关系。W4A16 的 per-group（沿 $K$）就是这样：
+块内求和交给 Tensor Core，块间乘 scale 再用 fp32 累加。Blackwell 的 MXFP4 / NVFP4 在硬件里做这一步；DeepSeek-V3 的 FP8 GEMM 用激活 $1 \times 128$、权重 $128 \times 128$ 的块，在 CUDA core 上做。
+
+**激活不能 per-channel**：按输入通道 $k$ 分 scale 等于 $b = 1$，每个元素一个 scale，块内一次乘加都不剩，低精度累加就没法做了。问题是激活的 outlier 偏偏集中在固定的几个输入通道 $k$ 上，最该按 $k$ 分 scale，却不能这么做。第 3 节的 SmoothQuant 就是为了绕开这个限制。
+
+### 路线二：先 dequantize 再算
+
+这条路线啥粒度都行，因为反量化后 scale 已经乘进 bf16 的 $\hat{W}$ 里了，GEMM 本身不碰 scale，scale 随 $k$ 变也没关系。W4A16 的 per-group（沿 $K$）就是这样：
 
 ```python
 # W_q [K, N] int4，s_w [K // g, N]：沿 K 每 g 行一组
@@ -160,37 +174,13 @@ for k0 in range(0, K, g):                                    # 每次取一个 K
     Y += X[:, k0:k0 + g] @ W_tile                            # bf16 GEMM
 ```
 
-overhead 具体是三项：
+**accuracy**：int4 只有 16 个值，per-channel 一个 scale 管一整列 $K$ 个元素，误差太大；per-group $g = 128$ 才够用。int8 权重（W8A16）per-channel 就够。
+
+**转换 overhead** 有三项：
 
 1. **乘 scale 的计算**：每个权重元素乘一次自己的 scale，次数等于元素个数，跟粒度无关。
-2. **读 scale 的带宽**：粒度越细 scale 越多。$K = N = 8192$ 的 int4 权重是 32 MiB；per-channel 有 8192 个 fp16 scale，16 KiB，可以忽略；per-group $g = 128$ 有 $64 \times 8192$ 个，1 MiB，多读 3.1%。
+2. **读 scale 的带宽**：粒度越细 scale 越多。per-group $g = 128$，每组一个 16 bit 的 scale，摊到每个权重上是 $16 / 128 = 0.125$ bit，int4 的实际位宽是 $4.125$ bit，多读 3.1%。$K = N = 8192$ 时权重 32 MiB、scale 1 MiB；per-channel 只有 8192 个 scale，16 KiB，可以忽略。int4 权重通常还带一个 zero point（非对称量化，$\hat{x} = s \cdot (x_q - z)$），再多一点。
 3. **和 kernel 分块对齐**：kernel 沿 $K$ 一个 tile 一个 tile 地算，$g$ 取 K-tile 的整数倍（如 128），每个 tile 只要读一行 scale。
-
-粒度换来的是精度，三种粒度在这条路线上的位置：
-
-1. **per-tensor**：int4 下一个 scale 管整个矩阵，误差太大，基本不用。
-2. **per-channel**：每列一个 scale。int8 权重（W8A16）这样就够准；int4 还是不够。
-3. **per-group**：每列沿 $K$ 每 $g$ 个一组，多 3% 的带宽换 int4 能用的精度，是 W4A16（GPTQ / AWQ）的标配。
-
-KV cache 也走这条路线：存 FP8，attention kernel 读进来乘 scale 再算。
-
-### 为什么激活不能 per-channel
-
-整数 GEMM 要求 scale 能提到 $K$ 维求和外面。激活 per-token（scale $s_x[i]$）、权重 per-output-channel（scale $s_w[j]$）时：
-
-$$
-Y_{ij} = \sum_k X_{ik} W_{kj} \approx s_x[i] \cdot s_w[j] \cdot \sum_k X_{q,ik} W_{q,kj}
-$$
-
-求和全是整数乘加，最后乘一次 scale 就行。但如果激活按输入通道 $k$ 量化，scale 变成 $s_x[k]$，它在求和号里面，提不出来，整数 GEMM 就做不了。
-
-问题是激活的 outlier 偏偏集中在固定的几个输入通道 $k$ 上，最该按 $k$ 分 scale，却不能这么做。第 3 节的 SmoothQuant 就是为了绕开这个限制。
-
-per-group 的 scale 也在 $K$ 维上，W4A16 能用是因为它先把权重反量化成 bf16 再乘，scale 在反量化时就乘进去了，不进整数求和。
-
-### scale 的开销
-
-per-group $g = 128$，每组一个 16 bit 的 scale，摊到每个权重上是 $16 / 128 = 0.125$ bit。int4 权重的实际位宽就是 $4 + 0.125 = 4.125$ bit。int4 权重通常还带一个 zero point（非对称量化，$\hat{x} = s \cdot (x_q - z)$），再加一点。
 
 ## 3. 各种消除 outlier 的算法
 
