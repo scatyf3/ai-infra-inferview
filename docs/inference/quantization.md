@@ -39,6 +39,10 @@ $$
 | INT4     | 4   | 整数        | 7                    | W4A16 的权重         |     |
 | FP4 E2M1 | 4   | 1 / 2 / 1 | 6                    | MXFP4 / NVFP4 的元素 |     |
 
+1. int和fp的分布区别
+2. fp8训练vs推理
+3. 不同的粒度，w8a8和w4a16
+
 **INT 和 FP 的区别在格点分布。** INT 的格点等间距，绝对误差处处一样，适合均匀分布的数。FP 的格点在 0 附近密、远处疏，相对误差大致恒定，适合「大部分很小、少数很大」的长尾分布，LLM 的激活正是这样。E2M1 能表示的正数只有 8 个：0, 0.5, 1, 1.5, 2, 3, 4, 6，可以看出越往大越稀。
 
 **E4M3 和 E5M2 是拿 1 bit 在精度和范围之间换。** E4M3 多 1 位尾数，1 后面的下一个格点是 1.125（E5M2 是 1.25）；E5M2 多 1 位指数，最大值与最小正规数之比从约 $2^{15}$（$448 / 2^{-6}$）扩到约 $2^{30}$（$57344 / 2^{-14}$）。权重和激活除以 scale 后落在窄范围里，缺的是精度，所以用 E4M3；梯度在一个张量里就跨很多个数量级，缺的是范围，所以用 E5M2。
@@ -65,6 +69,9 @@ $$
 3. KV cache
 
 一般保持 bf16 的：embedding、lm_head、RMSNorm、softmax、RoPE、MoE router。它们要么是逐元素运算、量化了也省不了多少，要么直接决定输出（logits、选哪个专家），对误差敏感。
+
+不同的部分需要quantize和dequantize，这里也需要高效的实现
+
 
 **怎么用 scale。** 记 Linear 为 $Y = XW$，$X \in \mathbb{R}^{M \times K}$，$W \in \mathbb{R}^{K \times N}$，$s_w$、$s_x$ 分别是权重和激活的 scale。
 
@@ -108,6 +115,11 @@ KV cache 存的时候量化、读的时候反量化：
 | per-group   | $W$ 一列里沿 $K$ 连续 $g$ 个元素，$g$ 常取 128 | W4A16 的权重                |
 | per-block   | 一个小块，如 MX 的 32 个元素                 | FP4、DeepSeek-V3 的 FP8 训练 |
 
+<QuantGranularity />
+
+
+W8A8的quantize粒度非常直觉
+1. a'c'ti'vv'a'ti
 ### 为什么激活不能 per-channel
 
 整数 GEMM 要求 scale 能提到 $K$ 维求和外面。激活 per-token（scale $s_x[i]$）、权重 per-output-channel（scale $s_w[j]$）时：

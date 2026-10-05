@@ -13,6 +13,7 @@ import StackFigure from './components/StackFigure.vue'
 import RoadmapFigure from './components/RoadmapFigure.vue'
 import TritonProgramViz from './components/TritonProgramViz.vue'
 import Flashcards from './components/Flashcards.vue'
+import QuantGranularity from './components/QuantGranularity.vue'
 import StackPageExtras from './components/StackPageExtras.vue'
 import ReaderNotes from './components/ReaderNotes.vue'
 import SyncControl from './components/SyncControl.vue'
@@ -44,5 +45,6 @@ export default {
     app.component('RoadmapFigure', RoadmapFigure)
     app.component('TritonProgramViz', TritonProgramViz)
     app.component('Flashcards', Flashcards)
+    app.component('QuantGranularity', QuantGranularity)
   },
 } satisfies Theme
