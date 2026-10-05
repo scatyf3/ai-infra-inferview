@@ -15,6 +15,10 @@
     "text": "flashdecoding是基于flashattn加了splitk吗",
     "at": 1791157327274
   },
+  "bagu-goodput": {
+    "text": "看情况了，offline就看吞吐，online看sla",
+    "at": 1791161501647
+  },
   "bagu-gptq-awq": {
     "text": "可视化？",
     "at": 1791159431065
