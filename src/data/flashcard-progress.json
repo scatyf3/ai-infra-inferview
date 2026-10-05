@@ -361,15 +361,15 @@
   },
   "bagu-ttft-parts": {
     "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "difficulty": 2.11121424,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 2,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-05T01:06:38.319Z",
-    "last_review": "2026-10-05T00:56:38.319Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-07T01:07:44.588Z",
+    "last_review": "2026-10-05T01:07:44.588Z"
   },
   "bagu-w4a16-vs-w8a8": {
     "stability": 1.33589976,
