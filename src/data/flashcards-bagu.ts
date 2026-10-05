@@ -2,7 +2,8 @@
 // 内容和数字取自站内对应文章（ref），改文章里的结论时记得同步这里。
 //
 // id 是复习记录的 key（src/data/flashcard-progress.json），改题面可以，改 id 会丢掉这张卡的记录。
-// a 支持行内 `code` 和 **加粗**，\n 换行；code 是答案下面的代码块；ref 是出处（站内链接，不含 base）。
+// a 支持行内 `code`、**加粗**、$公式$ 和 $$单独一行的公式$$（KaTeX），\n 换行；
+// fig 是答案下面的示意图（等宽字符画），code 是代码块；ref 是出处（站内链接，不含 base）。
 
 import type { Card } from '@lib/flashcards'
 
@@ -39,6 +40,13 @@ const PY = '/basics/python'
 
 const b = (c: Omit<Card, 'deck'>): Card => ({ deck: 'bagu', ...c })
 
+/** 多行的示意图 / 代码：去掉首尾的空行和公共缩进，源码里可以跟着缩进写；按原样取，反斜杠不转义 */
+const lines = (t: TemplateStringsArray) => {
+  const rows = t.raw[0].replace(/^\n/, '').replace(/\n\s*$/, '').split('\n')
+  const indent = Math.min(...rows.filter((r) => r.trim()).map((r) => r.length - r.trimStart().length))
+  return rows.map((r) => r.slice(indent)).join('\n')
+}
+
 export const baguCards: Card[] = [
   // ---------------- roofline ----------------
   b({
@@ -52,14 +60,14 @@ export const baguCards: Card[] = [
     id: 'bagu-prefill-ai',
     topic: 'roofline',
     q: 'prefill 的算术强度怎么推？为什么每个参数对每个 token 算 2 次 FLOP？',
-    a: '符号：P 参数量，B batch，S 每个序列的 token 数，b_w 每个参数的字节数（bf16 = 2）。\n为什么是 2：线性层 `y = x·W`，输出的每个元素是 `Σ_i x_i · W_ij`。每个权重元素对每个 token 只参与**一次乘法和一次加法**，就是 2 FLOP。\n1. FLOPs ≈ 2 · P · B · S（忽略 attention 的 S² 项）。\n2. 访存 ≈ P · b_w：权重读一遍，激活相对小。\n3. AI = 2PBS ÷ (P · b_w) = 2BS ÷ b_w，bf16 下就是 **B · S**。\n例：B = 1、S = 2048，AI ≈ 2048，远大于 H100 的 295，所以 prefill 是 **compute-bound**，TTFT ≈ FLOPs ÷ (峰值 × MFU)。',
+    a: '符号：$P$ 参数量，$B$ batch，$S$ 每个序列的 token 数，$b_w$ 每个参数的字节数（bf16 = 2）。\n为什么是 2：就是字面意思。线性层 $y = xW$，输出的每个元素 $y_j = \\sum_i x_i W_{ij}$，每个权重 $W_{ij}$ 对每个 token 恰好做 **1 次乘法 + 1 次加法**，就是 2 FLOP。所有线性层的权重加起来是 P 个，所以每个 token 约 2P FLOP。\n1. FLOPs ≈ $2PBS$。\n2. 访存 ≈ $P b_w$：权重读一遍，激活相对小。\n3. $AI = \\dfrac{2PBS}{P b_w} = \\dfrac{2BS}{b_w}$，bf16 下就是 $BS$。\n「忽略 attention」指的是：$QK^\\top$ 和 $PV$ 是激活乘激活，不碰权重，不在 2P 里。它们每层约 $4dS^2B$ FLOP，S 不长时比线性层小得多（比值见长上下文那张卡）。\n例：B = 1、S = 2048，AI ≈ 2048，远大于 H100 的 295，所以 prefill 是 **compute-bound**。',
     ref: ROOF,
   }),
   b({
     id: 'bagu-decode-ai',
     topic: 'roofline',
-    q: 'decode 的算术强度怎么推？batch = 1 和 64 时各是多少，和 H100 的 ridge（295）比呢？',
-    a: '符号同 prefill：P 参数量，B batch，b_w 每个参数的字节数（bf16 = 2）。decode 每步每个序列只算 **1 个新 token**。\n1. FLOPs ≈ 2 · P · B：每个权重对每个 token 一次乘加。\n2. 访存 ≈ P · b_w：权重整读一遍；KV cache 相对权重小时先忽略。\n3. AI ≈ 2PB ÷ (P · b_w) = 2B ÷ b_w，bf16 下就是 **B**。\nB = 1 时 AI = 1，比 295 低近 300 倍；B = 64 时 AI = 64，仍然 memory-bound。\n所以 decode 的优化都是「少读字节」或「一次读取服务更多 token」：加大 batch、量化权重、压缩 KV、投机解码。',
+    q: 'decode 的算术强度怎么推？batch = 1 和 64 时各是多少，和 H100 的 ridge 比呢？',
+    a: '先算 ridge：峰值算力 ÷ 显存带宽。H100 SXM 的 bf16 是 989 TFLOP/s、3.35 TB/s：\n$$\\text{ridge} = \\frac{989 \\times 10^{12}}{3.35 \\times 10^{12}} \\approx 295 \\ \\text{FLOP/B}$$\n再算 decode 的 AI。符号：$P$ 参数量，$B$ batch，$b_w$ 每个参数的字节数（bf16 = 2）。decode 每步每个序列只算 1 个新 token：\n1. FLOPs ≈ $2PB$：每个权重对每个 token 一次乘加。\n2. 访存 ≈ $P b_w$：权重整读一遍，KV 先忽略。\n3. $AI = \\dfrac{2PB}{P b_w} = B$（bf16）。\n代入：B = 1 时 AI = 1，B = 64 时 AI = 64，都远小于 295，**memory-bound**。要 B 接近 295 才到 ridge，算上读 KV 还更难。',
     ref: ROOF,
   }),
   b({
@@ -95,22 +103,51 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-how-many-gpus',
     topic: '显存账',
-    q: '推理显存由哪几项组成？哪一项决定了要几张卡？',
-    a: '四项：**权重 + KV cache + 激活 + 固定开销**（CUDA context、通信 buffer、CUDA Graph 等）。\n1. 权重：常数，只和模型和精度有关。\n2. 激活：推理不保存中间结果，用完即丢，很小。\n3. KV cache：**唯一随 batch 和序列长度线性涨的**。\n所以要几张卡，本质是 KV 要多少：每卡显存扣掉权重和开销，剩下的除以 KV/token，就是能同时放下多少 token。',
-    ref: MEM,
+    q: '推理显存的四项里，哪一项决定了要几张卡？为什么？',
+    a: '**KV cache**。四项是权重 + KV cache + 激活 + 固定开销（CUDA context、通信 buffer、CUDA Graph）：\n1. 权重：常数，只看模型和精度。\n2. 激活和固定开销：每卡几 GB，不随请求数涨。\n3. KV cache：**唯一随 batch × 序列长度线性涨的**。\n所以「要几张卡」就是：扣掉权重和开销后，剩下的显存能放下多少 token 的 KV，够不够要的并发。下面按 Llama-3-70B 算；文章里有能调参数的计算器。',
+    code: lines`
+      GB = 1e9
+      P, b_w = 70e9, 2                   # 参数量, 每参数字节 (bf16)
+      L, H_kv, d_h, b = 80, 8, 128, 2    # 层数, KV head 数, head 维度, KV 每元素字节
+      kv_per_token = 2 * L * H_kv * d_h * b   # K 和 V 各一份: 327,680 B
+
+      def kv_tokens(n_gpu, mem=80 * GB, overhead=4 * GB):
+          free = n_gpu * (mem - overhead) - P * b_w   # 权重按 TP 切到 n_gpu 张卡上
+          return int(free // kv_per_token)
+
+      for n in (2, 4, 8):
+          t = kv_tokens(n)
+          print(f"TP={n}: {t:,} token = {t // 8192} 个 8k 请求")
+      # TP=2: 36,621 token = 4 个 8k 请求
+      # TP=4: 500,488 token = 61 个 8k 请求
+      # TP=8: 1,428,222 token = 174 个 8k 请求
+    `,
+    ref: `${MEM}#交互`,
   }),
   b({
     id: 'bagu-layer-params',
     topic: '显存账',
     q: '一层 decoder（GQA + SwiGLU）的参数量怎么算？常见算错点是什么？',
-    a: '`2d²`（W_q、W_o）+ `2·d·H_kv·d_h`（W_k、W_v）+ `3·d·d_ff`（SwiGLU）+ `2d`（两个 norm）。再加 embedding `V·d`（不共享就 ×2）。\n算错点：**SwiGLU 是三个矩阵**（gate、up、down），不是两个；GQA 下 K、V 投影比 Q 小。',
+    a: '符号：d hidden 维度，H / H_kv 是 Q / KV head 数，d_h head 维度（H·d_h = d），d_ff MLP 中间维度，V 词表大小。按矩阵一个个数（见图）：\n1. attention：W_q、W_o 各 $d^2$；W_k、W_v 各 $d \\cdot H_{kv} d_h$。\n2. MLP（SwiGLU）：gate、up、down 三个矩阵，各 $d \\cdot d_{ff}$。\n3. 两个 RMSNorm：各 d。\n每层 $= 2d^2 + 2 d H_{kv} d_h + 3 d\\, d_{ff} + 2d$。模型再加 embedding 和 lm_head 各 $Vd$（共享就只算一次）。\n算错点：**SwiGLU 是三个矩阵**，不是两个；GQA 下 K、V 投影比 Q 小。\n验算 Llama-3-70B（d = 8192，H_kv = 8，d_h = 128，d_ff = 28672，80 层，V = 128256）：每层约 0.86 B，80 层 68.4 B，加 embedding 和 lm_head 2.1 B，共约 **70.6 B**。',
+    fig: lines`
+      x [d]
+      ├─ RMSNorm                 d
+      ├─ W_q     d x H*d_h       = d^2
+      ├─ W_k     d x H_kv*d_h
+      ├─ W_v     d x H_kv*d_h
+      ├─ W_o     H*d_h x d       = d^2
+      ├─ RMSNorm                 d
+      ├─ W_gate  d x d_ff
+      ├─ W_up    d x d_ff
+      └─ W_down  d_ff x d
+    `,
     ref: MEM,
   }),
   b({
     id: 'bagu-activation-small',
     topic: '显存账',
     q: '推理时激活为什么不是显存大头？哪一项要留意？',
-    a: '不做反向，不用保存中间结果；FlashAttention 不物化 S×S 的 score。每层活跃张量约 `B·S_chunk·(4d + 2d_ff)·b`，用完即丢。\n要留意的是 **logits**：`B × V × 4` 字节（fp32），batch 256 × 128k vocab 就是 128 MiB。',
+    a: '符号：T 是这一步处理的 token 数（≤ `max_num_batched_tokens`），d hidden 维度，d_ff MLP 中间维度，b 每元素字节。\n1. 不做反向，不用为反向保存中间结果：一层算完，它的激活就能给下一层复用。\n2. FlashAttention 不物化 S×S 的 score。\n3. 所以同时活着的只有一两层的张量，约 $T(4d + 2d_{ff})\\,b$（4d 是 Q、K、V 和 attention 输出，2d_ff 是 gate 和 up）。70B（d = 8192，d_ff = 28672）、T = 2048、bf16：约 **352 MiB**，和几十 GB 的 KV 比很小。\nCUDA Graph 下中间结果的地址确实要固定：录图时它们从一个**专用内存池**里分配，回放时原地复用。但池子里的 buffer 仍然逐层复用，只给小 batch（decode）录图，所有图共用一个池，所以也就几百 MB。vLLM 启动时先按最大 token 数跑一次假 forward，量出激活峰值，剩下的才分给 KV。\n要留意的是 **logits**：$B \\times V \\times 4$ 字节（fp32），batch 256 × 128k vocab 就是 128 MiB。',
     ref: MEM,
   }),
 
@@ -133,7 +170,26 @@ export const baguCards: Card[] = [
     id: 'bagu-prefix-cache',
     topic: 'PagedAttention',
     q: 'prefix caching 怎么实现？为什么只有满 block 参与共享？',
-    a: '满 block 按「前缀 + 本块 token」的内容算 hash，命中就把物理 block 号直接填进新序列的 block table，refCount + 1，省掉这段 prefill。\n写 refCount > 1 的 block 要 **copy-on-write**。未满 block 还会被追加写，内容不固定，所以不参与共享。',
+    a: '以 vLLM 为例，一个 block 16 个 token（代码见下）：\n1. prompt 按 16 个一块切开，每个**满块**算一个 hash = hash(前一块的 hash, 本块的 16 个 token)。链式算，所以 hash 相同就说明**从开头到这块**全部相同。\n2. 新请求从第一块开始查表：命中就把那个物理 block 号直接填进自己的 block table、引用计数 +1，这 16 个 token 不用再 prefill；遇到第一个没命中的就停，后面照常算。\n3. 为什么只有满块：最后一块没填满，decode 还要往里写新 token，内容会变，hash 就定不下来；满块以后只读不写，才能放心给别人用。\n4. 引用计数归零的块不马上清掉，留在表里等下次命中，显存不够时按 LRU 回收。\n原来提到的 copy-on-write 是另一回事：并行采样（n > 1）时几个分支共用同一个没满的块，谁要往里写就先复制一份，不影响别人。只共享满块的 prefix cache 用不上它。',
+    code: lines`
+      BLOCK = 16
+      cache = {}   # 块 hash -> 物理 block 号
+
+      def block_hashes(tokens):
+          hashes, prev = [], None
+          for i in range(0, len(tokens) - BLOCK + 1, BLOCK):   # 只取满块
+              prev = hash((prev, tuple(tokens[i:i + BLOCK])))
+              hashes.append(prev)
+          return hashes
+
+      def lookup(tokens):
+          table = []
+          for h in block_hashes(tokens):
+              if h not in cache:
+                  break                    # 第一个没命中就停
+              table.append(cache[h])       # 复用物理块，引用计数 +1
+          return table, len(table) * BLOCK  # 命中的块, 省掉的 prefill token 数
+    `,
     ref: KV,
   }),
   b({
@@ -154,7 +210,7 @@ export const baguCards: Card[] = [
     id: 'bagu-kv-quant',
     topic: 'PagedAttention',
     q: 'KV cache 量化到 FP8 有什么收益和注意点？',
-    a: '收益：KV 的显存和访存减半，等于 decode 的算术强度翻倍、能放下的并发翻倍。\n注意：\n1. 用 per-token / per-head 量化，不要 per-tensor，outlier 集中在少数 channel。\n2. **K 比 V 难量化**：K 在 softmax 之前参与点积，误差被指数放大。\n3. 早期 token 的 KV 被后续每一步反复读，长 context 下误差影响更大。',
+    a: '先说粒度：量化时一组元素共用一个缩放系数 s（$x_q = \\text{round}(x / s)$），组怎么划就是粒度。\n1. per-tensor：一层的整个 K（或 V）共用一个 s。\n2. per-token：每个 token 的那一行一个 s。\n3. per-channel：每一维（一列）一个 s，所有 token 共用。\n收益：bf16 → fp8，KV 的显存和访存减半，decode 的算术强度翻倍、能放下的 token 翻倍。\n注意点：\n1. **FP8 用 per-tensor 就够**：fp8 自带指数位，动态范围大。vLLM 的 `kv_cache_dtype="fp8"` 每层 K、V 各一个 scale。int4 / int2 这种整数格式才要细粒度：K 的离群值集中在少数几个 channel，所以 K 按 per-channel、V 按 per-token（KIVI）。\n2. **K 比 V 敏感**：score $= q \\cdot k / \\sqrt{d_h}$。k 上的误差 δ 让 score 偏 $q \\cdot \\delta / \\sqrt{d_h}$，过了 softmax 变成乘上 $e^{q \\cdot \\delta / \\sqrt{d_h}}$，会改变注意到谁；V 的误差只是线性混进加权平均，一部分被平均掉。',
     ref: KV,
   }),
 
@@ -163,7 +219,15 @@ export const baguCards: Card[] = [
     id: 'bagu-gqa',
     topic: 'attention 变体',
     q: 'MHA / GQA / MQA 的区别？为什么只减 K、V 的 head，不减 Q 的？',
-    a: 'decode 时 Q 只有当前 token，算完就丢；K、V 要留着给后面每个 token 用。所以 **KV cache 大小只由 K/V 的 head 数决定**，Q 保持 H 个 head 不损失表达力。\nLlama-3-70B 规格下每 token：MHA（64 个 KV head）2.5 MiB，GQA（8 个）320 KiB，MQA（1 个）40 KiB。GQA 是质量和访存的工业折中。',
+    a: '符号：H 是 Q head 数，H_kv 是 KV head 数，d_h 是 head 维度，L 层数。\n1. MHA：H_kv = H，每个 Q head 有自己的一对 K/V。\n2. GQA：H 个 Q head 分成 H_kv 组，组内共用一对 K/V（见图）。\n3. MQA：H_kv = 1，所有 Q head 共用一对。\n为什么只减 KV：目的就是省 KV。K、V 要缓存，每 token 存 $2 L H_{kv} d_h$ 个数，decode 每一步全读一遍；Q 只算当前 token、用完就丢，不进 cache，减 Q head 省不了显存和带宽，只会掉效果。\nLlama-3-70B（L = 80，d_h = 128，bf16）每 token：MHA（64 个 KV head）2.5 MiB，GQA（8 个）320 KiB，MQA（1 个）40 KiB。',
+    fig: lines`
+      H = 8; KV head read by each Q head
+
+               Q head   0 1 2 3 4 5 6 7
+      MHA      KV head  0 1 2 3 4 5 6 7
+      GQA (4)  KV head  0 0 1 1 2 2 3 3
+      MQA      KV head  0 0 0 0 0 0 0 0
+    `,
     ref: ATTN,
   }),
   b({
@@ -177,7 +241,7 @@ export const baguCards: Card[] = [
     id: 'bagu-mla',
     topic: 'attention 变体',
     q: 'MLA 缓存什么？decode 时怎么避免把 K 展开？',
-    a: '只缓存下投影后的 latent `c_kv`（DeepSeek-V3 里 d_c = 512），加一个所有 head 共享、单独加 RoPE 的 `k_pe`（64 维），每 token 576 个元素，约 **68.6 KiB/token**（61 层），比同规模 GQA 还小。\ndecode 用 **weight absorption**：把 `W_UK` 吸收进 Q 侧，`qᵀKᵀ = (qᵀW_UKᵀ) c_kvᵀ`，直接在 latent 空间算 score。\n代价是计算量比 GQA 大，拿算力换带宽，正适合 memory-bound 的 decode。prefill 反而直接展开更快。',
+    a: '符号（DeepSeek-V3）：$h$ 是 token 的 hidden（7168 维），128 个 head，每个 head 128 维；latent 维度 $d_c = 512$，RoPE 部分 $d_r = 64$，61 层。\n缓存什么：\n1. 下投影 $c_{kv} = W_{DKV} h$，7168 → 512 维，**缓存它**。\n2. 位置部分 $k^R = \\text{RoPE}(W_{KR} h)$，64 维，所有 head 共享，**也缓存**。\n3. 用的时候再上投影：第 i 个 head 的 $k_i = W_{UK,i}\\, c_{kv}$，$v_i = W_{UV,i}\\, c_{kv}$。\n每 token 每层 512 + 64 = 576 个数，61 层、bf16 共 **68.6 KiB**；同样 61 层、8 个 KV head 的 GQA 是 244 KiB。\n怎么不展开 K（weight absorption）：\n$$q_i^\\top k_i = q_i^\\top W_{UK,i}\\, c_{kv} = (W_{UK,i}^\\top q_i)^\\top c_{kv}$$\n先把 q 投到 512 维的 latent 空间，直接和缓存的 $c_{kv}$ 点积。V 同理：先对 $c_{kv}$ 加权求和，最后再乘 $W_{UV,i}$，它还能并进 $W_O$。\n效果：decode 时相当于 128 个 Q head 共用**一个 576 维的 KV head**，像 MQA。点积维度从 192（128 + 64）变成 576，算得更多，但 decode 是 memory-bound，拿算力换带宽划算。prefill 是 compute-bound，反而展开成每 head 128 维更快。',
     ref: ATTN,
   }),
   b({
@@ -191,7 +255,7 @@ export const baguCards: Card[] = [
     id: 'bagu-gqa-tp',
     topic: 'attention 变体',
     q: 'GQA 模型做 TP 时对切分数有什么限制？',
-    a: '`H` 和 `H_kv` 都要能被 TP 整除。KV head 只有 8 个、TP 开到 16 时，KV head 不够分，只能在卡之间**复制**，KV cache 跟着复制，白占显存。所以 TP 一般不超过 H_kv。',
+    a: 'TP 要整除 H（Q head 数）。KV head 分两种情况：\n1. TP ≤ H_kv：TP 要整除 H_kv，每卡分到 H_kv / TP 个 KV head，KV cache 正好按 1/TP 切。\n2. TP > H_kv：KV head 不够分，只能**复制**，每个 KV head 在 TP / H_kv 张卡上各存一份，每卡的 KV 不再是 1/TP，白占显存。\n例：Llama-3-70B，H = 64，H_kv = 8。TP = 8 时每卡 1 个 KV head；TP = 16 时每两张卡存同一个 KV head，KV 总量翻倍。\n所以 TP 一般 **≤ H_kv**。',
     ref: TP,
   }),
 
@@ -213,8 +277,15 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-flash-decoding',
     topic: 'FlashAttention',
-    q: 'decode 阶段 FlashAttention 帮助大吗？用什么？',
-    a: '帮助有限：Q 只有 1 行，score 是 1×S，本来就小，瓶颈是读整个 KV cache 的带宽。\n用 **FlashDecoding**（split-KV）：沿 KV 长度切成多段，多个 block 并行读、各算局部结果，再用 online softmax 的方式合并，让足够多的 SM 一起读 KV。',
+    q: 'decode 阶段 FlashAttention 帮助大吗？FlashDecoding 改了什么？',
+    a: '可以这么记：**FlashDecoding = FlashAttention + 沿 KV 长度切分（split-KV，和 GEMM 的 split-K 一个思路）+ 最后合并一次**。\n1. 问题：decode 时 Q 只有 1 行，FlashAttention 按 batch × head 分 block。B = 1、32 个 head 就只有 32 个 block，H100 有 132 个 SM，大部分闲着，读 KV 的带宽用不满。\n2. 切分：长度 S 的 KV 切成 s 段，block 数变成 B × H × s。每段各算局部输出 $o_j$、局部最大值 $m_j$、局部分母 $\\ell_j$（见图）。\n3. 合并（一个小 kernel），和 online softmax 的合并一样：\n$$m = \\max_j m_j,\\qquad o = \\frac{\\sum_j e^{m_j - m}\\,\\ell_j\\, o_j}{\\sum_j e^{m_j - m}\\,\\ell_j}$$',
+    fig: lines`
+      KV  [seg 0|seg 1|seg 2|seg 3]
+             |     |     |     |
+            SM    SM    SM    SM   o_j m_j l_j
+              \    \    /    /
+             merge: rescale+sum -> o
+    `,
     ref: FA,
   }),
 
@@ -258,7 +329,7 @@ export const baguCards: Card[] = [
     id: 'bagu-preempt-whom',
     topic: '调度',
     q: '抢占时踢谁？频繁抢占说明什么？',
-    a: '通常 **LIFO**，踢最新进来的：老请求已经投入了更多计算，踢它浪费更大，也避免老请求被反复饿死。\n生产上频繁抢占说明 `max_num_seqs` 设得太激进或 KV 空间不够，该调参或加卡，而不是让调度器反复抖动。',
+    a: '**踢最新进来的**（LIFO）：它算得最少，丢掉重算浪费最小；老请求也不会被反复踢、饿死。\n出处：vLLM V1 的 `vllm/v1/core/sched/scheduler.py`，`schedule()` 给 running 请求分配 block 失败时：\n1. FCFS 策略：`self.running.pop()`，弹出 running 列表末尾，也就是最后被调度进来的请求。\n2. priority 策略：踢优先级最低的，同优先级踢到达最晚的。\n被踢的请求 KV 全部释放，放回 waiting 队首，之后重新 prefill（V1 只有 recompute，没有 swap）。\n频繁抢占说明 `max_num_seqs` 设得太激进或 KV 空间不够，该调参或加卡，而不是让调度器反复抖动。',
     ref: SCHED,
   }),
 
@@ -267,21 +338,29 @@ export const baguCards: Card[] = [
     id: 'bagu-spec-why',
     topic: '投机解码',
     q: 'speculative decoding 为什么能「白赚」？',
-    a: 'decode 是 memory-bound，Tensor Core 基本在空转。target 一次前向验证 k 个 token，读的字节数几乎不变（权重还是读一遍），FLOPs 涨 k 倍，AI 从 B 变成 kB。原本在 roofline 左侧有大量余量，这 k 倍 FLOPs 几乎免费。\n本质是**用闲置算力换延迟**，把 k 次 GEMV 变成 1 次小 GEMM。',
+    a: 'decode 是 memory-bound：每一步把权重整读一遍，只算 B 个 token，Tensor Core 大半在闲着。\n投机解码让小模型先猜 k 个 token，target 一次前向把 k 个一起验证：\n1. 读权重：还是一遍。\n2. FLOPs：涨约 k 倍，但算力本来就闲着，几乎不加时间。\n3. 一次前向平均能产出好几个 token（见接受率那张卡）。\n一句话：**多花闲置的算力（猜错的 token 白算），换少读几遍权重**；读权重的次数少了，延迟就降了。',
     ref: SPEC,
   }),
   b({
     id: 'bagu-spec-exact',
     topic: '投机解码',
     q: '投机采样怎么保证输出分布和 target 单独采样完全一样？',
-    a: 'rejection sampling：draft 分布 q，target 分布 p，对每个位置：\n1. 以概率 `min(1, p(x)/q(x))` 接受 draft 的 token x；\n2. 否则拒绝，从残差分布 `norm(max(0, p − q))` 重新采样，后面的 draft token 全部作废。\n可以证明输出分布**严格等于 p**，是精确加速，不用重新评测质量。',
+    a: '符号：draft 模型给 token x 的概率 $q(x)$，target 给的 $p(x)$。对 draft 猜的每个位置依次：\n1. 以概率 $\\min\\left(1, \\frac{p(x)}{q(x)}\\right)$ 接受 draft 的 x。\n2. 拒绝时从残差分布重新采样，后面的 draft token 全部作废：\n$$\\tilde x \\sim \\frac{\\max(0,\\ p - q)}{\\sum_y \\max(0,\\ p(y) - q(y))}$$\n3. k 个全接受时，target 在第 k+1 个位置的分布已经算出来了，顺手再采一个。\n为什么严格等于 p：拒绝的总概率正好是 $\\sum_y \\max(0, p(y) - q(y))$，代进去\n$$P(x) = \\min(p(x), q(x)) + \\max(0,\\ p(x) - q(x)) = p(x)$$\n前一项是 draft 猜到 x 且被接受，后一项是拒绝后补采到 x。\n例（见图）：draft 猜 A 的概率 0.6，接受率 0.3 / 0.6 = 0.5；拒绝的总概率 0.3，按 B : C = 0.2 : 0.1 重采。每个 token 最后的概率都等于 p。',
+    fig: lines`
+      token          A     B     C
+      q (draft)     0.6   0.3   0.1
+      p (target)    0.3   0.5   0.2
+      accepted      0.3   0.3   0.1   min(p,q)
+      resampled     0     0.2   0.1   max(0,p-q)
+      total         0.3   0.5   0.2   = p
+    `,
     ref: SPEC,
   }),
   b({
     id: 'bagu-spec-expected',
     topic: '投机解码',
     q: '接受率 α、猜 k 个，一轮平均产出几个 token？k 越大越好吗？',
-    a: '`E[tokens] = (1 − α^(k+1)) / (1 − α)`。α = 0.8、k = 4 时约 3.4 个；α = 0.5 时只有 1.9 个。\n加速比还要除以 draft 成本 `c·k + 1`。k 大了 α^k 衰减而 draft 成本线性涨，典型最优 k 在 **3–5**。α 太低（< 0.3）时净收益为负。',
+    a: '假设每个 draft token 独立地以概率 α 被接受。前 i 个都被接受的概率是 $\\alpha^i$；不管停在哪，target 都会再补 1 个 token（拒绝位置的重采样，或全接受后的第 k+1 个）：\n$$E[\\text{tokens}] = \\sum_{i=0}^{k} \\alpha^i = \\frac{1 - \\alpha^{k+1}}{1 - \\alpha}$$\n算一下：α = 0.8、k = 4 时 $(1 - 0.8^5) / 0.2 \\approx 3.4$；α = 0.5 时约 1.9。\n加速比还要除以一轮的成本 $ck + 1$（c 是 draft 一步和 target 一步的耗时比）：\n$$\\text{speedup} = \\frac{1 - \\alpha^{k+1}}{(1 - \\alpha)(ck + 1)}$$\nk 大了 $\\alpha^k$ 越来越小、分母线性涨，典型最优 k 在 **3–5**；α 低、draft 又不够便宜时净收益为负。',
     ref: SPEC,
   }),
   b({
@@ -311,7 +390,20 @@ export const baguCards: Card[] = [
     id: 'bagu-gptq-awq',
     topic: '量化',
     q: 'GPTQ 和 AWQ 分别怎么降低 4 bit 权重量化的误差？',
-    a: '**GPTQ**：逐层、逐列量化，用二阶信息（Hessian）把当前列的量化误差补偿到还没量化的列上。\n**AWQ**：按**激活幅度**找出少数重要的权重通道，量化前把它们放大（激活侧除回去），让重要权重的相对误差变小。不用反向，校准快。\n两者通常配 per-group（group 128）的 scale。',
+    a: '两者都是 weight-only 4 bit，都配 per-group（每 128 个权重一个 scale）。区别在怎么降误差（见图）：\n**GPTQ**：一列一列量化。每量化一列，就把这列的量化误差按二阶信息（$H = 2XX^\\top$，X 是校准数据的激活）**补偿到还没量化的列上**，让这一层的输出 $WX$ 整体误差最小。\n**AWQ**：看激活。激活大的输入通道对输出影响大（约 1%）。量化前把这些通道的权重乘 s、对应的激活除 s，输出不变：\n$$Wx = \\big(W \\operatorname{diag}(s)\\big)\\big(\\operatorname{diag}(s)^{-1} x\\big)$$\n乘 s 后量化的舍入误差大小不变，除回去以后就缩小到 1/s。不用反向，只要搜 s，校准快。',
+    fig: lines`
+      GPTQ: quantize column by column
+        W columns   c0   c1   c2   c3
+        step 1      Q -> error spread to c1..c3
+        step 2           Q -> spread to c2..c3
+        step 3                Q -> spread to c3
+        step 4                     Q
+
+      AWQ: protect salient channels
+        |x| per channel   1   1   9   1
+                                  ^ salient
+        weights of c2 *= s,  x2 /= s
+    `,
     ref: QUANT,
   }),
   b({
@@ -325,7 +417,18 @@ export const baguCards: Card[] = [
     id: 'bagu-quant-granularity',
     topic: '量化',
     q: 'per-tensor / per-channel / per-group 量化的取舍？',
-    a: '粒度越细，scale 越多、元数据越大，误差越小。\nper-tensor：一个 scale，最省但最容易被离群值拖累。per-channel：每个输出通道一个，权重常用。per-group：每 128 个元素一个，4 bit 权重的标配。\nKV cache 用 per-token / per-head。',
+    a: '定义：量化把一组浮点数映射成整数，$w_q = \\text{round}(w / s)$，int4 对称量化时 $s = \\max|w| / 7$。**粒度 = 多少个元素共用一个 s**（见图，W 是 out × in）：\n1. per-tensor：整个矩阵一个 s。\n2. per-channel：每个输出通道（一行）一个 s。\n3. per-group：每行再按 g 个元素一组（常用 g = 128）。\n取舍：\n1. 误差：s 由组里绝对值最大的元素决定，一个离群值会把整组的 s 撑大，其余元素的分辨率就变差。组越小，离群值祸害的范围越小。\n2. 开销：scale 要存，kernel 里要按组反量化。int4 + g = 128 + fp16 scale，每个权重多 16 / 128 = 0.125 bit。\n所以 int8 权重常用 per-channel，int4 权重用 per-group；激活只能运行时现算 scale，一般 per-token 或 per-tensor。KV cache 见 KV 量化那张卡。',
+    fig: lines`
+      W: 4 x 8 (out x in)
+      same letter = shares one scale
+
+      per-tensor     per-channel    per-group g=4
+      aaaaaaaa       aaaaaaaa       aaaabbbb
+      aaaaaaaa       bbbbbbbb       ccccdddd
+      aaaaaaaa       cccccccc       eeeeffff
+      aaaaaaaa       dddddddd       gggghhhh
+      1 scale        4 scales       8 scales
+    `,
     ref: QUANT,
   }),
 
@@ -340,22 +443,34 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-goodput',
     topic: '指标',
-    q: '什么是 goodput？为什么调参要看它而不是吞吐？',
-    a: 'goodput = **满足 SLA 的请求**的吞吐（比如 TTFT < 1 s 且 TPOT < 50 ms）。\n加大 batch 往往吞吐涨了，但每步变慢、TPOT 超标的请求变多、抢占增加，goodput 反而降。只看裸吞吐会让「牺牲少数请求换总量」的改动看起来是正收益。',
+    q: '什么是 goodput？什么时候看它，什么时候看吞吐？',
+    a: 'goodput = **满足 SLA 的请求**的吞吐，比如每秒完成多少个 TTFT < 1 s 且 TPOT < 50 ms 的请求。\n看哪个要分场景：\n1. 离线批处理（评测、数据合成）：没有延迟要求，看吞吐。\n2. 在线服务：看 goodput。加大 batch 往往吞吐涨了，但每步变慢、TPOT 超标的请求变多、抢占增加，goodput 反而降；只看吞吐会把「牺牲一部分请求换总量」的改动当成正收益。',
     ref: METRIC,
   }),
   b({
     id: 'bagu-benchmark-design',
     topic: '指标',
     q: '怎么设计一次推理服务的压测？',
-    a: '1. 输入输出长度用真实 trace 或 ShareGPT 分布，别用固定长度。\n2. 按泊松到达**扫 QPS**，每个点跑够久、充分 warmup。\n3. 画 QPS 对 P50 / P99 的 TTFT 和 TPOT 曲线，报 goodput。\n4. 确认客户端不是瓶颈。',
+    a: '1. 输入输出长度用真实 trace 或 ShareGPT 的分布，别用固定长度。\n2. 请求按**泊松过程**到达，逐档扫 QPS，每档跑够久、先 warmup。泊松到达就是相邻请求的间隔服从指数分布、均值 1/QPS（见图和代码）：平均速率一样，但会扎堆，比匀速发更像真实流量，也更容易暴露排队。\n3. 画 QPS 对 P50 / P99 的 TTFT、TPOT 曲线，报 goodput。\n4. 确认**压测客户端自己**不是瓶颈：客户端也要发请求、解析流式返回、算指标，它的 CPU 打满时，测到的延迟里混着客户端自己的排队。看客户端 CPU，或者和服务端自己记的指标对一下。',
+    fig: lines`
+      1 second, 10 requests each
+
+      uniform  |  |  |  |  |  |  |  |  |  |
+      poisson  || |   |||    | |  |      |
+    `,
+    code: lines`
+      import numpy as np
+      qps, n = 10, 1000
+      gaps = np.random.exponential(1 / qps, n)   # 间隔 ~ Exp(λ = qps)，均值 0.1 s
+      send_at = np.cumsum(gaps)                  # 每个请求的发送时刻
+    `,
     ref: METRIC,
   }),
   b({
     id: 'bagu-ttft-parts',
     topic: '指标',
     q: 'TTFT 由哪几段组成？高负载下大头通常是哪段？',
-    a: '排队 + tokenize + prefill 计算 + 采样 + detokenize + 网络。\n高负载下大头往往是**排队**，不是计算。所以过载时要做准入控制（直接 429），而不是让队列越排越长、P99 雪崩。',
+    a: '按时间顺序：\n1. **排队**：在 waiting 队列里等调度器分到 KV block 和 token 预算。\n2. **tokenize**：文本 → token id，在 CPU 上做，长 prompt 要几毫秒。\n3. **prefill**：GPU 前向算完整个 prompt，拿到最后一个位置的 logits。\n4. **采样**：logits 按 temperature / top-p 选出第一个 token id，GPU 上一般不到 1 ms。\n5. **detokenize**：token id → 文本片段。一个汉字常常跨几个 token 的字节，要凑齐才能输出。\n6. **网络**：这段文本通过 SSE 推回客户端，同机房一两毫秒，跨地域几十毫秒。\n高负载下大头往往是**排队**，不是计算。所以过载时要做准入控制（直接返回 429），别让队列越排越长、P99 雪崩。',
     ref: LIFE,
   }),
 
@@ -443,14 +558,33 @@ export const baguCards: Card[] = [
     id: 'bagu-gpu-three-basics',
     topic: 'GPU',
     q: '写 CUDA kernel 的三个基本功是什么？',
-    a: '1. **访存合并（coalescing）**：一个 warp 的 32 个线程读连续地址，合成少数几次 128 B 事务；跨步访问会把事务数放大几十倍。\n2. **避免 bank conflict**：shared memory 分 32 个 bank，同一 warp 多线程落在同一 bank 的不同地址会串行，常用 padding 一列解决。\n3. **occupancy 够用**：每个 SM 驻留足够多的 warp 来藏访存延迟，受寄存器和 shared memory 用量限制，不是越高越好。',
+    a: '1. **访存合并（coalescing）**：一个 warp 的 32 个线程读连续地址，合成一次 128 B 事务（32 × 4 B）。\n例：行主序矩阵，线程 t 读 `A[row][t]` 是连续的；读 `A[t][col]` 每个线程隔一整行，变成 32 次事务。\n优化：转置这类必须跨行读的，先合并地读进 shared memory，再从 shared memory 按列取。\n2. **避免 bank conflict**：shared memory 分 32 个 bank，地址按 4 B 轮流落到各个 bank。同一 warp 的多个线程打到同一 bank 的不同地址会串行。\n例：`float tile[32][32]`，一个 warp 读一列 `tile[t][c]`，相邻线程地址差 32 个 float，全落在同一个 bank，32 路冲突。\n优化：声明成 `tile[32][33]`，每行错开一个 bank，一列的 32 个元素落在 32 个不同的 bank。\n3. **occupancy 够用**：每个 SM 要驻留足够多的 warp，一个 warp 等内存时换另一个上。\n例：H100 每个 SM 有 65536 个寄存器、最多 64 个 warp。kernel 每线程用 128 个寄存器，一个 SM 只能放 512 个线程 = 16 个 warp，occupancy 25%。\n优化：用 `__launch_bounds__` 限制寄存器、少用 shared memory，或者让每个线程多发几个独立的 load。够藏住延迟就行，不是越高越好。',
     ref: GPU,
   }),
   b({
     id: 'bagu-warp-divergence',
     topic: 'GPU',
     q: '什么是 warp divergence？causal attention 为什么不怎么受影响？',
-    a: '同一 warp 内线程走不同分支时，硬件串行执行两条路径，吞吐减半。\ncausal mask 按 tile 处理：大部分 tile 要么全可见、要么全被 mask（直接跳过），只有对角线上的 tile 内部有分支，代价很小。',
+    a: '同一 warp 的 32 个线程共用一条指令流。线程走不同分支时，硬件先让走 if 的线程执行（其余空等），再让走 else 的执行，两条路径**串行**，吞吐减半（例子见代码）。\ncausal attention 影响小，因为 mask 按 tile 处理（见图）：大多数 tile 要么全可见、要么全被 mask（整块跳过），这个判断按 tile 做，整个 warp 走同一路。只有对角线上的 tile 要逐元素 mask，而且用 `where(mask, s, -inf)` 这样的选择指令，不用分支。',
+    fig: lines`
+                 K tile
+                 0  1  2  3
+      Q tile 0   D  .  .  .
+             1   F  D  .  .
+             2   F  F  D  .
+             3   F  F  F  D
+
+      F: fully visible, no mask
+      D: diagonal, mask per element
+      .: fully masked, skipped
+    `,
+    code: lines`
+      // divergence：同一 warp 里奇数、偶数线程走不同分支，两条路径串行
+      if (threadIdx.x % 2 == 0) a(); else b();
+
+      // 没有 divergence：按 warp 分界，同一 warp 的线程走同一路
+      if ((threadIdx.x / 32) % 2 == 0) a(); else b();
+    `,
     ref: GPU,
   }),
   b({
@@ -470,8 +604,33 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-kernel-fusion',
     topic: 'GPU',
-    q: '为什么推理框架要把残差加和 RMSNorm 融合成一个 kernel？',
-    a: '两者都是 memory-bound 的逐元素 / 行操作。分开写要把残差和写回 HBM 再读出来做 norm，多一次读写；融合后中间结果留在寄存器里。\n收益按 roofline 算：时间 ∝ 读写字节数，decode 下每层都省一点，累积可观。SiLU × up、RoPE + 写 KV 也是同理。',
+    q: '为什么推理框架要把残差加和 RMSNorm 融合成一个 kernel？它在层里的什么位置？',
+    a: 'pre-norm 的 decoder 层：$h = x + \\text{Attn}(\\text{Norm}(x))$，$y = h + \\text{MLP}(\\text{Norm}(h))$。\n位置：融合的是「**残差加 + 紧跟着的 norm**」，不是 norm + linear，每层两处（见图和代码）：\n1. o_proj 之后：$h = x + \\text{attn\\_out}$，紧接着 $\\text{Norm}(h)$ 喂给 MLP。\n2. down_proj 之后：加回残差，紧接着下一层的 input norm。第一层前面还没有残差，只做 norm。\n为什么融合：两步都是 memory-bound 的逐元素 / 逐行操作。分开做是 add 读 x 和 attn_out、写 h，norm 再读 h、写结果；融合后 h 留在寄存器里，少读一遍 h，少一次 kernel launch。\n单次省得不多，但每层两处、80 层就是 160 次，decode 下累积可观。SiLU × up、RoPE + 写 KV 也是同理。',
+    fig: lines`
+      x (residual)
+       |
+      [add + norm]   input_layernorm
+       |
+      qkv_proj -> attention -> o_proj
+       |
+      [add + norm]   post_attention_layernorm
+       |
+      gate_up -> SiLU * up -> down_proj
+       |
+       v  next layer: [add + norm]
+    `,
+    code: lines`
+      # vllm/model_executor/models/llama.py  LlamaDecoderLayer.forward
+      if residual is None:   # 第一层：还没有残差
+          residual = hidden_states
+          hidden_states = self.input_layernorm(hidden_states)
+      else:                  # 融合：residual += hidden_states; hidden_states = norm(residual)
+          hidden_states, residual = self.input_layernorm(hidden_states, residual)
+      hidden_states = self.self_attn(positions=positions, hidden_states=hidden_states)
+      hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
+      hidden_states = self.mlp(hidden_states)
+      return hidden_states, residual
+    `,
     ref: GRAPH,
   }),
   b({
@@ -486,29 +645,79 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-request-lifecycle',
     topic: '框架',
-    q: '一个请求在 vLLM 里从 HTTP 到第一个 token，经过哪几步？',
-    a: 'HTTP 到达 → 校验、渲染 chat template → tokenize → 进 waiting 队列（IPC 到 EngineCore）→ 调度器分配 KV block（先查 prefix cache）→ 组 batch、准备输入拷到 GPU → prefill 前向 → 采样 → detokenize、SSE 推出第一个 token（**TTFT 到此结束**）。\n之后每轮 decode 一个 token，结束后释放 block。',
+    q: '一个请求在 vLLM 里从 HTTP 到第一个 token，经过哪几个阶段？',
+    a: '四个大阶段（见图），以一句「你好」为例：\n1. **前端**（API server 进程）：HTTP 请求进来 → 套 chat template（加上角色标记）→ tokenize 成一串 token id。\n2. **调度**（EngineCore 进程）：进 waiting 队列 → 查 prefix cache、分配 KV block → 放进这一步的 batch。\n3. **执行**（GPU worker）：prefill 前向算完整个 prompt → 最后位置的 logits → 采样出第一个 token id。\n4. **回传**（前端）：detokenize 成文字 → SSE 推给客户端，**TTFT 到此结束**。\n之后每步 decode 重复 2–4，每步出一个 token；结束后释放 KV block。',
+    fig: lines`
+      client
+        |  HTTP: "你好"
+        v
+      API server   template, tokenize
+        |  ZMQ: token ids
+        v
+      EngineCore   queue, KV blocks, batch
+        |
+        v
+      GPU worker   prefill, logits, sample
+        |  token id
+        v
+      API server   detokenize, SSE
+        |                      <- TTFT ends
+        v
+      client
+    `,
     ref: LIFE,
   }),
   b({
     id: 'bagu-tokenize-event-loop',
     topic: '框架',
-    q: 'API server 里 tokenize 为什么不能直接在 asyncio 事件循环里做？',
-    a: 'tokenize 是 CPU 密集操作，长 prompt 要几毫秒到几十毫秒。事件循环是单线程的，**一个同步慢调用会卡住所有连接**。\n要么放进线程池（HF tokenizers 是 Rust 实现，会释放 GIL），要么放独立进程。vLLM V1 把 tokenize / detokenize 放在单独的前端进程里。',
+    q: 'API server 用 asyncio 同时服务上千个连接，为什么 tokenize 要挪到线程池或单独的进程，不能在请求处理函数里直接调？',
+    a: '1. asyncio 是**一个线程**跑很多协程：一个协程只有在 `await` 时才让出，事件循环才能去处理别的连接（收新请求、往 SSE 里推 token）。\n2. tokenize 是同步的 CPU 计算，长 prompt 要几到几十毫秒，中间没有 `await`。直接调用的话，这几十毫秒里**所有连接都卡住**，正在流式输出的请求 ITL 一起抖。\n3. 解法：放进线程池（HF tokenizers 是 Rust 实现，计算时释放 GIL，能真并行），或者放进独立进程。vLLM V1 把 tokenize / detokenize 放在前端进程里，和跑调度的 EngineCore 进程分开。',
+    code: lines`
+      async def handle(req):
+          ids = tokenizer.encode(req.prompt)   # 同步 20 ms：整个事件循环停 20 ms
+
+      async def handle(req):
+          loop = asyncio.get_running_loop()
+          ids = await loop.run_in_executor(pool, tokenizer.encode, req.prompt)
+          # await 期间事件循环继续服务别的连接
+    `,
     ref: PY,
   }),
   b({
     id: 'bagu-vllm-v1',
     topic: '框架',
     q: 'vLLM V1 的进程架构？为什么把 EngineCore 单独放一个进程？',
-    a: '前端进程（HTTP、tokenize、detokenize）↔ ZMQ ↔ **EngineCore 进程**（调度 + KV 管理）→ 每张卡一个 worker 进程（model runner）。\nV0 里这些在同一个 Python 进程里串行，CPU 干活时 GPU 空转。拆开后 CPU 工作和 GPU 执行重叠，GPU 利用率明显提升；代价是多一次进程间序列化。\nV1 的 scheduler 不再区分 prefill / decode batch，每个请求每步分配若干 token，chunked prefill 和 prefix caching 默认开。',
+    a: '三层进程（见图）：前端进程（HTTP、tokenize、detokenize）↔ ZMQ ↔ **EngineCore 进程**（调度 + KV block 管理）→ 每张卡一个 worker 进程（model runner）。TP = 1 时 worker 就在 EngineCore 进程里。\n为什么拆：V0 里这些在同一个 Python 进程里串行，CPU 干活时 GPU 空转。拆开后 CPU 的工作和 GPU 执行重叠，GPU 利用率明显提升；代价是多一次进程间序列化。\nV1 的 scheduler 不再区分 prefill / decode batch，每个请求每步分配若干 token，chunked prefill 和 prefix caching 默认开。',
+    fig: lines`
+      API server process
+        HTTP, tokenize, detokenize
+           |  ZMQ
+           v
+      EngineCore process
+        scheduler, KV block manager
+           |  one batch per step
+           v
+      worker 0   worker 1   ...   worker N-1
+        one process per GPU, runs the model
+    `,
     ref: V1,
   }),
   b({
     id: 'bagu-flat-input',
     topic: '框架',
     q: 'vLLM 的模型 forward 为什么输入是 `[num_tokens, H]` 而不是 `[B, S, H]`？',
-    a: 'continuous batching 下一个 batch 里既有 prefill 的长序列又有 decode 的单 token，padding 成矩形会浪费大量算力。\n所以把所有请求的 token 拼成一维，再用 metadata（每个序列的起止、slot mapping、block table）告诉 attention kernel 怎么分组；Linear 层本来就和 token 怎么分组无关。',
+    a: 'continuous batching 下，一个 batch 里既有 prefill 的长序列，也有 decode 的单个 token。\n例（见图）：A 在 prefill 1000 个 token，B、C 各 decode 1 个。补成矩形 `[B, S, H]` 要 3 × 1000 = 3000 行，有效的只有 1002 行，**三分之二是 padding**，白算还白占显存。\n所以把所有请求的 token 拼成一维 `[num_tokens, H]`，再用 metadata 告诉 attention kernel 怎么分组：每个序列的起止（`cu_seqlens`）、每个 token 的 KV 写到哪（slot mapping）、block table。Linear 层本来就和 token 怎么分组无关，直接算。',
+    fig: lines`
+      [B, S, H]: pad every sequence to S = 1000
+      A  ####################   1000
+      B  #...................      1
+      C  #...................      1
+         real 1002 of 3000 rows
+
+      [num_tokens, H]: concatenate
+         A x 1000 | B | C   = 1002 rows
+         cu_seqlens = [0, 1000, 1001, 1002]
+    `,
     ref: ADD,
   }),
   b({
@@ -522,7 +731,16 @@ export const baguCards: Card[] = [
     id: 'bagu-caching-allocator',
     topic: '框架',
     q: 'PyTorch 的 caching allocator 做了什么？显存碎片怎么看出来？',
-    a: '在 `cudaMalloc` 之上按 stream 维护分桶的空闲块池，释放时不还给驱动，下次直接复用，避免 cudaMalloc / cudaFree 的同步开销。\n碎片表现为 **reserved 远大于 allocated**。缓解：`expandable_segments`、尽量固定 shape、推理框架启动时一次性预分配 KV 池。`empty_cache()` 解决不了碎片，还会让后续分配变慢。',
+    a: '先和 Java 对比：Java GC 管的是对象**什么时候死**；PyTorch 张量靠 Python 引用计数，引用一归零就释放。caching allocator 管的是**释放后的显存去哪**，更像 malloc 的空闲链表。\n1. 为什么要它：`cudaMalloc` / `cudaFree` 很慢，`cudaFree` 还会同步整个 device。\n2. 怎么做：向驱动要一大段显存（segment），切成块给张量用；张量释放后块回到池子（按 stream 分开），**不还给驱动**；下次分配找够大的最小空闲块，大了就切开，相邻的空闲块合并。\n3. 碎片：Java GC 会搬动对象、把空隙压实；PyTorch 不能搬，张量的地址已经交给 kernel 了。空闲块散在各处就拼不成大块（见图），表现是 **reserved 远大于 allocated**，明明还有空闲却 OOM。\n缓解：`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`（用虚拟内存让 segment 能原地变长）、尽量固定 shape、推理框架启动时一次性预分配 KV 池。`empty_cache()` 只把整段空闲的 segment 还给驱动，解决不了碎片，还会让之后的分配变慢。',
+    fig: lines`
+      segment, 20 MiB
+      [used 4][free 6][used 4][free 6]
+
+      malloc(8 MiB): no free block >= 8
+        -> new cudaMalloc, or OOM
+      reserved 20, allocated 8
+      free 12, but no block fits
+    `,
     ref: PTI,
   }),
 
@@ -531,21 +749,56 @@ export const baguCards: Card[] = [
     id: 'bagu-train-memory',
     topic: 'Post-train',
     q: '混合精度 Adam 训练，每个参数占多少显存？7B 全参微调要多少？',
-    a: '**16 字节**：bf16 参数 2 + bf16 梯度 2 + fp32 主权重 4 + Adam 的 m、v 各 4。7B 就是 112 GB，还没算激活，单卡放不下。\n激活随 batch × seq × 层数涨，gradient checkpointing 只存每层输入、反向时重算，用约 30% 的额外计算换大幅省激活。',
+    a: '每个参数要存 5 样东西（见图）：\n1. bf16 参数 w（2 B）：前向、反向用的权重。\n2. bf16 梯度 g（2 B）：反向算出的 $\\partial L / \\partial w$。\n3. fp32 主权重（4 B）：优化器在它上面更新，更新完再 cast 成 bf16 的 w（为什么见 bf16 那张卡）。\n4. Adam 的 m 和 v（各 4 B）：每个参数各有一个，更新公式：\n$$m \\leftarrow \\beta_1 m + (1 - \\beta_1) g,\\quad v \\leftarrow \\beta_2 v + (1 - \\beta_2) g^2,\\quad w \\leftarrow w - \\eta \\frac{m}{\\sqrt{v} + \\epsilon}$$\n合计 **16 字节 / 参数**。7B：7 × 10⁹ × 16 = 112 GB，超过一张 80 GB 的 H100，这还没算激活。',
+    fig: lines`
+      per parameter   bytes   dtype
+      w               2       bf16
+      grad            2       bf16
+      master w        4       fp32
+      Adam m          4       fp32
+      Adam v          4       fp32
+      total           16
+    `,
+    ref: TMEM,
+  }),
+  b({
+    id: 'bagu-float-formats',
+    topic: 'Post-train',
+    q: 'fp32、fp16、bf16、fp8（e4m3、e5m2）各几位指数、几位尾数？指数位和尾数位各决定什么？',
+    a: '位数见图。\n1. **指数位定范围**：fp16 只有 5 位，最大 65504，最小的正规数约 6 × 10⁻⁵；bf16 和 fp32 都是 8 位，范围约 10⁻³⁸ 到 3 × 10³⁸。\n2. **尾数位定精度**：相邻两个数的相对间隔约 $2^{-m}$（m 是尾数位数）。fp16 约 0.001，bf16 约 0.008，只有两三位有效数字。\n3. fp8：e4m3 精度高、范围小（最大 448），用于前向的权重和激活；e5m2 范围大（最大 57344），用于梯度。',
+    fig: lines`
+              sign   exp   mantissa
+      fp32     1      8      23
+      fp16     1      5      10
+      bf16     1      8       7
+      e4m3     1      4       3
+      e5m2     1      5       2
+    `,
     ref: TMEM,
   }),
   b({
     id: 'bagu-bf16-fp16',
     topic: 'Post-train',
     q: '为什么 fp16 训练要 loss scaling，bf16 不用？那 bf16 为什么还要 fp32 主权重？',
-    a: 'fp16 指数只有 5 位，小梯度会下溢成 0，所以先把 loss 乘大再除回来。bf16 指数 8 位、和 fp32 动态范围一样，不会下溢。\n但 bf16 尾数只有 7 位，`lr × grad` 常小于参数的分辨率，直接加会被舍掉，所以用 fp32 主权重累加更新，前向再 cast 回 bf16。',
+    a: '位数见「浮点格式」那张卡：fp16 是 5 位指数 + 10 位尾数，bf16 是 8 位指数 + 7 位尾数。\n1. fp16 要 loss scaling：指数只有 5 位，小于约 6 × 10⁻⁸ 的数直接变成 0，小梯度会下溢。先把 loss 乘一个大数 S，梯度跟着放大 S 倍，更新前再除回去。\n2. bf16 不用：8 位指数，范围和 fp32 一样，梯度不会下溢。\n3. bf16 还要 fp32 主权重：尾数只有 7 位，1 附近相邻两个数差 $2^{-7} \\approx 0.008$。权重 w = 1.0、更新量 $\\eta g = 10^{-4}$，直接在 bf16 里算 $1.0 - 10^{-4}$ 会被舍入回 1.0，这次更新就丢了。所以在 fp32 主权重上累加更新，前向时再 cast 成 bf16。',
     ref: TMEM,
   }),
   b({
     id: 'bagu-lora',
     topic: 'Post-train',
     q: 'LoRA 怎么初始化？它省了哪些显存，没省哪些？',
-    a: '冻结 W，训练低秩的 `B·A`（秩 r 一般 8–64），forward 是 `Wx + (α/r)·BAx`。**A 随机、B 全零**，训练开始时 BA = 0，模型行为和原模型一致。\n省的是可训练参数的梯度和优化器状态（缩小上百倍）。**没省激活**：算 A 的梯度要用每层的输入 x，激活和全参一样要存。QLoRA 再把冻结的 W 压成 4 bit NF4。',
+    a: '公式（见图）：冻结原权重 $W_0 \\in \\mathbb{R}^{d \\times k}$，只训练两个小矩阵 $B \\in \\mathbb{R}^{d \\times r}$、$A \\in \\mathbb{R}^{r \\times k}$，$r \\ll \\min(d, k)$，一般 8–64：\n$$h = W_0 x + \\frac{\\alpha}{r} B A x$$\n可训练参数从 $dk$ 降到 $r(d + k)$。d = k = 4096、r = 16：1678 万 → 13 万，约 0.8%。\n初始化：**A 随机、B 全零**，一开始 BA = 0，模型和原模型完全一样。不能两个都是 0：$\\partial L / \\partial B \\propto (Ax)^\\top$、$\\partial L / \\partial A \\propto B^\\top$，两个都是 0 时梯度也都是 0，永远学不动。\n省了：可训练参数的梯度和优化器状态，缩小上百倍。\n没省：**激活**。算 A 的梯度要用每层的输入 x，激活和全参一样要存。QLoRA 再把冻结的 $W_0$ 压成 4 bit NF4。',
+    fig: lines`
+                x   (k)
+              /    \
+           W0        A    r x k   random
+         d x k       |
+         frozen      B    d x r   zeros
+            |        |    * alpha / r
+              \    /
+                +
+                h   (d)
+    `,
     ref: LORA,
   }),
   b({
@@ -587,7 +840,24 @@ export const baguCards: Card[] = [
     id: 'bagu-sft-packing',
     topic: 'Post-train',
     q: 'SFT 做 packing 要注意什么？loss mask 怎么设？',
-    a: 'packing 把多条短样本拼成定长序列，GPU 利用率从三到五成提到九成以上。要配 **varlen attention**（传 `cu_seqlens`）或 block-diagonal mask，否则样本之间互相 attend；位置编码按样本重置。\nloss mask：prompt、system、用户轮的 label 设 −100，只在 assistant 回答上算 loss。',
+    a: 'packing 把多条短样本拼成一条定长序列，GPU 利用率从三到五成提到九成以上。要注意三件事：\n1. **attention 不能跨样本**：用 block-diagonal 的因果 mask（见图），或者 varlen attention 传 `cu_seqlens`，否则后面的样本会 attend 到前面样本的 token。\n2. **位置编码按样本重置**：position_ids 每个样本从 0 开始。\n3. **loss mask**：prompt、system、用户轮的 label 设成 −100（PyTorch 的 cross entropy 默认忽略它），只在 assistant 的回答上算 loss。',
+    fig: lines`
+      3 samples packed:  a a a | b b | c c c
+      1 = can attend
+
+            a a a b b c c c
+         a  1 . . . . . . .
+         a  1 1 . . . . . .
+         a  1 1 1 . . . . .
+         b  . . . 1 . . . .
+         b  . . . 1 1 . . .
+         c  . . . . . 1 . .
+         c  . . . . . 1 1 .
+         c  . . . . . 1 1 1
+
+      position_ids = 0 1 2 0 1 0 1 2
+      cu_seqlens   = [0, 3, 5, 8]
+    `,
     ref: SFT,
   }),
 
@@ -609,8 +879,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-sd-routing',
     topic: '系统设计',
-    q: '多副本之间怎么路由？过载时怎么办？',
-    a: '**不要轮询**。按 prompt 前缀做 hash，路由到持有这段 KV 的副本，prefix 命中率能从接近 0 提到七成以上，直接砍掉大部分 prefill；同时按负载加权，防止热点前缀打爆一个副本。多轮对话固定路由到同一副本。\n过载：队列超阈值直接返回 **429**，准入控制比排队重要，LLM 请求以秒计，排队只会让 P99 雪崩。',
+    q: '多副本之间怎么路由才能命中 prefix cache？路由器怎么知道哪个副本有哪段 KV？',
+    a: '**不要轮询**：同一前缀的请求被打散到各个副本，每个副本都要重新 prefill。\n1. 需要一层路由（可以多实例）。它的状态是「软」的：猜错只是 cache miss，不影响正确性。\n2. 每个副本本来就维护着自己的 prefix cache（block hash 表或 radix tree），那是它自己复用用的。\n3. 路由器怎么知道，有两种做法：\n近似：路由器不问副本。按前缀（比如 system prompt 或 session id）做一致性哈希，同前缀总去同一个副本；或者像 SGLang router 那样，按自己路由过的请求，给每个副本维护一棵近似的 radix tree。\n精确：副本把 KV block 的存入、淘汰事件上报（vLLM 能发这类 KV events），路由器维护全局索引，挑前缀匹配最长的副本，比如 llm-d。\n4. 都要按负载加权，防止热门前缀把一个副本打爆。\n效果：prefix 命中率能从接近 0 提到七成以上，直接砍掉大部分 prefill。过载时的准入控制见 TTFT 那张卡。',
     ref: SD,
   }),
 ]

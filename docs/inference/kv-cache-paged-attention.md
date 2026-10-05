@@ -61,8 +61,8 @@ vLLM 默认 recompute，因为 PCIe 往返通常比重算更慢，而且 recompu
 ### KV 量化
 
 KV 从 bf16 降到 fp8 直接让 KV 访存和显存减半，等于 decode 的 AI 翻倍。注意点：
-- **per-token 或 per-head 量化**，不要 per-tensor。KV 的 outlier 集中在少数几个 channel 上。
-- K 比 V 更难量化（K 参与 softmax 前的点积，误差会被指数放大）。有些方案对 K 用更高精度。
+- **FP8 用 per-tensor scale 就够**：fp8 自带指数位，动态范围大，vLLM 的 `kv_cache_dtype="fp8"` 每层 K、V 各一个 scale。int4 / int2 这类整数格式才需要细粒度：K 的 outlier 集中在少数几个 channel，所以 K 按 per-channel、V 按 per-token（KIVI）。
+- K 比 V 更难量化：k 上的误差 $\delta$ 让 score 偏 $q \cdot \delta / \sqrt{d_h}$，过了 softmax 变成乘性的 $e^{q \cdot \delta / \sqrt{d_h}}$；V 的误差只是线性混进加权平均。有些方案对 K 用更高精度。
 - 误差会累积：早期 token 的 KV 被后续每一步反复读，长 context 下影响更大。
 
 ## 交互

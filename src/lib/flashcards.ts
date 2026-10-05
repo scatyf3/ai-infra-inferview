@@ -2,6 +2,7 @@
  * 原语闪卡：FSRS 调度（ts-fsrs）、出题顺序、记录的合并与校验、卡面的行内格式（纯函数）。
  * 自评用 FSRS 原生的 Again / Hard / Good / Easy；每张卡存一份 FSRS 状态，日期用 ISO 字符串，方便写进 json。
  */
+import katex from 'katex'
 import { createEmptyCard, fsrs, generatorParameters, Rating, State, TypeConvert, type Card as FsrsCard, type Grade } from 'ts-fsrs'
 
 export type Deck = 'torch' | 'triton' | 'bagu'
@@ -20,9 +21,11 @@ export interface Card {
   /** 小标题，比如 stride、mask、online softmax */
   topic: string
   q: string
-  /** 答案，支持行内 `code` 和 **加粗** */
+  /** 答案，支持行内 `code`、**加粗**、$行内公式$ 和 $$单独一行的公式$$（KaTeX） */
   a: string
-  /** 可选的代码块，放在答案下面 */
+  /** 可选的示意图（等宽字符画），放在答案下面；手机上宽度别超过 40 列 */
+  fig?: string
+  /** 可选的代码块，放在示意图下面 */
   code?: string
   /** 出处：站内链接（不含 base） */
   ref?: string
@@ -265,14 +268,17 @@ export function isFlags(v: unknown): v is Flags {
 
 const escapeHtml =(s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-/** 卡面的行内格式：先转义，再把 `code` 和 **加粗** 换成标签 */
+const tex = (src: string, displayMode: boolean) => katex.renderToString(src, { displayMode, throwOnError: false, output: 'html' })
+
+/** 卡面的行内格式：$$公式$$、$公式$、`code` 原样保留，其余先转义，再把 **加粗** 换成标签 */
 export function inlineMd(s: string): string {
-  return escapeHtml(s)
-    .split(/(`[^`]+`)/)
-    .map((part) =>
-      part.startsWith('`') && part.endsWith('`') && part.length > 1
-        ? `<code>${part.slice(1, -1)}</code>`
-        : part.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'),
-    )
+  return s
+    .split(/(\$\$[^$]+\$\$|\$[^$\n]+\$|`[^`]+`)/)
+    .map((part) => {
+      if (part.length > 4 && part.startsWith('$$') && part.endsWith('$$')) return tex(part.slice(2, -2), true)
+      if (part.length > 2 && part.startsWith('$') && part.endsWith('$')) return tex(part.slice(1, -1), false)
+      if (part.length > 1 && part.startsWith('`') && part.endsWith('`')) return `<code>${escapeHtml(part.slice(1, -1))}</code>`
+      return escapeHtml(part).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    })
     .join('')
 }

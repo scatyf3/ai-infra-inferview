@@ -226,6 +226,7 @@ onBeforeUnmount(() => {
         <button v-if="!flipped" class="fc-flip" @click="flip">翻面 <kbd>空格</kbd></button>
         <template v-else>
           <div class="fc-a" v-html="inlineMd(cur.a)" />
+          <pre v-if="cur.fig" class="fc-fig">{{ cur.fig }}</pre>
           <pre v-if="cur.code" class="fc-code"><code>{{ cur.code }}</code></pre>
           <a v-if="cur.ref" class="fc-ref" :href="withBase(cur.ref)" target="_blank">出处 →</a>
           <div class="fc-notebox">
@@ -303,6 +304,7 @@ onBeforeUnmount(() => {
           <tr v-if="open.has(c.id)" class="fc-ans">
             <td colspan="5">
               <div class="fc-ans-a" v-html="inlineMd(c.a)" />
+              <pre v-if="c.fig" class="fc-fig">{{ c.fig }}</pre>
               <pre v-if="c.code" class="fc-code"><code>{{ c.code }}</code></pre>
               <a v-if="c.ref" class="fc-ref" :href="withBase(c.ref)">出处 →</a>
               <button class="btn fc-suspend" @click="suspend(c.id, !isSuspended(flags, c.id))">
@@ -362,6 +364,8 @@ onBeforeUnmount(() => {
 .fc-a, .fc-ans-a { white-space: pre-line; }
 .fc-q :deep(code), .fc-a :deep(code), .fc-table :deep(code) { font-size: 0.88em; padding: 1px 5px; border-radius: 4px; background: var(--vp-c-bg-soft); }
 .fc-code { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--vp-code-block-bg); font-size: 12.5px; line-height: 1.6; overflow-x: auto; }
+.fc-fig { margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--wg-border); border-radius: 8px; font-family: var(--vp-font-family-mono); font-size: 12.5px; line-height: 1.45; overflow-x: auto; }
+.fc-a :deep(.katex-display), .fc-ans-a :deep(.katex-display) { margin: 6px 0; overflow-x: auto; overflow-y: hidden; }
 .fc-code code { font-family: var(--vp-font-family-mono); color: var(--vp-code-block-color); }
 .fc-ref { display: inline-block; margin-top: 8px; font-size: 12.5px; }
 

@@ -248,6 +248,13 @@ describe('格式', () => {
   it('inlineMd 先转义 HTML，再处理 code 和加粗；code 里的 ** 不当加粗', () => {
     expect(inlineMd('`a < b` 和 **c**')).toBe('<code>a &lt; b</code> 和 <b>c</b>')
     expect(inlineMd('<script>')).toBe('&lt;script&gt;')
-    expect(inlineMd('`x ** 2`')).toBe('<code>x ** 2</code>')
+    expect(inlineMd('`x ** 2`')).toBe('<code>x ** 2</code>')  })
+
+  it('inlineMd 把 $…$ 和 $$…$$ 交给 KaTeX；code 里的 $ 不当公式', () => {
+    expect(inlineMd('$x^2$')).toContain('class="katex"')
+    expect(inlineMd('$x^2$')).not.toContain('katex-display')
+    expect(inlineMd('$$\\sum_i x_i$$')).toContain('katex-display')
+    expect(inlineMd('`echo $HOME $PATH`')).toBe('<code>echo $HOME $PATH</code>')
+    expect(inlineMd('a < $b$ **c**')).toMatch(/^a &lt; <span class="katex">.*<\/span> <b>c<\/b>$/)
   })
 })
