@@ -138,9 +138,6 @@ LeetGPU attention 系列（[#6](/leetgpu/softmax-attention)、[#12](/leetgpu/mul
 | 算子 | 用法 | 注意 |
 |---|---|---|
 | `x.triu(k)` / `torch.triu(x, k)` | `full(-inf).triu(1)` 得加法 causal mask | 保留第 k 条对角线及右上方，其余置 0。`k=1` 不含主对角线；写成 `triu(0)` 会把对角线也盖掉，第一行全 -inf，softmax 出 NaN |
-| `x.tril(k)` | `ones(bool).tril()` 得"可见"区域 | 下三角版本，规则相同 |
-| `x.masked_fill(mask, value)` | `attn.masked_fill(ones(bool).triu(1), float('-inf'))` | mask 为 True 的位置填 value，所以传「看不到」的位置（`triu(1)`）；mask 广播成 x 的 shape。out-of-place，原地版是 `masked_fill_` |
+| `x.masked_fill(mask, value)` | `attn.masked_fill(ones(bool).triu(1), float('-inf'))` | mask 为 True 的位置填 value，mask 广播成 x 的 shape。out-of-place，原地版是 `masked_fill_` |
 
 两种 causal mask 写法等价，都用 `triu(1)` 标出「看不到」的位置：加法 mask（`attn + full(-inf).triu(1)`）和布尔 mask（`attn.masked_fill(ones(bool).triu(1), -inf)`）。都放在 softmax 之前，`exp(-inf) = 0`。
-
-`~tril()` 和 `triu(1)` 是同一个布尔 mask。`F.scaled_dot_product_attention` 的布尔 `attn_mask` 约定 True = 能看，要传的是 `tril()`；给 `masked_fill` 用就直接 `triu(1)`，不用先 tril 再取反。

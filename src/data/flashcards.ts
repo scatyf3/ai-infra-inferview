@@ -124,18 +124,11 @@ const primitiveCards: Card[] = [
     id: 'torch-masked-fill',
     deck: 'torch',
     topic: 'mask',
-    q: '`masked_fill` 的语义？布尔版 causal mask 怎么写？为什么有人写 `~tril()`，有人写 `triu(1)`？',
-    a: '`x.masked_fill(mask, value)`：mask 为 True 的位置换成 value，其余保留 x 原来的值；mask 广播成 x 的 shape；返回新 tensor（原地版是 `masked_fill_`）。\n所以给它的 mask 要是「**不能看**」的位置，直接用 `triu(1)`：主对角线右上方（key j > query i）是 True。\n`~tril()` 是同一个 mask：`~` 是布尔取反（True ↔ False），`tril()` 是「能看」的位置，取反就是「不能看」。会出现这种写法，是因为 `F.scaled_dot_product_attention` 的布尔 `attn_mask` 约定 **True = 能看**，手里是给它准备的 `allowed`，拿去 `masked_fill` 才要取反。\n记法：给 `masked_fill` 用 `triu(1)`（盖掉的），给 SDPA 用 `tril()`（留下的）。放在 softmax **之前**，$e^{-\infty} = 0$。',
+    q: '`masked_fill` 的语义？布尔版 causal mask 怎么写？',
+    a: '`x.masked_fill(mask, value)`：mask 为 True 的位置换成 value，其余不变；mask 会广播成 x 的 shape。\ncausal mask 要盖掉的是「看不到」的位置，也就是主对角线右上方，用 `triu(1)`。放在 softmax **之前**，$e^{-\infty} = 0$。',
     code: lines`
-      blocked = torch.ones(S, S, dtype=torch.bool, device=x.device).triu(1)   # True = 看不到
-      attn = attn.masked_fill(blocked, float('-inf'))
-      # S = 3 时 blocked:
-      # [[False,  True,  True],
-      #  [False, False,  True],
-      #  [False, False, False]]      和 ~tril() 完全一样
-
-      allowed = ~blocked             # = tril()，True = 能看，给 SDPA 的 attn_mask 用
-      out = F.scaled_dot_product_attention(q, k, v, attn_mask=allowed)
+      mask = torch.ones(S, S, dtype=torch.bool, device=x.device).triu(1)   # True = 看不到
+      attn = attn.masked_fill(mask, float('-inf'))
     `,
     ref: `${TP}#mask`,
   },
@@ -714,37 +707,6 @@ const primitiveCards: Card[] = [
     ref: `${TP}#mask`,
   },
   {
-    id: 'torch-read-tril',
-    deck: 'torch',
-    topic: 'tril · 读代码',
-    q: '读代码：每个表达式输出什么？（tril）',
-    qcode: lines`
-      torch.ones(3, 3, dtype=torch.bool).tril()
-      torch.arange(1, 10).view(3, 3).tril(-1)
-    `,
-    a: '`tril(k)` 保留第 k 条对角线及它**左下方**的元素，其余置 0（bool 是 False）。k = -1 不含主对角线。',
-    code: lines`
-      >>> torch.ones(3, 3, dtype=torch.bool).tril()
-      tensor([[ True, False, False],
-              [ True,  True, False],
-              [ True,  True,  True]])
-
-      >>> torch.arange(1, 10).view(3, 3).tril(-1)
-      tensor([[0, 0, 0],
-              [4, 0, 0],
-              [7, 8, 0]])
-    `,
-    ref: `${TP}#mask`,
-  },
-  {
-    id: 'torch-write-tril',
-    deck: 'torch',
-    topic: 'tril · 写代码',
-    q: '写代码：布尔 causal mask：`(S, S)`，`True` 表示 query i 能看 key j（j ≤ i）。要和 score `x` 在同一个 device。',
-    a: '`allowed = torch.ones(S, S, dtype=torch.bool, device=x.device).tril()`。这是 `F.scaled_dot_product_attention` 的布尔 `attn_mask` 要的格式（True = 能看）。如果是给 `masked_fill` 用，要的是「看不到」的位置，直接写 `triu(1)`，不用 `~tril()`。',
-    ref: `${TP}#mask`,
-  },
-  {
     id: 'torch-read-masked-fill',
     deck: 'torch',
     topic: 'masked_fill · 读代码',
@@ -753,22 +715,12 @@ const primitiveCards: Card[] = [
       x = torch.tensor([[1., 2.], [3., 4.]])
       m = torch.tensor([[False, True], [False, False]])
       x.masked_fill(m, 0.)
-      ~m
-      x.masked_fill(~m, 0.)
     `,
-    a: '`x.masked_fill(mask, value)`：mask 为 True 的位置换成 value，其余保留 x 的值；mask 会广播成 x 的 shape；返回新 tensor。`~` 是布尔取反（True ↔ False），所以 `masked_fill(~m, v)` 填的是 m 为 False 的位置。',
+    a: '`x.masked_fill(mask, value)`：mask 为 True 的位置换成 value，其余保留 x 的值；mask 会广播成 x 的 shape；返回新 tensor。',
     code: lines`
       >>> x.masked_fill(m, 0.)
       tensor([[1., 0.],
               [3., 4.]])
-
-      >>> ~m
-      tensor([[ True, False],
-              [ True,  True]])
-
-      >>> x.masked_fill(~m, 0.)
-      tensor([[0., 2.],
-              [0., 0.]])
     `,
     ref: `${TP}#mask`,
   },

@@ -38,12 +38,12 @@ def solve(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, output: torch.Tenso
 mask = torch.full((M, M), float('-inf'), device=Q.device).triu(1)
 attn = attn + mask
 
-# 布尔 mask：下三角（含对角线）= 可见，取反后填 -inf
-allowed = torch.tril(torch.ones(M, M, dtype=torch.bool, device=Q.device))
-attn = attn.masked_fill(~allowed, float('-inf'))
+# 布尔 mask：同样用 triu(1) 标出看不到的位置，填 -inf
+mask = torch.ones(M, M, dtype=torch.bool, device=Q.device).triu(1)
+attn = attn.masked_fill(mask, float('-inf'))
 ```
 
-`triu(k)` 保留第 k 条对角线及其右上方，其余置 0。`k=0` 从主对角线开始，`k=1` 从主对角线右边一条开始（主对角线也被置 0）。`tril(k)` 是下三角版本。
+`triu(k)` 保留第 k 条对角线及其右上方，其余置 0。`k=0` 从主对角线开始，`k=1` 从主对角线右边一条开始（主对角线也被置 0）。
 
 ## 这题的坑
 
