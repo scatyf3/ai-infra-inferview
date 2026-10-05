@@ -15,13 +15,25 @@
     "suspended": true,
     "at": 1791157149744
   },
+  "bagu-pp-bubble": {
+    "suspended": true,
+    "at": 1791161812259
+  },
   "bagu-ring-allreduce": {
     "suspended": true,
     "at": 1791161807436
   },
+  "bagu-sp-cp": {
+    "suspended": true,
+    "at": 1791161813606
+  },
   "bagu-tp-comm-size": {
     "suspended": true,
     "at": 1791161806236
+  },
+  "bagu-tp-intra-node": {
+    "suspended": true,
+    "at": 1791161811321
   },
   "triton-2d-ptrs": {
     "suspended": true,
