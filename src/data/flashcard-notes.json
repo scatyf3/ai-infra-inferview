@@ -176,8 +176,8 @@
     "at": 1791092837609
   },
   "torch-view-vs-reshape": {
-    "text": "ranspose 后把 (N, h, dk) 合成 (N, d_model) 为啥达不成",
-    "at": 1791092869505
+    "text": "view本质上是啥啊",
+    "at": 1791163555706
   },
   "triton-atomic-init": {
     "text": "add为啥不是0而是1啊",
