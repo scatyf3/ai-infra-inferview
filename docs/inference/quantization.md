@@ -22,6 +22,12 @@ $$
 
 $s$ 是 scale，$q_{\max}$ 是格式能表示的最大值（int8 取 127，int4 取 7），$\hat{x}$ 是反量化回来的近似值。格式决定 $q_{\max}$ 和格点怎么分布，粒度决定多少个元素共用一个 $s$，outlier 决定 $\max|x|$ 有多大。
 
+tldr：把高精度的 $x$（如 bf16）压缩成低精度的 $x_q$（如 int4），再额外存一份 metadata（scale $s$），用 $\hat{x} = s \cdot x_q$ 重建。目标是 reconstruction error 最小：
+
+$$
+\min_{s} \ \| x - \hat{x} \|^2 = \min_{s} \ \| x - s \cdot x_q \|^2
+$$
+
 ## 1. 格式
 
 | 格式       | 位宽  | 符号/指数/尾数  | 最大值                  | 用途                |     |
