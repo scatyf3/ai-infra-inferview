@@ -227,6 +227,18 @@
     "due": "2026-10-06T23:53:55.931Z",
     "last_review": "2026-10-04T23:53:55.931Z"
   },
+  "bagu-spec-why": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T00:00:01.606Z",
+    "last_review": "2026-10-05T00:00:01.606Z"
+  },
   "kernel-cross-program-reduce": {
     "stability": 2.3065,
     "difficulty": 2.11810397,
