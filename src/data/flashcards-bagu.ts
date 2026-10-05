@@ -5,7 +5,7 @@
 // a 支持行内 `code`、**加粗**、$公式$ 和 $$单独一行的公式$$（KaTeX），\n 换行；
 // fig 是答案下面的示意图（等宽字符画），code 是代码块；ref 是出处（站内链接，不含 base）。
 
-import type { Card } from '@lib/flashcards'
+import { lines, type Card } from '@lib/flashcards'
 
 const ROOF = '/inference/prefill-decode-roofline'
 const MEM = '/inference/memory-accounting'
@@ -39,13 +39,6 @@ const SD = '/basics/system-design-llm-serving'
 const PY = '/basics/python'
 
 const b = (c: Omit<Card, 'deck'>): Card => ({ deck: 'bagu', ...c })
-
-/** 多行的示意图 / 代码：去掉首尾的空行和公共缩进，源码里可以跟着缩进写；按原样取，反斜杠不转义 */
-const lines = (t: TemplateStringsArray) => {
-  const rows = t.raw[0].replace(/^\n/, '').replace(/\n\s*$/, '').split('\n')
-  const indent = Math.min(...rows.filter((r) => r.trim()).map((r) => r.length - r.trimStart().length))
-  return rows.map((r) => r.slice(indent)).join('\n')
-}
 
 export const baguCards: Card[] = [
   // ---------------- roofline ----------------

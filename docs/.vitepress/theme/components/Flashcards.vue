@@ -222,6 +222,7 @@ onBeforeUnmount(() => {
           <span v-if="curSched" class="fc-hist muted">复习 {{ curSched.reps }} 次 · 忘记 {{ curSched.lapses }} 次</span>
         </div>
         <div class="fc-q" :class="{ tappable: props.app && !flipped }" v-html="inlineMd(cur.q)" @click="props.app && flip()" />
+        <pre v-if="cur.qcode" class="fc-code fc-qcode"><code>{{ cur.qcode }}</code></pre>
 
         <button v-if="!flipped" class="fc-flip" @click="flip">翻面 <kbd>空格</kbd></button>
         <template v-else>
@@ -303,6 +304,7 @@ onBeforeUnmount(() => {
           </tr>
           <tr v-if="open.has(c.id)" class="fc-ans">
             <td colspan="5">
+              <pre v-if="c.qcode" class="fc-code fc-qcode"><code>{{ c.qcode }}</code></pre>
               <div class="fc-ans-a" v-html="inlineMd(c.a)" />
               <pre v-if="c.fig" class="fc-fig">{{ c.fig }}</pre>
               <pre v-if="c.code" class="fc-code"><code>{{ c.code }}</code></pre>
@@ -364,6 +366,7 @@ onBeforeUnmount(() => {
 .fc-a, .fc-ans-a { white-space: pre-line; }
 .fc-q :deep(code), .fc-a :deep(code), .fc-table :deep(code) { font-size: 0.88em; padding: 1px 5px; border-radius: 4px; background: var(--vp-c-bg-soft); }
 .fc-code { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--vp-code-block-bg); font-size: 12.5px; line-height: 1.6; overflow-x: auto; }
+.fc-qcode { margin-top: 12px; }
 .fc-fig { margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--wg-border); border-radius: 8px; font-family: var(--vp-font-family-mono); font-size: 12.5px; line-height: 1.45; overflow-x: auto; }
 .fc-a :deep(.katex-display), .fc-ans-a :deep(.katex-display) { margin: 6px 0; overflow-x: auto; overflow-y: hidden; }
 .fc-code code { font-family: var(--vp-font-family-mono); color: var(--vp-code-block-color); }

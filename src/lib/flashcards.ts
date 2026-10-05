@@ -21,6 +21,8 @@ export interface Card {
   /** 小标题，比如 stride、mask、online softmax */
   topic: string
   q: string
+  /** 可选：题面上的代码块（翻面前就显示），比如「读代码说输出」的代码和输入 */
+  qcode?: string
   /** 答案，支持行内 `code`、**加粗**、$行内公式$ 和 $$单独一行的公式$$（KaTeX） */
   a: string
   /** 可选的示意图（等宽字符画），放在答案下面；手机上宽度别超过 40 列 */
@@ -267,6 +269,13 @@ export function isFlags(v: unknown): v is Flags {
 }
 
 const escapeHtml =(s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/** 卡片里多行的示意图 / 代码：去掉首尾的空行和公共缩进，源码里可以跟着缩进写；按原样取，反斜杠不转义 */
+export const lines = (t: TemplateStringsArray): string => {
+  const rows = t.raw[0].replace(/^\n/, '').replace(/\n\s*$/, '').split('\n')
+  const indent = Math.min(...rows.filter((r) => r.trim()).map((r) => r.length - r.trimStart().length))
+  return rows.map((r) => r.slice(indent)).join('\n')
+}
 
 const tex = (src: string, displayMode: boolean) => katex.renderToString(src, { displayMode, throwOnError: false, output: 'html' })
 
