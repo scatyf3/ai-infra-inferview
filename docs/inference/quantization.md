@@ -188,6 +188,10 @@ for k0 in range(0, K, g):                                    # 每次取一个 K
 
 LLM 的激活里有少数几个**固定的通道**，在几乎所有 token 上的数值都比其他通道大 100 倍左右（LLM.int8() 发现模型超过 6.7B 后普遍出现）。权重本身比较平坦。
 
+![OPT-13B 一个 Linear 层的激活和权重幅值](/figures/smoothquant-fig4.png)
+
+OPT-13B 一个 Linear 层输入激活和权重的绝对值。看第 1 张（原始激活）：红色的高墙沿 Token 轴贯穿到底，说明 outlier 固定在几个 Channel 上，每个 token 都有；第 3 张（原始权重）则几乎是平的。第 2、4 张是 SmoothQuant 把难度从激活挪到权重之后的样子，见下文。图源：Xiao et al., [SmoothQuant](https://arxiv.org/abs/2211.10438), Figure 4（CC BY 4.0）。
+
 per-token int8 量化一个 token 的激活 $x = [0.1, -0.2, 0.3, 60]$：
 
 $$
