@@ -299,6 +299,18 @@
     "due": "2026-10-05T00:37:00.148Z",
     "last_review": "2026-10-05T00:27:00.148Z"
   },
+  "bagu-weight-rule": {
+    "stability": 1.2931,
+    "difficulty": 5.11217071,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-05T00:37:36.072Z",
+    "last_review": "2026-10-05T00:31:36.072Z"
+  },
   "kernel-cross-program-reduce": {
     "stability": 2.3065,
     "difficulty": 2.11810397,
