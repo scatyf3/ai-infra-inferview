@@ -275,6 +275,18 @@
     "due": "2026-10-05T00:36:55.186Z",
     "last_review": "2026-10-05T00:30:55.186Z"
   },
+  "bagu-profiling": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T01:01:13.315Z",
+    "last_review": "2026-10-05T01:01:13.315Z"
+  },
   "bagu-radix": {
     "stability": 8.2956,
     "difficulty": 1,
