@@ -311,6 +311,18 @@
     "due": "2026-10-13T00:00:01.606Z",
     "last_review": "2026-10-05T00:00:01.606Z"
   },
+  "bagu-ttft-parts": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-05T01:06:38.319Z",
+    "last_review": "2026-10-05T00:56:38.319Z"
+  },
   "bagu-w4a16-vs-w8a8": {
     "stability": 1.33589976,
     "difficulty": 5.10228691,
