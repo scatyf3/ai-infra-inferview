@@ -864,16 +864,16 @@
     "last_review": "2026-10-04T06:04:40.117Z"
   },
   "triton-stream-order": {
-    "stability": 2.3065,
-    "difficulty": 4.75285849,
-    "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 2,
+    "stability": 8.90467756,
+    "difficulty": 2.98473668,
+    "elapsed_days": 1,
+    "scheduled_days": 9,
+    "reps": 3,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-04T18:58:42.882Z",
-    "last_review": "2026-10-04T18:52:42.882Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-14T02:03:56.655Z",
+    "last_review": "2026-10-05T02:03:56.655Z"
   },
   "triton-why-one-program-no": {
     "stability": 3.94605407,
