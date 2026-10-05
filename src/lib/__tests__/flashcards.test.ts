@@ -28,7 +28,7 @@ import {
   type Card,
   type Progress,
 } from '@lib/flashcards'
-import { cards } from '@data/flashcards'
+import { cards, retiredIds } from '@data/flashcards'
 import progressFile from '@data/flashcard-progress.json'
 import notesFile from '@data/flashcard-notes.json'
 import flagsFile from '@data/flashcard-flags.json'
@@ -41,6 +41,7 @@ const DAY = 86_400_000
 describe('flashcard deck', () => {
   it('id 唯一，题面和答案非空，出处是站内链接', () => {
     expect(new Set(cards.map((c) => c.id)).size).toBe(cards.length)
+    for (const id of retiredIds) expect(cards.some((c) => c.id === id), `${id} 已退役，别再用`).toBe(false)
     for (const c of cards) {
       expect(c.q.trim() && c.a.trim()).toBeTruthy()
       if (c.ref) expect(c.ref.startsWith('/')).toBe(true)
@@ -62,7 +63,7 @@ describe('flashcard deck', () => {
     expect(isProgress(progressFile)).toBe(true)
     expect(isNotes(notesFile)).toBe(true)
     expect(isFlags(flagsFile)).toBe(true)
-    const ids = new Set(cards.map((c) => c.id))
+    const ids = new Set([...cards.map((c) => c.id), ...retiredIds])
     for (const id of [...Object.keys(progressFile), ...Object.keys(notesFile), ...Object.keys(flagsFile)]) expect(ids.has(id)).toBe(true)
   })
 })

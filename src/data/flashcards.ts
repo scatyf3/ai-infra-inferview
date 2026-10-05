@@ -388,44 +388,6 @@ const primitiveCards: Card[] = [
     ref: `${TP}#tensor-itself`,
   },
   {
-    id: 'torch-read-index',
-    deck: 'torch',
-    topic: '索引 / 切片 · 读代码',
-    q: '读代码：每个表达式输出什么？（索引 / 切片）',
-    qcode: lines`
-      x = torch.arange(12).view(3, 4)
-      x[:, 1:3]
-      x[-1]
-      x[:, -1]
-      x[:, -1:].shape
-    `,
-    a: '每一维用 `start:stop` 取一段（不含 stop），或用整数取一个位置，负数从后往前数。**整数下标会把那一维去掉**，切片会保留：`x[:, -1]` 是 (3,)，`x[:, -1:]` 是 (3, 1)。都是 view，不拷贝。',
-    code: lines`
-      >>> x[:, 1:3]
-      tensor([[ 1,  2],
-              [ 5,  6],
-              [ 9, 10]])
-
-      >>> x[-1]
-      tensor([ 8,  9, 10, 11])
-
-      >>> x[:, -1]
-      tensor([ 3,  7, 11])
-
-      >>> x[:, -1:].shape
-      torch.Size([3, 1])
-    `,
-    ref: `${TP}#tensor-itself`,
-  },
-  {
-    id: 'torch-write-index',
-    deck: 'torch',
-    topic: '索引 / 切片 · 写代码',
-    q: '写代码：decoder 的 hidden states `h` 是 `(B, S, D)`（B batch，S 序列长度，D hidden 维度）。生成下一个 token 只要每个序列**最后一个位置**的向量，得到 `(B, D)`。',
-    a: '`h[:, -1]`（等于 `h[:, -1, :]`）。想保留序列那一维就写 `h[:, -1:]`，得到 `(B, 1, D)`。',
-    ref: `${TP}#tensor-itself`,
-  },
-  {
     id: 'torch-read-expand',
     deck: 'torch',
     topic: 'expand · 读代码',
@@ -480,8 +442,15 @@ const primitiveCards: Card[] = [
     id: 'torch-write-repeat',
     deck: 'torch',
     topic: 'repeat · 写代码',
-    q: '写代码：位置编码表 `pe` 的 shape `(S, D)`（S 序列长度，D hidden 维度），要给 batch 里 B 个样本各一份**能独立改写**的拷贝，得到 `(B, S, D)`。',
-    a: '`pe.repeat(B, 1, 1)`：`pe` 先当成 `(1, S, D)`，第 0 维铺 B 份。只读不写的话用 `pe.expand(B, S, D)`，不拷贝。',
+    q: '写代码：`x = torch.tensor([[1, 2, 3], [4, 5, 6]])`，shape `(2, 3)`。想把它**整块**上下摞两份，得到 `(4, 3)`：前两行是 x，后两行还是 x。',
+    a: '`x.repeat(2, 1)`：每个参数是这一维铺几份。第 0 维（行）铺 2 份，第 1 维（列）铺 1 份，也就是不变。',
+    code: lines`
+      >>> x.repeat(2, 1)
+      tensor([[1, 2, 3],
+              [4, 5, 6],
+              [1, 2, 3],
+              [4, 5, 6]])
+    `,
     ref: `${TP}#只改元数据-vs-会拷贝`,
   },
   {
@@ -490,20 +459,21 @@ const primitiveCards: Card[] = [
     topic: 'repeat_interleave · 读代码',
     q: '读代码：每个表达式输出什么？（repeat_interleave）',
     qcode: lines`
-      x = torch.tensor([1, 2])
-      x.repeat_interleave(3)
-      torch.tensor([[1, 2], [3, 4]]).repeat_interleave(2, dim=0)
+      x = torch.tensor([[1, 2], [3, 4]])    # shape (2, 2)
+      x.repeat_interleave(2, dim=0)
+      x.repeat_interleave(2, dim=1)
     `,
-    a: '`repeat_interleave(n, dim)` 把**每个元素**（或沿 dim 的每一片）原地连着重复 n 次：[1, 2] 变成 [1, 1, 1, 2, 2, 2]。对比 `repeat` 是整体平铺：[1, 2, 1, 2, 1, 2]。不传 dim 时先展平。真的拷贝。',
+    a: '`repeat_interleave(n, dim)`：沿第 dim 维，把每一片原地连着复制 n 份，只有这一维变长。\n1. `dim=0`：每一**行**复制 2 份：行 0、行 0、行 1、行 1，(2, 2) 变成 (4, 2)。\n2. `dim=1`：每一**列**复制 2 份，(2, 2) 变成 (2, 4)。\n不写 dim 会先展平成一维再复制，所以一般都要写。',
     code: lines`
-      >>> x.repeat_interleave(3)
-      tensor([1, 1, 1, 2, 2, 2])
-
-      >>> torch.tensor([[1, 2], [3, 4]]).repeat_interleave(2, dim=0)
+      >>> x.repeat_interleave(2, dim=0)
       tensor([[1, 2],
               [1, 2],
               [3, 4],
               [3, 4]])
+
+      >>> x.repeat_interleave(2, dim=1)
+      tensor([[1, 1, 2, 2],
+              [3, 3, 4, 4]])
     `,
     ref: `${TP}#只改元数据-vs-会拷贝`,
   },
@@ -511,8 +481,13 @@ const primitiveCards: Card[] = [
     id: 'torch-write-repeat-interleave',
     deck: 'torch',
     topic: 'repeat_interleave · 写代码',
-    q: '写代码：GQA：k 的 shape `(B, H_kv, S, dk)`，每个 KV head 给连续的 g 个 Q head 用：Q head i 用 KV head `i // g`，H = H_kv · g。想展开成 `(B, H, S, dk)` 和 q 一一对齐。',
-    a: '`k.repeat_interleave(g, dim=1)`：KV head 的顺序变成 0, 0, …, 1, 1, …，正好是 `i // g`。用 `k.repeat(1, g, 1, 1)` 会变成 0, 1, …, 0, 1, …，对应的是 `i % H_kv`，**错了还不报错**。',
+    q: '写代码：GQA 里 Q 有 4 个 head，K 只有 2 个 head：Q head 0、1 共用 K head 0，Q head 2、3 共用 K head 1。k 的 shape 是 `(2, S, dk)`，第 0 维是 head。想展开成 `(4, S, dk)`，让第 i 个位置正好是 Q head i 要用的 K。',
+    a: '`k.repeat_interleave(2, dim=0)`：每个 K head 原地连着复制 2 份，顺序变成 0, 0, 1, 1（见图）。2 是每个 K head 要给几个 Q head 用：4 ÷ 2。\n用 `k.repeat(2, 1, 1)` 会变成 0, 1, 0, 1，Q head 1 拿到的是 K head 1，错了还不报错。',
+    fig: lines`
+      Q head                      0  1  2  3
+      repeat_interleave(2, dim=0) 0  0  1  1   right
+      repeat(2, 1, 1)             0  1  0  1   wrong
+    `,
     ref: `${TP}#只改元数据-vs-会拷贝`,
   },
   {
@@ -521,14 +496,14 @@ const primitiveCards: Card[] = [
     topic: 'cat · 读代码',
     q: '读代码：每个表达式输出什么？（cat）',
     qcode: lines`
-      a = torch.tensor([[1, 2]])
-      b = torch.tensor([[3, 4]])
-      torch.cat([a, b])
+      a = torch.tensor([[1, 2]])    # shape (1, 2)
+      b = torch.tensor([[3, 4]])    # shape (1, 2)
+      torch.cat([a, b], dim=0)
       torch.cat([a, b], dim=1)
     `,
-    a: '`torch.cat(tensors, dim=0)` 沿**已有的**第 dim 维首尾相接，其他维必须一样长，维度数不变。默认 dim = 0。',
+    a: 'dim 是沿哪一维接，从左往右数、从 0 开始：(1, 2) 的第 0 维是行，第 1 维是列。\n1. `dim=0`：b 的行接在 a 的行下面，(1, 2) 和 (1, 2) 变成 (2, 2)。\n2. `dim=1`：b 的列接在 a 的列右边，变成 (1, 4)。\n只有被接的那一维长度相加，其他维必须一样长。',
     code: lines`
-      >>> torch.cat([a, b])
+      >>> torch.cat([a, b], dim=0)
       tensor([[1, 2],
               [3, 4]])
 
@@ -542,7 +517,7 @@ const primitiveCards: Card[] = [
     deck: 'torch',
     topic: 'cat · 写代码',
     q: '写代码：没有预分配的 KV cache：`k_cache` 是 `(B, H, T, dk)`（T 已缓存的 token 数），这一步新算出的 `k_new` 是 `(B, H, 1, dk)`，接到最后。',
-    a: '`k_cache = torch.cat([k_cache, k_new], dim=2)`，得到 `(B, H, T + 1, dk)`。每步都要把整个 cache 拷一遍，所以推理框架用预分配 + 原地写，不用 cat。',
+    a: '`k_cache = torch.cat([k_cache, k_new], dim=2)`。dim 从左往右数、从 0 开始：B 是 0，H 是 1，T 是 2，dk 是 3；要接在 token 那一维，所以是 2，结果 `(B, H, T + 1, dk)`。\n每步都要把整个 cache 拷一遍，所以推理框架用预分配 + 原地写，不用 cat。',
     ref: `${TP}#只改元数据-vs-会拷贝`,
   },
   {
@@ -553,12 +528,12 @@ const primitiveCards: Card[] = [
     qcode: lines`
       a = torch.tensor([1, 2])
       b = torch.tensor([3, 4])
-      torch.stack([a, b])
+      torch.stack([a, b], dim=0)
       torch.stack([a, b], dim=1)
     `,
-    a: '`torch.stack(tensors, dim)` 先给每个 tensor 在第 dim 位**新插一维**再拼，所有 tensor 的 shape 必须完全一样，结果多一维。对比 `cat` 是沿已有的维拼，维度数不变。',
+    a: '有区别。stack 会**新插一维**，dim 是新维插在哪，不写就是 0：\n1. `dim=0`：结果的第 i **行**是第 i 个 tensor，a、b 各占一行。\n2. `dim=1`：结果的第 i **列**是第 i 个 tensor，a、b 各占一列。\n两个结果 shape 都是 (2, 2)，内容互为转置。',
     code: lines`
-      >>> torch.stack([a, b])
+      >>> torch.stack([a, b], dim=0)
       tensor([[1, 2],
               [3, 4]])
 
@@ -1019,9 +994,30 @@ const primitiveCards: Card[] = [
     id: 'triton-online-merge',
     deck: 'triton',
     topic: 'softmax',
-    q: '已知每块的 `(m_b, d_b)`，`d_b = Σ exp(x - m_b)`，全局 M、D 怎么得到？',
-    a: '每块先只看自己：\n`m_b = max_{i∈b} x_i`\n`d_b = Σ_{i∈b} exp(x_i − m_b)`\n合并：\n`M = max_b m_b`\n`D = Σ_b d_b · exp(m_b − M)`\n每块的和是相对 m_b 算的，乘 `exp(m_b − M)` 换算成相对 M。因为 m_b ≤ M，修正因子 ≤ 1，不会溢出。\n流式版（一块块扫，FlashAttention 用的就是这个）：\n`m_new = max(m, m_b)`\n`d = d · exp(m − m_new) + d_b · exp(m_b − m_new)`\n初值 `(m, d) = (−inf, 0)`。这个合并满足结合律，所以既能并行两两合并，也能串行一块块扫。',
-    code: "# 第 1 趟：每块的局部量\nm_b = tl.max(x, axis=0)\nd_b = tl.sum(tl.exp(x - m_b), axis=0)\n\n# 第 2 趟：合并（ms、ds 是所有块的 m_b、d_b，补齐的位置分别填 -inf、0）\nM = tl.max(ms, axis=0)\nD = tl.sum(ds * tl.exp(ms - M), axis=0)\n\n# 流式版：在一个 program 里一块块扫\nm = tl.full([], -float('inf'), tl.float32)   # 循环里会重新赋值，初值类型要和循环里一致\nd = tl.full([], 0.0, tl.float32)\nfor start in range(0, N, BLOCK):\n    x = tl.load(x_ptr + start + offs, mask=start + offs < N, other=-float('inf'))\n    m_new = tl.maximum(m, tl.max(x, axis=0))\n    d = d * tl.exp(m - m_new) + tl.sum(tl.exp(x - m_new), axis=0)\n    m = m_new",
+    q: '已知每块的 $(m_b, d_b)$，全局的 M、D 怎么得到？代码里 M、D 放在哪？',
+    a: '每块先只看自己：\n$$m_b = \\max_{i \\in b} x_i, \\qquad d_b = \\sum_{i \\in b} e^{x_i - m_b}$$\n合并：\n$$M = \\max_b m_b, \\qquad D = \\sum_b d_b \\, e^{m_b - M}$$\n每块的和是相对 $m_b$ 算的，乘 $e^{m_b - M}$ 换算成相对 M；因为 $m_b \\le M$，修正因子 ≤ 1，不会溢出。\nM、D 怎么分配：\n1. 显存里只分配每块一格的 `m`、`d`：`torch.empty(NB)`，NB 是块数。不用初始化，第 1 趟每格都会写。\n2. M、D **不占显存**：第 2 趟每个 program 都把 NB 个 `m`、`d` 读回来，在寄存器里自己算一遍 M、D，再归一化自己那块。',
+    code: lines`
+      def solve(x, out, N):
+          BLOCK = 4096
+          NB = triton.cdiv(N, BLOCK)                          # 块数
+          NB_BLOCK = max(16, triton.next_power_of_2(NB))      # tl.arange 的长度要是 2 的幂
+          m = torch.empty(NB, device=x.device, dtype=torch.float32)   # 每块一格
+          d = torch.empty_like(m)
+          partial_kernel[(NB,)](x, m, d, N, BLOCK=BLOCK)
+          norm_kernel[(NB,)](x, out, m, d, N, NB, BLOCK=BLOCK, NB_BLOCK=NB_BLOCK)
+
+      # 第 1 趟 partial_kernel：每块算 (m_b, d_b)，写进自己那一格
+      m_b = tl.max(x, axis=0)
+      tl.store(m_ptr + pid, m_b)
+      tl.store(d_ptr + pid, tl.sum(tl.exp(x - m_b), axis=0))
+
+      # 第 2 趟 norm_kernel：读回所有块，在寄存器里合并出 M、D
+      i = tl.arange(0, NB_BLOCK)
+      ms = tl.load(m_ptr + i, mask=i < NB, other=-float('inf'))
+      ds = tl.load(d_ptr + i, mask=i < NB, other=0.0)        # 补齐的位置：0 * exp(-inf) = 0
+      M = tl.max(ms, axis=0)
+      D = tl.sum(ds * tl.exp(ms - M), axis=0)
+    `,
     ref: `${SM}#大-n-先-max-再-sum-vs-online-合并`,
   },
   {
@@ -1098,6 +1094,9 @@ const primitiveCards: Card[] = [
     ref: KM,
   },
 ]
+
+/** 删掉的卡：data 分支和各设备的本地缓存里可能还留着它们的复习记录、批注，页面不显示，测试放行 */
+export const retiredIds: string[] = ['torch-read-index', 'torch-write-index']
 
 /** 原语卡（torch / triton）+ 八股卡（flashcards-bagu.ts） */
 export const cards: Card[] = [...primitiveCards, ...baguCards]
