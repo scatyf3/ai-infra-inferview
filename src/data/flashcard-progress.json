@@ -263,6 +263,18 @@
     "due": "2026-10-13T00:00:01.606Z",
     "last_review": "2026-10-05T00:00:01.606Z"
   },
+  "bagu-w4a16-vs-w8a8": {
+    "stability": 1.2931,
+    "difficulty": 5.11217071,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-05T00:22:59.499Z",
+    "last_review": "2026-10-05T00:16:59.499Z"
+  },
   "kernel-cross-program-reduce": {
     "stability": 2.3065,
     "difficulty": 2.11810397,
