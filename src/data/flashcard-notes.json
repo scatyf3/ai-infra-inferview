@@ -48,8 +48,8 @@
     "at": 1791157545575
   },
   "bagu-prefill-ai": {
-    "text": "为啥一次乘加，而且符号也不清楚",
-    "at": 1791127240217
+    "text": "1. 这里说忽略attention\n2. 除去这个，就是字面义，每个权重算一次乘法和一次加法？  matmul\ny = x·W，输出的每个元素是 Σ_i x_i · W_ij",
+    "at": 1791160244688
   },
   "bagu-prefix-cache": {
     "text": "code，第二段啥意思啊",
