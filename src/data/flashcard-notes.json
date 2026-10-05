@@ -99,6 +99,10 @@
     "text": "浪费算力，换mem",
     "at": 1791158400374
   },
+  "bagu-tokenize-event-loop": {
+    "text": "asyncio 事件 是啥，你想问的是为啥不串行，而是单独搞个线程对吗",
+    "at": 1791162246784
+  },
   "bagu-ttft-parts": {
     "text": "采样 + detokenize + 网络 啥意思",
     "at": 1791161791836
