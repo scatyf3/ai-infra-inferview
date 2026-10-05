@@ -167,6 +167,10 @@
     "text": "这个错我犯过了吗，感觉很怪啊",
     "at": 1791164630748
   },
+  "torch-masked-fill": {
+    "text": "~allowed 啥意思，mask_fill语义是啥",
+    "at": 1791164843989
+  },
   "torch-meta-vs-copy": {
     "text": "x.unsqueeze(0)、x.expand(4, -1) 啥意思",
     "at": 1791163183111
