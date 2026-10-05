@@ -32,8 +32,6 @@ import { syncState, syncsToGitHub, useSyncedDoc } from '../sync'
  * 改动先存本机，再在设备间同步（GitHub / 本机仓库文件，见 ../sync.ts）。
  */
 
-const NEW_PER_ROUND = 20
-
 /** app：独立的闪卡页（/flashcards）用，去掉长说明，手机上评分按钮固定在屏幕底部，点题目即可翻面 */
 const props = defineProps<{ app?: boolean }>()
 
@@ -82,28 +80,19 @@ const segments = computed(() => {
 // ---------- 复习 ----------
 // 这一轮跳过的卡，按跳过的先后；它们排到最后，别的出完了再出
 const deferred = ref<string[]>([])
-const newLimit = ref(NEW_PER_ROUND)
-const newSeen = ref(0)
 const reviewed = ref(0)
 const flipped = ref(false)
 
 const cur = computed(() =>
-  nextCard(deckCards.value, progress.value, now.value, {
-    newLeft: newLimit.value - newSeen.value,
-    deferred: deferred.value,
-    flags: flags.value,
-  }),
+  nextCard(deckCards.value, progress.value, now.value, { deferred: deferred.value, flags: flags.value }),
 )
 const curSched = computed(() => (cur.value ? progress.value[cur.value.id] : undefined))
 watch(() => cur.value?.id, () => { flipped.value = false; editing.value = null })
 const pv = computed(() => (cur.value && flipped.value ? preview(curSched.value, now.value) : null))
-const newLeft = computed(() => Math.min(buckets.value.new, Math.max(0, newLimit.value - newSeen.value)))
 const nextDue = computed(() => nextDueAt(deckCards.value, progress.value, flags.value))
 
 function restart() {
   deferred.value = []
-  newLimit.value = NEW_PER_ROUND
-  newSeen.value = 0
   reviewed.value = 0
   now.value = new Date()
 }
@@ -122,7 +111,6 @@ function give(g: Grade) {
   if (!c || !flipped.value) return
   saveNote() // 写到一半就评分：先把批注存下来，换卡时草稿不会丢
   const t = new Date()
-  if (bucketOf(progress.value[c.id], t) === 'new') newSeen.value++
   progress.value = review(progress.value, c.id, g, t)
   deferred.value = deferred.value.filter((id) => id !== c.id)
   now.value = t
@@ -232,7 +220,6 @@ onBeforeUnmount(() => {
           <span class="muted">{{ cur.topic }}</span>
           <span class="fc-state" :class="'b-' + bucketOf(curSched, now)">{{ STATE_LABEL[curSched?.state ?? State.New] }}</span>
           <span v-if="curSched" class="fc-hist muted">复习 {{ curSched.reps }} 次 · 忘记 {{ curSched.lapses }} 次</span>
-          <span class="fc-left muted">本轮还有新卡 {{ newLeft }}</span>
         </div>
         <div class="fc-q" :class="{ tappable: props.app && !flipped }" v-html="inlineMd(cur.q)" @click="props.app && flip()" />
 
@@ -284,17 +271,13 @@ onBeforeUnmount(() => {
           这一轮没有要复习的卡了<template v-if="reviewed">，复习了 <b>{{ reviewed }}</b> 次</template>。
           <template v-if="nextDue && nextDue > now.getTime()">下一张 <b>{{ fmtInterval(nextDue - now.getTime()) }}</b>后到期。</template>
         </p>
-        <p v-if="buckets.suspended" class="muted">已暂停 {{ buckets.suspended }} 张，在「全部卡片」里可以恢复。</p>
-        <div class="fc-done-btns">
-          <button v-if="buckets.new && !newLeft" class="btn" @click="newLimit += 10">再学 10 张新卡</button>
-        </div>
-      </div>
+        <p v-if="buckets.suspended" class="muted">已暂停 {{ buckets.suspended }} 张，在「全部卡片」里可以恢复。</p>      </div>
 
       <p v-if="props.app" class="muted fc-note">
         改动{{ storageText }}。<a :href="withBase('/handson/flashcards')">评分规则和快捷键 →</a>
       </p>
       <p v-else class="muted fc-note">
-        FSRS 按你的每次评分估计记忆的衰减，算出下次该复习的时间：先出到期的卡，再出新卡（每轮 {{ NEW_PER_ROUND }} 张）。
+        FSRS 按你的每次评分估计记忆的衰减，算出下次该复习的时间：先出到期的卡，再出新卡（不限量）。
         按钮上方是选它之后多久再出现。翻面后按 <kbd>N</kbd> 给这张卡写批注。
         跳过的卡排到这一轮最后；暂停的卡不再出现，直到在「全部卡片」里恢复。
         复习记录、批注和暂停{{ storageText }}。
@@ -370,8 +353,7 @@ onBeforeUnmount(() => {
 
 .fc-card { border: 1px solid var(--wg-border); border-radius: 10px; background: var(--vp-c-bg); padding: 16px 18px; min-height: 180px; }
 .fc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12px; margin-bottom: 10px; }
-.fc-left { margin-left: auto; }
-.fc-hist, .fc-left { font-size: 11.5px; }
+.fc-hist { font-size: 11.5px; }
 .fc-deck { padding: 1px 7px; border-radius: 10px; font: 600 11px/1.6 var(--vp-font-family-mono); color: #fff; background: #ee4c2c; }
 .fc-state { padding: 1px 7px; border-radius: 4px; font-size: 11px; line-height: 1.6; white-space: nowrap; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
 .fc-q { font-size: 16px; font-weight: 600; line-height: 1.7; }
@@ -409,7 +391,6 @@ kbd { padding: 0 5px; border: 1px solid var(--wg-border); border-radius: 4px; fo
 .fc-suspend { margin: 8px 0 0 12px; padding: 2px 10px; font-size: 12px; }
 .fc-done { padding: 22px; text-align: center; border: 1px dashed var(--wg-border); border-radius: 10px; }
 .fc-done p { margin: 0 0 10px; }
-.fc-done-btns { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
 .fc-note { font-size: 12px; line-height: 1.7; margin-top: 12px; }
 
 .fc-table { width: 100%; display: table; }
@@ -452,7 +433,7 @@ kbd { padding: 0 5px; border: 1px solid var(--wg-border); border-radius: 4px; fo
   .fc-app .fc-rate { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
   .fc-app .fc-rate button { padding: 8px 2px 10px; }
   .fc-app .fc-hint { display: none; }
-  .fc-app .fc-meta .fc-hist, .fc-app .fc-meta .fc-left { display: none; }
+  .fc-app .fc-meta .fc-hist { display: none; }
   /* 列表窄屏只留状态、题目、下次；题目里的长代码允许断行，不然整张表被撑出屏幕 */
   .fc-app .fc-table td:nth-child(3), .fc-app .fc-table td:nth-child(3) :deep(code) { overflow-wrap: anywhere; word-break: break-word; }
   .fc-app .fc-table th, .fc-app .fc-table td { padding: 8px 6px; }

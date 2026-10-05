@@ -98,20 +98,20 @@ export function countBuckets(cards: Card[], p: Progress, now: Date, flags: Flags
 }
 
 export interface QueueOpts {
-  /** 这一轮还能出几张新卡 */
-  newLeft: number
+  /** 这一轮还能出几张新卡；不传就不限 */
+  newLeft?: number
   /** 这一轮跳过的卡，按跳过的先后；它们排在所有别的卡后面 */
   deferred?: string[]
   flags?: Flags
 }
 
 /**
- * 下一张：先出已到期的（学习中 + 复习，按到期时间），再出新卡（按文件顺序，受这一轮的新卡额度限制）。
+ * 下一张：先出已到期的（学习中 + 复习，按到期时间），再出新卡（按文件顺序，给了 newLeft 就受这个额度限制）。
  * 没到期的不提前出：学习中的卡评完 Good 要 10 分钟后才到期，提前出会让人以为评分没生效。暂停的卡不出。
  * 跳过的卡不是丢掉，而是排到最后：别的都出完了，再按跳过的先后出它们。
  * 它们这一轮已经出过一次，所以不再受新卡额度限制，否则额度被别的新卡用完后，跳过的新卡就回不来了。
  */
-export function nextCard(cards: Card[], p: Progress, now: Date, { newLeft, deferred = [], flags = {} }: QueueOpts): Card | undefined {
+export function nextCard(cards: Card[], p: Progress, now: Date, { newLeft = Infinity, deferred = [], flags = {} }: QueueOpts = {}): Card | undefined {
   const t = now.getTime()
   const byDue = (a: Card, b: Card) => Date.parse(p[a.id].due) - Date.parse(p[b.id].due)
   const pick = (pool: Card[], allowNew: boolean): Card | undefined => {

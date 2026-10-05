@@ -123,6 +123,12 @@ describe('出题顺序', () => {
     expect(nextCard(cs, p, T0, { newLeft: 5 })?.id).toBe('b')
   })
 
+  it('不传新卡额度就不限量', () => {
+    let p: Progress = {}
+    for (const c of cs) p = review(p, c.id, Rating.Easy, T0)
+    expect(nextCard([...cs, card('z')], p, T0)?.id).toBe('z')
+  })
+
   it('跳过的卡排到最后：别的出完了，再按跳过的先后出', () => {
     expect(nextCard(cs, {}, T0, { newLeft: 10, deferred: ['a', 'b'] })?.id).toBe('c')
     const two = cs.slice(0, 2)
