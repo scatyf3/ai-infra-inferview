@@ -575,6 +575,18 @@
     "due": "2026-10-10T01:34:51.070Z",
     "last_review": "2026-10-05T01:34:51.070Z"
   },
+  "torch-softmax-fn": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T01:47:54.854Z",
+    "last_review": "2026-10-05T01:47:54.854Z"
+  },
   "torch-storage-index": {
     "stability": 4.28567357,
     "difficulty": 6.50909534,
