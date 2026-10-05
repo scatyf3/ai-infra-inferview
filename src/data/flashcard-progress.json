@@ -793,15 +793,15 @@
   },
   "torch-write-squeeze": {
     "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "difficulty": 2.11121424,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 2,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-05T04:07:08.667Z",
-    "last_review": "2026-10-05T03:57:08.667Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-07T04:09:24.972Z",
+    "last_review": "2026-10-05T04:09:24.972Z"
   },
   "torch-write-transpose": {
     "stability": 8.2956,
