@@ -44,8 +44,7 @@ const primitiveCards: Card[] = [
     deck: 'torch',
     topic: 'view / reshape',
     q: '为什么 transpose 之后 `view` 会报错？`reshape` 和 `.contiguous()` 各做什么？',
-    a: '`view` 的本质：新建一个 tensor 对象，指向**同一块 storage**，只换一套 shape 和 stride（必要时还有 offset），一个字节都不拷。所以它只能表达「按某组步长去读同一块内存」读得出来的形状，读不出来就报错。\n例子：attention 输出 `out` 是 `(h, N, dk)`、连续，stride `(N·dk, dk, 1)`。`transpose(0, 1)` 后 shape `(N, h, dk)`，stride `(dk, N·dk, 1)`。\n合成 `(N, h·dk)` 要把 h、dk 两维并成一维。相邻两维能合并的条件是 `stride[h] == shape[dk] × stride[dk]`，这里应该是 `dk`，实际是 `N·dk`：同一个 token 的各个 head 在内存里隔着 N·dk 个元素，不是连着的一段，一个 stride 表达不出来。\n`reshape`：能 view 就 view，不能就先拷一份连续的；`.contiguous()`：手动做这次拷贝。
-**默认用 `reshape`**；只有要通过结果写回原 tensor 时用 `view`（比如 `output.view(N, h, dk).copy_(y)`）：`view` 保证不拷，`reshape` 可能拷一份，写进副本也不报错。',
+    a: '`view` 的本质：新建一个 tensor 对象，指向**同一块 storage**，只换一套 shape 和 stride（必要时还有 offset），一个字节都不拷。所以它只能表达「按某组步长去读同一块内存」读得出来的形状，读不出来就报错。\n例子：attention 输出 `out` 是 `(h, N, dk)`、连续，stride `(N·dk, dk, 1)`。`transpose(0, 1)` 后 shape `(N, h, dk)`，stride `(dk, N·dk, 1)`。\n合成 `(N, h·dk)` 要把 h、dk 两维并成一维。相邻两维能合并的条件是 `stride[h] == shape[dk] × stride[dk]`，这里应该是 `dk`，实际是 `N·dk`：同一个 token 的各个 head 在内存里隔着 N·dk 个元素，不是连着的一段，一个 stride 表达不出来。\n`reshape`：能 view 就 view，不能就先拷一份连续的；`.contiguous()`：手动做这次拷贝。\n**默认用 `reshape`**；只有要通过结果写回原 tensor 时用 `view`（比如 `output.view(N, h, dk).copy_(y)`）：`view` 保证不拷，`reshape` 可能拷一份，写进副本也不报错。',
     code: 'out = torch.randn(h, N, dk)        # stride (N*dk, dk, 1)\nt = out.transpose(0, 1)            # (N, h, dk), stride (dk, N*dk, 1)\nt.view(N, h * dk)                  # RuntimeError: view size is not compatible ...\nt.reshape(N, h * dk)               # OK：内部先拷一份连续的\nt.contiguous().view(N, h * dk)     # 同上，手动拷',
     ref: `${TP}#tensor-itself`,
   },
@@ -264,22 +263,19 @@ const primitiveCards: Card[] = [
     q: '读代码：每个表达式输出什么？（transpose）',
     qcode: lines`
       x = torch.arange(6).view(2, 3)
-      x.transpose(0, 1)
-      x.transpose(0, 1).stride()
-      torch.zeros(2, 3, 4).transpose(-1, -2).shape
+      y = x.transpose(0, 1)
+      y
+      y.stride()
     `,
-    a: '`transpose(d0, d1)` 对调两个维度的 shape 和 stride，storage 不动：原来的 `x[i, j]` 变成 `y[j, i]`。负数下标从后往前数，`(-1, -2)` 就是最后两维。',
+    a: '`transpose(d0, d1)` 对调两个维度的 shape 和 stride，storage 不动：原来的 `x[i, j]` 就是 `y[j, i]`。x 的 stride 是 (3, 1)，对调成 (1, 3)。',
     code: lines`
-      >>> x.transpose(0, 1)
+      >>> y
       tensor([[0, 3],
               [1, 4],
               [2, 5]])
 
-      >>> x.transpose(0, 1).stride()
+      >>> y.stride()
       (1, 3)
-
-      >>> torch.zeros(2, 3, 4).transpose(-1, -2).shape
-      torch.Size([2, 4, 3])
     `,
     ref: `${TP}#tensor-itself`,
   },
@@ -436,16 +432,17 @@ const primitiveCards: Card[] = [
     q: '读代码：每个表达式输出什么？（expand）',
     qcode: lines`
       x = torch.tensor([[1], [2]])
-      x.expand(2, 3)
-      x.expand(-1, 3).stride()
+      y = x.expand(2, 3)
+      y
+      y.stride()
     `,
-    a: '`expand(*shape)` 把长度为 1 的维「拉长」到给定长度，`-1` 表示这一维不变。不拷贝：被拉长的那一维 stride 是 0，每一列读到的都是同一个元素。只能拉长长度为 1 的维。',
+    a: '`expand` 把长度为 1 的维「拉长」到给定长度，只能拉长长度为 1 的维。不拷贝：被拉长的那一维 stride 是 0，每一列读到的都是同一个元素。',
     code: lines`
-      >>> x.expand(2, 3)
+      >>> y
       tensor([[1, 1, 1],
               [2, 2, 2]])
 
-      >>> x.expand(-1, 3).stride()
+      >>> y.stride()
       (1, 0)
     `,
     ref: `${TP}#只改元数据-vs-会拷贝`,
@@ -837,23 +834,14 @@ const primitiveCards: Card[] = [
       x.is_contiguous()
       y = x.contiguous()
       y.stride()
-      y.data_ptr() == x.data_ptr()
-      z = torch.arange(6)
-      z.contiguous() is z
     `,
-    a: '`contiguous()` 返回按当前 shape 行优先连续存放的 tensor：不连续就拷一份（新内存，stride 变成 (2, 1)）；已经连续就直接返回自己，不拷贝。',
+    a: '`contiguous()` 返回按当前 shape 行优先连续存放的 tensor。x 转置后不连续，所以拷了一份，stride 变成 (2, 1)。已经连续的 tensor 调它不拷，直接返回自己。',
     code: lines`
       >>> x.is_contiguous()
       False
 
       >>> y.stride()
       (2, 1)
-
-      >>> y.data_ptr() == x.data_ptr()
-      False
-
-      >>> z.contiguous() is z
-      True
     `,
     ref: `${TP}#tensor-itself`,
   },
