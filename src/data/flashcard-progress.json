@@ -611,6 +611,18 @@
     "due": "2026-10-05T15:01:58.776Z",
     "last_review": "2026-10-04T15:01:58.776Z"
   },
+  "torch-unassigned-view": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T01:48:26.377Z",
+    "last_review": "2026-10-05T01:48:26.377Z"
+  },
   "torch-view-vs-reshape": {
     "stability": 8.2956,
     "difficulty": 1,
