@@ -151,6 +151,29 @@ $s_x[i]$ 和 $s_w[j]$ 都不随 $k$ 变，所以能挪到 $k$ 循环外面，循
 
 这部分啥粒度都行，唯一care的就是dequantize的overhead了
 
+啥粒度都行，是因为反量化后 scale 已经乘进 bf16 的 $\hat{W}$ 里了，GEMM 本身不碰 scale，scale 随 $k$ 变也没关系。W4A16 的 per-group（沿 $K$）就是这样：
+
+```python
+# W_q [K, N] int4，s_w [K // g, N]：沿 K 每 g 行一组
+for k0 in range(0, K, g):                                    # 每次取一个 K-tile，正好一组
+    W_tile = W_q[k0:k0 + g, :].to(torch.bfloat16) * s_w[k0 // g, :]  # 反量化
+    Y += X[:, k0:k0 + g] @ W_tile                            # bf16 GEMM
+```
+
+overhead 具体是三项：
+
+1. **乘 scale 的计算**：每个权重元素乘一次自己的 scale，次数等于元素个数，跟粒度无关。
+2. **读 scale 的带宽**：粒度越细 scale 越多。$K = N = 8192$ 的 int4 权重是 32 MiB；per-channel 有 8192 个 fp16 scale，16 KiB，可以忽略；per-group $g = 128$ 有 $64 \times 8192$ 个，1 MiB，多读 3.1%。
+3. **和 kernel 分块对齐**：kernel 沿 $K$ 一个 tile 一个 tile 地算，$g$ 取 K-tile 的整数倍（如 128），每个 tile 只要读一行 scale。
+
+粒度换来的是精度，三种粒度在这条路线上的位置：
+
+1. **per-tensor**：int4 下一个 scale 管整个矩阵，误差太大，基本不用。
+2. **per-channel**：每列一个 scale。int8 权重（W8A16）这样就够准；int4 还是不够。
+3. **per-group**：每列沿 $K$ 每 $g$ 个一组，多 3% 的带宽换 int4 能用的精度，是 W4A16（GPTQ / AWQ）的标配。
+
+KV cache 也走这条路线：存 FP8，attention kernel 读进来乘 scale 再算。
+
 ### 为什么激活不能 per-channel
 
 整数 GEMM 要求 scale 能提到 $K$ 维求和外面。激活 per-token（scale $s_x[i]$）、权重 per-output-channel（scale $s_w[j]$）时：
