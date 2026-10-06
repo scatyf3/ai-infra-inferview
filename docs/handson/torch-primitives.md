@@ -117,6 +117,35 @@ LeetGPU attention 系列（[#6](/leetgpu/softmax-attention)、[#12](/leetgpu/mul
 | `torch.matmul(a, b)` / `a @ b` | `q @ k.transpose(-1, -2)` | 只对最后两维做矩阵乘，前面全当 batch 并[广播](#broadcasting)；1 维输入会被临时补成矩阵 |
 | `x.transpose(-1, -2)` | 转置 K | 用负数索引，前面有几个 batch 维都不用改；别用 `.T`（反转全部维度） |
 
+#### 逐元素运算
+
+| 算子 | 用法 | 注意 |
+|---|---|---|
+| `a * b` / `torch.mul(a, b)` | RoPE 的 `x * cos` | 逐元素乘，shape 不同时按[广播](#broadcasting)对齐；矩阵乘是 `@`，别混 |
+
+#### 拼接 / 切分
+
+| 算子 | 用法 | 注意 |
+|---|---|---|
+| `torch.cat((a, b, ...), dim)` | `torch.cat((-x2, x1), dim=-1)` | 第一个参数是一组 tensor（元组或 list），因为能一次拼任意多个；写成 `cat(a, b)` 会把 `b` 当 `dim` 报错。**只有 `dim` 那一维长度相加**，其余维必须完全相同 |
+| `torch.stack((a, b, ...), dim)` | 把同 shape 的 tensor 叠成一批 | 不加长已有维，而是在 `dim` 处新造一维：两个 `(M, N)` → `(2, M, N)` |
+| `x.chunk(n, dim)` | `x1, x2 = x.chunk(2, dim=-1)` | 沿 `dim` 均分成 n 份，返回 view；等价于切片 `x[..., :half]`、`x[..., half:]` |
+
+`cat` 的 shape 规则：
+
+```
+(M, D/2) cat (M, D/2), dim=-1  →  (M, D/2 + D/2) = (M, D)    左右接
+(M, D/2) cat (M, D/2), dim=0   →  (M + M, D/2)   = (2M, D/2) 上下叠
+```
+
+`dim=-1` 指最后一维（特征维），2D 时等于 `dim=1`，Q 变成 `(B, H, S, D)` 也不用改。RoPE 的 `rotate_half` 就是每行内部前后两半互换、后半取负：
+
+```python
+x1, x2 = Q[:, :half], Q[:, half:]        # 各 (M, D/2)
+rot = torch.cat((-x2, x1), dim=-1)       # (M, D)：[a, b, c, d] → [-c, -d, a, b]
+output.copy_(Q * cos + rot * sin)
+```
+
 #### 归一化
 
 | 算子 | 用法 | 注意 |
