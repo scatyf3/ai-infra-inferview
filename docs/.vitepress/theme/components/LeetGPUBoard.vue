@@ -40,6 +40,22 @@ const visible = computed(() => {
   )
 })
 
+// dev 时未做的题可以一键建题解骨架页（接口见 docs/.vitepress/leetgpuNewPage.ts），生产构建里不显示
+const canCreate = import.meta.env.DEV
+const creating = ref<number | null>(null)
+async function createPage(id: number) {
+  creating.value = id
+  try {
+    const res = await fetch('/__leetgpu-new', { method: 'POST', body: JSON.stringify({ id }) })
+    const data = await res.json()
+    if (!data.url) throw new Error(data.error ?? res.statusText)
+    window.location.href = withBase(data.url)
+  } catch (e) {
+    console.error('[leetgpu] 新建题解失败', e)
+    creating.value = null
+  }
+}
+
 const noteText: Record<Status, string> = { todo: '未写', draft: '草稿', reviewed: '已复习' }
 const diffLabel: Record<LeetGPUDifficulty, string> = { easy: 'Easy', medium: 'Med.', hard: 'Hard' }
 </script>
@@ -79,7 +95,16 @@ const diffLabel: Record<LeetGPUDifficulty, string> = { easy: 'Easy', medium: 'Me
             <span v-else>{{ r.title }}</span>
           </td>
           <td class="c-diff"><span class="lb-d" :class="r.difficulty">{{ diffLabel[r.difficulty] }}</span></td>
-          <td class="c-note"><span v-if="r.page" class="lb-note" :class="r.page.status">{{ noteText[r.page.status] }}</span></td>
+          <td class="c-note">
+            <span v-if="r.page" class="lb-note" :class="r.page.status">{{ noteText[r.page.status] }}</span>
+            <button
+              v-else-if="canCreate"
+              class="lb-new"
+              :disabled="creating !== null"
+              :title="`在 docs/leetgpu/ 下新建 #${r.id} 的题解页`"
+              @click="createPage(r.id)"
+            >{{ creating === r.id ? '…' : '+ 新建' }}</button>
+          </td>
           <td class="c-oj"><a :href="urlOf(r)" target="_blank" rel="noopener" title="在 LeetGPU 打开">↗</a></td>
         </tr>
         <tr v-if="!visible.length"><td colspan="6" class="lb-empty">没有符合条件的题</td></tr>
@@ -109,7 +134,7 @@ const diffLabel: Record<LeetGPUDifficulty, string> = { easy: 'Easy', medium: 'Me
 .lb-table tbody tr:hover { background: var(--vp-c-bg-soft) !important; }
 .lb-table tbody tr:not(.done) .c-title { color: var(--vp-c-text-2); }
 .c-fam { width: 52px; } .c-id { width: 44px; font-family: var(--vp-font-family-mono); color: var(--wg-muted); }
-.c-diff { width: 60px; } .c-note { width: 56px; } .c-oj { width: 28px; text-align: center; }
+.c-diff { width: 60px; } .c-note { width: 64px; } .c-oj { width: 28px; text-align: center; }
 .c-title a { font-weight: 600; color: var(--vp-c-text-1); text-decoration: none; }
 .c-title a:hover { color: var(--vp-c-brand-1); }
 .c-oj a { color: var(--wg-muted); text-decoration: none; }
@@ -120,6 +145,9 @@ const diffLabel: Record<LeetGPUDifficulty, string> = { easy: 'Easy', medium: 'Me
 .lb-d { font-weight: 600; font-size: 12.5px; }
 .lb-d.easy { color: var(--lg-easy); } .lb-d.medium { color: var(--lg-medium); } .lb-d.hard { color: var(--lg-hard); }
 .lb-note { font-size: 12px; color: var(--wg-muted); }
+.lb-new { padding: 1px 6px; font-size: 11.5px; color: var(--vp-c-brand-1); border: 1px dashed var(--vp-c-brand-1); border-radius: 5px; white-space: nowrap; }
+.lb-new:hover:not(:disabled) { background: var(--vp-c-brand-soft); }
+.lb-new:disabled { opacity: 0.5; cursor: wait; }
 .lb-note.draft { color: var(--st-draft); } .lb-note.reviewed { color: var(--st-reviewed); }
 .lb-empty { text-align: center; color: var(--wg-muted); padding: 18px; }
 

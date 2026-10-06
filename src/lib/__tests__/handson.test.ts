@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FAM_LEVELS, countByFam, famCls, famOf, isFamiliarity, isPassing } from '@lib/fam'
 import { challengeById, challenges, slugOf, urlOf } from '@lib/leetgpu'
+import { solutionPageSkeleton } from '@lib/leetgpuPage'
 
 describe('familiarity', () => {
   it('未评是 null，不是 0', () => {
@@ -68,5 +69,16 @@ describe('leetgpu roadmap', () => {
           expect(it.impl.length, `${g.key} #${it.id}`).toBeGreaterThan(0)
         }
       }
+  })
+})
+
+describe('leetgpu 题解骨架', () => {
+  it('frontmatter 挂题号、文件名和 OJ 链接同一个 slug', () => {
+    const c = challengeById.get(26)!
+    const md = solutionPageSkeleton(c)
+    expect(md).toMatch(/^---\ntitle: Multi-Head Cross-Attention\nstatus: draft\n/)
+    expect(md).toContain('leetgpu: [26]')
+    expect(md).toContain(`(${urlOf(c)})`)
+    expect(slugOf(c.title)).toBe('multi-head-cross-attention')
   })
 })

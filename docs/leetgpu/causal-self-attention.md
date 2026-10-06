@@ -31,7 +31,18 @@ def solve(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, output: torch.Tenso
     torch.matmul(attn_norm, V, out=output)                                   # [M, d]，shape 一致可以 out=
 ```
 
-## mask 的两种写法
+## mask 的写法
+
+**标准写法**（[mask 怎么拼](./mask)）：下标比较。
+
+```python
+i = torch.arange(M, device=Q.device)[:, None]   # [M, 1] query
+j = torch.arange(M, device=Q.device)[None, :]   # [1, M] key
+allowed = j <= i                                # 下三角含对角线
+attn = attn.masked_fill(~allowed, float('-inf'))
+```
+
+用 `triu` / `tril` 的两种等价写法：
 
 ```python
 # 加法 mask：上面题解的写法
