@@ -4,7 +4,7 @@ title: LeetGPU 题解
 
 # LeetGPU 题解
 
-[LeetGPU](https://leetgpu.com/challenges) 上做过的题，一题一页：题解代码 + 这道题特有的坑。概念和白板版写法在 [手撕高频](/handson/)，这里只管把 OJ 刷过。
+[LeetGPU](https://leetgpu.com/challenges) 上做过的题，一题一页：题解代码 + 这道题特有的坑。概念和白板版写法在 [手撕高频](/handson/)，这里只管把 OJ 刷过。attention 类的题先看 [通用模板](./attention)。
 
 ## 题单
 

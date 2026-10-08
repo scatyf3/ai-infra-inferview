@@ -29,13 +29,11 @@ def solve(
     K: N×d
     V: N×d
     '''
-    K_T = torch.transpose(K, 0, 1)                  # [d, N]
-    attn = torch.matmul(Q, K_T) / math.sqrt(d)      # [M, N]
-    attn_norm = torch.softmax(attn, dim=-1)         # 沿 N 归一化
-    torch.matmul(attn_norm, V, out=output)          # [M, d]，shape 和 output 一致，可以直接 out=
+    torch.matmul(torch.softmax(torch.matmul(Q,K.transpose(-1,-2))/math.sqrt(d),dim=-1),V,out=output)
+
 ```
 
-## 这题的坑
+1. leetgpu的坑，要把out写到output，用torch的那个out即可
+2. softmax要指定dim=-1
+3. 记得`/math.sqrt(d)`
 
-- **`return` 结果而不写 `output`**：判题只看传入的 `output`。
-- 其余见 [通用语法坑](./#通用语法坑)。
