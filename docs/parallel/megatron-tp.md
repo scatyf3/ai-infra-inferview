@@ -22,6 +22,18 @@ stack: [d-intra]
 
 对 $Y = XA$，$X \in \mathbb{R}^{S \times d}$，$A \in \mathbb{R}^{d \times h}$：
 
+::: tip 约定：行/列指数学上的矩阵，存储一律行主序
+- **$X$ 的每一行是一个 token**，列是 hidden 维。
+- **本文的「按行切 / 按列切」说的是数学公式里的 $A$**，和内存布局无关。PyTorch 张量默认行主序（row-major，最后一维连续），切完以后每张卡拿到的都是一块独立的、连续存储的分片。
+- **容易踩坑**：`nn.Linear` 存的 `weight` 形状是 `[out, in]`，即 $A^\top$，算的是 $Y = XW^\top$。所以数学上 $A$ **按列切**，对应 `weight` 的 **dim 0（out_features）切**；$A$ **按行切**，对应 `weight` 的 **dim 1（in_features）切**。Megatron 的 `ColumnParallelLinear` / `RowParallelLinear` 就是按这个对应关系实现的。
+
+```python
+W = linear.weight            # [out, in] = A^T，行主序
+W_col = W.chunk(N, dim=0)    # column parallel：每卡 out/N 行，连续
+W_row = W.chunk(N, dim=1)    # row parallel：每卡 in/N 列（需 .contiguous() 拷成独立分片）
+```
+:::
+
 **Column parallel**：$A = [A_1, A_2]$ 按列切。
 
 $$

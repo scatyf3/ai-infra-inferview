@@ -14,7 +14,7 @@ stack: [kv-paged, kv-prefix, kv-quant]
 
 ## 一句话结论
 
-KV cache 在 PagedAttention 之前是按「每请求预留最大长度的连续大块」分配的，浪费 60–80%。PagedAttention 把它切成固定大小的 block，用一张 block table 做逻辑到物理的映射，外部碎片归零、内部碎片上限是每序列半个 block，还顺带解锁了 **prefix 共享**（copy-on-write + refcount）和**细粒度抢占**。
+KV cache 在 PagedAttention 之前是按「每请求预留最大长度的连续大块」分配的，浪费 60–80%。PagedAttention 把它切成固定大小的 block，用一张 block table 做逻辑到物理的映射，外部碎片归零、内部碎片上限是每序列半个 block，还顺带解锁了 **block 共享**（refcount；跨请求的 prefix caching，以及同一请求 fork 时的 copy-on-write）和**细粒度抢占**。
 
 ## 推导
 
@@ -37,11 +37,96 @@ attention kernel 按 block table 去 gather，所以计算不要求物理连续�
 
 浪费的上界变成：每个序列最后一个未满 block 的空槽，平均 `block_size / 2` 个 token。16 token 的 block 下，每序列浪费 8 个 token 的 KV，可以忽略。
 
-### Prefix 共享
+### Block 共享：prefix caching 与 copy-on-write
 
-如果两个序列有相同的前缀（system prompt、few-shot 例子、多轮对话的历史），它们前缀部分的 KV **逐位相同**。于是：满 block 按内容 hash，命中就直接把物理 block 号填进新序列的 block table，refCount 加一。
+block 化之后，多个序列的 block table 可以指向**同一个物理 block**，每个 block 记一个 `ref_count`，表示有几个序列在引用它。共享有两种来源，要分清：
 
-写的时候要小心：refCount > 1 的 block 不能原地写，必须 **copy-on-write** 先复制出一份。只有满 block 才参与共享，因为未满 block 还会被追加。
+**1. Prefix caching：跨请求共享，不需要 CoW**
+
+如果两个请求有相同的前缀（system prompt、few-shot 例子、多轮对话的历史），前缀部分的 KV **逐位相同**。满 block 按「从开头到这个 block 为止的全部 token」算 hash，新请求命中就直接把物理 block 号填进自己的 block table，`ref_count += 1`，这部分不用再 prefill。
+
+**只有满 block 参与 prefix caching。** 满 block 以后永远不会再被写（新 token 只会追加到序列最后那个未满 block），所以共享的 block 是只读的，**不存在写冲突，也就用不到 copy-on-write**。
+
+**2. Fork：同一请求分叉，需要 CoW**
+
+parallel sampling（`n > 1`）和 beam search 会把一个序列分叉成多个：fork 时直接复制 block table，所有 block 的 `ref_count += 1`，**包括最后那个未满的 block**。之后各分支要往这个共享的未满 block 追加不同的 token，就冲突了：
+
+- 写之前检查 `ref_count > 1`：先申请一个新 block，把旧 block 内容拷过去，改自己的 block table 指向新 block，旧 block `ref_count -= 1`，然后再写。这就是 **copy-on-write**。
+- 只有分叉点所在的那一个 block 需要拷，前面的满 block 永远共享。
+
+### 伪代码
+
+```python
+class BlockAllocator:
+    def __init__(self, num_blocks):
+        self.free = list(range(num_blocks))
+        self.ref = [0] * num_blocks
+        self.hash_to_block = {}                  # prefix cache：满 block 的 hash → 物理 block
+
+    def alloc(self):
+        b = self.free.pop()                      # 空了就触发抢占（见下节）
+        self.ref[b] = 1
+        return b
+
+    def release(self, b):
+        self.ref[b] -= 1
+        if self.ref[b] == 0:
+            self.free.append(b)                  # 实际实现会留在 hash 表里做 LRU 淘汰
+
+
+class Sequence:
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.block_table = []                    # 逻辑 block 号 → 物理 block 号
+
+
+def prefill(seq, A, B):                          # B = block_size
+    h = None
+    for i in range(0, len(seq.tokens), B):
+        chunk = seq.tokens[i:i + B]
+        if len(chunk) == B:                      # 只有满 block 查 prefix cache
+            h = hash((h, tuple(chunk)))          # 链式 hash：包含整个前缀
+            if h in A.hash_to_block:
+                b = A.hash_to_block[h]
+                A.ref[b] += 1                    # 命中：共享，跳过这段的计算
+                seq.block_table.append(b)
+                continue
+        b = A.alloc()
+        compute_and_write_kv(b, chunk)
+        if len(chunk) == B:
+            A.hash_to_block[h] = b
+        seq.block_table.append(b)
+
+
+def append_token(seq, tok, A, B):                # decode 一步
+    pos = len(seq.tokens)
+    if pos % B == 0:                             # 最后一个 block 满了，开新 block
+        seq.block_table.append(A.alloc())
+    else:
+        last = seq.block_table[-1]
+        if A.ref[last] > 1:                      # 被 fork 共享的未满 block → CoW
+            new = A.alloc()
+            copy_block(src=last, dst=new)
+            A.release(last)
+            seq.block_table[-1] = new
+    write_kv(seq.block_table[-1], pos % B, tok)
+    seq.tokens.append(tok)
+
+
+def fork(seq, A):                                # parallel sampling / beam search
+    child = Sequence(list(seq.tokens))
+    child.block_table = list(seq.block_table)
+    for b in child.block_table:
+        A.ref[b] += 1
+    return child
+
+
+def attention(q, seq, B):                        # kernel 按 block table 间接寻址
+    for pos in range(len(seq.tokens)):
+        b, off = seq.block_table[pos // B], pos % B
+        k, v = K_cache[b][off], V_cache[b][off]
+        ...                                      # 常规 online softmax
+```
 
 SGLang 的 **RadixAttention** 把这个做得更进一步：用 radix tree 管理所有前缀，支持任意长度的部分匹配（不止 block 对齐），并用 LRU 淘汰。收益场景：多轮对话（每轮复用全部历史）、agent 的长 system prompt、树搜索类的推理（共享分支前缀）。
 
@@ -64,12 +149,6 @@ KV 从 bf16 降到 fp8 直接让 KV 访存和显存减半，等于 decode 的 AI
 - **FP8 用 per-tensor scale 就够**：fp8 自带指数位，动态范围大，vLLM 的 `kv_cache_dtype="fp8"` 每层 K、V 各一个 scale。int4 / int2 这类整数格式才需要细粒度：K 的 outlier 集中在少数几个 channel，所以 K 按 per-channel、V 按 per-token（KIVI）。
 - K 比 V 更难量化：k 上的误差 $\delta$ 让 score 偏 $q \cdot \delta / \sqrt{d_h}$，过了 softmax 变成乘性的 $e^{q \cdot \delta / \sqrt{d_h}}$；V 的误差只是线性混进加权平均。有些方案对 K 用更高精度。
 - 误差会累积：早期 token 的 KV 被后续每一步反复读，长 context 下影响更大。
-
-## 交互
-
-点「新请求（共享前缀）」看 refCount 变成 2、block 边框变双线；一直点「decode 一步」直到 free 归零，再试 swap 和 recompute 两种抢占，对比 block table 的变化。
-
-<PagedKV :block-size="4" :num-blocks="24" />
 
 ## 面试追问
 

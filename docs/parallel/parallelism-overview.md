@@ -41,13 +41,36 @@ $$
 \text{bubble} = \frac{p - 1}{m}
 $$
 
-$p$ 是 stage 数，$m$ 是 micro-batch 数。$m \gg p$ 才划算，所以 PP 需要大 batch 来摊薄。1F1B 调度能把峰值激活显存从 $O(m)$ 降到 $O(p)$，interleaved（virtual pipeline）能把 bubble 再降到 $\frac{p-1}{m v}$，代价是通信次数 ×$v$。
+$p$ 是 stage 数，$m$ 是 micro-batch **个数**。$m \gg p$ 才划算。
+
+注意区分三个量：
+
+$$
+\text{global batch} = m \times \text{micro-batch size}
+$$
+
+要的是 micro-batch **个数**多，不是每个 micro-batch 小。micro-batch size 不能无限缩（太小 GEMM 喂不饱，每个 stage 的算力利用率掉下去），通常固定在 1~4 条样本左右。在这个前提下想让 $m$ 大，就只能把 **global batch 做大**。所以说「PP 需要大 batch」指的是 global batch 大，切出来的 micro-batch 个数多。
+
+1F1B 调度能把峰值激活显存从 $O(m)$ 降到 $O(p)$，interleaved（virtual pipeline）能把 bubble 再降到 $\frac{p-1}{m v}$，代价是通信次数 ×$v$。
 
 推理场景 PP 用得少，因为 decode 的 batch 天然小，bubble 摊不掉；但显存实在放不下时（比如 8 卡放不下 405B）还是要用。
 
 ### DP：推理时最省事
 
-每个副本持有完整模型，请求按负载分流，副本之间零通信。推理扩容的默认手段。注意 **DP attention**：MoE 模型上 attention 部分用 DP（因为 attention 的权重小）、expert 部分用 EP，能避免 attention 的 KV 被 TP 复制，DeepSeek 的部署方案就是这么做的。
+每个副本持有完整模型，请求按负载分流，副本之间零通信。推理扩容的默认手段。
+
+注意 **DP attention**：MoE 模型上 attention 部分用 DP（attention 权重小，每卡放一份完整的没压力），expert 部分用 EP。好处是每张卡只存自己那批请求的 KV。如果 attention 用 TP，KV head 数少时（GQA 的 $H_{kv}$ 小于 TP 度，MLA 更是只有一份 latent KV）KV cache 会在 TP 组内被**复制**，浪费显存。DeepSeek-V3 的推理部署就是这么做的。
+
+**这不是 AF 分离（Attention-FFN disaggregation）。** 两者的区别在于 attention 和 expert 是否跑在同一批卡上：
+
+| | DP attention + EP | AF 分离 |
+|---|---|---|
+| 物理部署 | 同一批卡，每张卡既跑 attention 也存一部分 expert | attention 一组卡、FFN/expert 另一组卡 |
+| 层内切换 | attention 算完在本卡，all-to-all 把 token 发给 expert 所在卡 | attention 节点把激活发到 FFN 节点，算完再发回 |
+| 隐藏通信 | 靠 two-batch overlap（一个 micro-batch 算、另一个传） | 靠多个 micro-batch 在两组卡之间 ping-pong 流水 |
+| 代表 | DeepSeek-V3 / SGLang 的 DP attention | MegaScale-Infer、Step-3 的 AFD |
+
+DeepSeek 做的分离是 **PD 分离**（prefill 和 decode 用不同集群）。在 decode 集群内部，attention 和 expert 仍然在同一批卡上，没有做 AF 分离。AF 分离更进一步：attention 是访存密集（读 KV），FFN 是计算密集，拆开以后两组卡可以分别选型、分别扩缩容。
 
 ### EP：all-to-all 是新瓶颈
 
