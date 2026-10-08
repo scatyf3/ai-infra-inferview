@@ -10,31 +10,51 @@ stack: [k-attn]
 
 # Attention 题通用模板
 
-> LeetGPU 上所有 attention 题都是同一个骨架，区别只在「怎么排成 `[head, seq, D]`」和「mask 是什么」。先背骨架，再看每题改了哪一行。mask 细节见 [Attention mask 怎么拼](./mask)。
+> LeetGPU 上所有 attention 题都是同一个骨架，区别只在「怎么排成 `[head, seq, D]`」「位置编码怎么加」和「mask 是什么」。先背骨架，再看每题改了哪一行。mask 细节见 [Attention mask 怎么拼](./mask)。
 
-## 骨架：五步
+## 骨架：六步
 
 ```python
 import torch
 import math
 
 
-def attention(q, k, v, allowed=None):
-    # q: [..., M_q, D]   k, v: [..., M_k, D]   前面的 ... 是 head（或组）维，matmul 当 batch 处理
-    attn = torch.matmul(q, k.transpose(-1, -2)) / math.sqrt(q.shape[-1])   # [..., M_q, M_k]
-    if allowed is not None:                                                # bool，True = 能看
+def attention(q, k, v, allowed=None, cos=None, sin=None):
+    # 1. reshape for input：调用前做完
+    # q: [..., M_q, D]   k, v: [..., M_k, D], 前面是head/batch，matmul当作batch维度
+    # 2. pos encoding：只转 q、k，v 不动
+    if cos is not None:
+        q, k = rope(q, cos, sin), rope(k, cos, sin)
+    # 3. generate attention score
+    attn = torch.matmul(q, k.transpose(-1, -2)) / math.sqrt(q.shape[-1])
+    # [..., M_q, M_k]
+    # 4. build mask
+    if allowed is not None:
         attn = attn.masked_fill(~allowed, float('-inf'))
-    attn = torch.softmax(attn, dim=-1)                                     # 沿 key 方向
-    return torch.matmul(attn, v)                                           # [..., M_q, D]
+    # 5. softmax
+    # 沿 key 方向，对每个query的概率softmax
+    attn = torch.softmax(attn, dim=-1)
+    # 6. output
+    return torch.matmul(attn, v) # [..., M_q, D]
+
+
+def rope(x, cos, sin):
+    # x: [..., M, D]   cos, sin: [M, D]，广播到前面的 head 维
+    half = x.shape[-1] // 2
+    x_rot = torch.cat([-x[..., half:], x[..., :half]], dim=-1)   # rotate_half
+    return x * cos + x_rot * sin
 ```
 
 | 步 | 做什么 | 要点 |
 |---|---|---|
 | 1. 排 shape | 把输入整理成 `[H, M, D]`（GQA 是 `[H_kv, G, M, D]`） | head 必须在 seq **前面**，matmul 只对最后两维做矩阵乘 |
-| 2. 打分 | `q @ k^T / sqrt(D)` | `D` 是**单 head** 维度；转置用 `transpose(-1, -2)` |
-| 3. mask | `masked_fill(~allowed, -inf)` | `i` 行下标 `[:, None]`、`j` 列下标 `[None, :]`，带 `device=Q.device` |
-| 4. softmax | `torch.softmax(attn, dim=-1)` | 方阵沿错方向不报错，静默算错 |
-| 5. 乘 V、写回 | `attn @ v`，换回题目的 shape，写进 `output` | shape 完全一致才能 `out=output`，否则 `output.copy_(...)` |
+| 2. 位置编码 | 对 q、k 做 RoPE | 必须在拆 head **之后**：旋转是在单 head 的 `D` 维里配对的；v 不转 |
+| 3. 打分 | `q @ k^T / sqrt(D)` | `D` 是**单 head** 维度；转置用 `transpose(-1, -2)` |
+| 4. mask | `masked_fill(~allowed, -inf)` | `i` 行下标 `[:, None]`、`j` 列下标 `[None, :]`，带 `device=Q.device` |
+| 5. softmax | `torch.softmax(attn, dim=-1)` | 方阵沿错方向不报错，静默算错 |
+| 6. 乘 V、写回 | `attn @ v`，换回题目的 shape，写进 `output` | shape 完全一致才能 `out=output`，否则 `output.copy_(...)` |
+
+**为什么位置编码排在拆 head 之后**：RoPE 把第 $k$ 维和第 $k + D/2$ 维配成一对旋转，$D$ 是单 head 维度。在 `[N, d_model]` 上直接转，配对会跨 head（head 0 的前半和 head $h/2$ 的前半配成一对），shape 对、数值错。
 
 下面按「基础 → 换 mask → 换 shape → 位置编码」的顺序逐题展开。每题只讲相对骨架改了什么、为什么这么改、容易错在哪；完整提交代码和踩坑记录在各题页面。
 
@@ -44,7 +64,7 @@ def attention(q, k, v, allowed=None):
 
 [题解](./softmax-attention) · 单头、无 mask、无投影
 
-`Q` 是 `[M, d]`，`K` / `V` 是 `[N, d]`。没有 head 维，第 1 步什么都不用做；没有 mask，第 3 步跳过。剩下三步一行写完：
+`Q` 是 `[M, d]`，`K` / `V` 是 `[N, d]`。没有 head 维，第 1 步什么都不用做；没有位置编码和 mask，第 2、4 步跳过。剩下三步一行写完：
 
 ```python
 attn = torch.matmul(Q, K.transpose(-1, -2)) / math.sqrt(d)   # [M, N]
@@ -60,9 +80,9 @@ torch.matmul(attn, V, out=output)                            # [M, d]，和 outp
 - 结果没写进 `output`。`return` 和 `output = ...` 都不算，要 `out=output` 或 `output.copy_(...)`。
 - `softmax` 不写 `dim`，或者写成 `dim=0`。
 
-## 换 mask：第 3 步不同
+## 换 mask：第 4 步不同
 
-这几题都是单头 `[M, d]`、Q 和 K 等长，第 1、5 步和 #6 一模一样，只多一段构造 `allowed`。统一写法：
+这几题都是单头 `[M, d]`、Q 和 K 等长，其余步骤和 #6 一模一样，只多一段构造 `allowed`。统一写法：
 
 ```python
 i = torch.arange(M, device=Q.device)[:, None]   # [M, 1] query 下标（行）
@@ -205,7 +225,7 @@ allowed = j <= i                                      # [M_q, M_k]，不再是�
 
 decode 时 $M_q = 1$，`i = past`，所有 key 都 $\le$ `past`，causal mask 全 True，可以省掉。
 
-## 换 shape：第 1、5 步不同
+## 换 shape：第 1、6 步不同
 
 这几题没有 mask，难点全在把 head 维挪到 seq 前面、算完再挪回去。
 
@@ -292,7 +312,21 @@ output.copy_(out.reshape(num_q_heads, seq_len, head_dim))
 - 第二个 matmul 用了原始大写 `V`：插过维度的是小写 `v`。
 - 转置 K 用 `transpose(0, 1)`：换的是 head 和 seq。要换最后两维。
 
-## 位置编码：第 2 步之前对 q、k 做 RoPE
+## 位置编码：第 2 步不同
+
+**为什么要位置编码**：第 3–6 步里没有任何东西知道 token 的顺序。把 k、v 的行按同一个顺序打乱，每个 query 的输出不变：softmax 加权求和不在乎 key 排第几。所以「猫追狗」和「狗追猫」里，「追」看到的是同一组 key、得到同一个输出。顺序只能从外面塞进去。
+
+**三种塞法，改的是骨架的不同步**：
+
+| 方法 | 改哪一步 | 怎么改 | 谁在用 |
+|---|---|---|---|
+| 绝对位置（正弦 / 可学习） | 第 1 步之前，投影之前 | 输入加位置向量：$x_m + p_m$ | 原始 Transformer、BERT、GPT-2 |
+| RoPE | 第 2 步 | 按位置旋转 q、k：$q_m = R_m q$，$k_n = R_n k$ | Llama、Qwen、DeepSeek |
+| ALiBi | 第 4 步 | 分数减一个和距离成正比的偏置：$s_{ij} - c_h (i - j)$ | BLOOM、MPT |
+
+符号：$m$、$n$ 是 token 位置；$p_m$ 是位置 $m$ 的 $d_{\text{model}}$ 维向量；$R_m$ 是按位置 $m$ 的旋转（下面 #61）；$s_{ij}$ 是 query $i$ 对 key $j$ 的分数；$c_h$ 是第 $h$ 个 head 的固定斜率，不训练。
+
+现在的 LLM 基本都用 RoPE，LeetGPU 也只考它，下面两题都是 RoPE。
 
 ### #61 Rotary Positional Embedding：旋转本身
 
@@ -308,9 +342,22 @@ out = x * cos + x_rot * sin
 
 **对照二维旋转**：一对 $(a, b)$ 转角度 $\theta$ 得到 $(a\cos\theta - b\sin\theta,\ b\cos\theta + a\sin\theta)$。`rotate_half` 把 $(a, b)$ 变成 $(-b, a)$，所以 `x * cos + rotate_half(x) * sin` 正好是这个公式。
 
-**为什么 RoPE**：q 在位置 $m$ 转 $m\theta$，k 在位置 $n$ 转 $n\theta$，点积只依赖 $(m - n)\theta$，即相对位置。位置信息进了 attention 分数，而不是加在输入上。
+**为什么 RoPE**：q 在位置 $m$ 转 $m\theta$，k 在位置 $n$ 转 $n\theta$，两个向量的夹角多了 $(m - n)\theta$，点积只依赖相对位置 $m - n$。算一个：$D = 2$，$q = k = (1, 0)$，$\theta = 30°$。
+
+| | q 转到 | k 转到 | 夹角 | 点积 |
+|---|---|---|---|---|
+| $m = 3, n = 1$ | 90° | 30° | 60° | $\cos 60° = 0.5$ |
+| $m = 5, n = 3$ | 150° | 90° | 60° | $\cos 60° = 0.5$ |
+
+绝对位置不同、距离都是 2，分数一样。位置信息直接进了 attention 分数，而不是加在输入上。
 
 **只作用在 q 和 k**，v 不动：位置只需要影响「谁看谁」，不需要影响「看到什么内容」。
+
+### 带 KV cache 时的位置
+
+和 [带 KV cache 时的 mask](#带-kv-cache-时的-mask) 一样，位置要用绝对位置：新来的 $M_q$ 个 token 位置是 `past + arange(M_q)`，取 `cos[past : past + M_q]`。
+
+cache 里的 k 在写进去之前就按自己的位置转好了（#115 的第 3、4 步），读出来直接用，不再转。所以骨架里 q、k 共用一份 `cos` / `sin` 只适用于没有 cache 的 self-attention；有 cache 时第 2 步只转新 token 的 q、k。
 
 ### #115 Fused QKV Projection + RoPE + KV Cache Update：decode 的前半步
 
@@ -340,7 +387,7 @@ V_cache[batch_idx, :, positions, :] = v
 
 ## 面试默写顺序
 
-1. #6：五步骨架
+1. #6：六步骨架（没有位置编码和 mask 时是三行）
 2. #53：加 `i` / `j` 和 `allowed`
 3. #12：加拆 head / 合 head
 4. #80：把 head 拆成「组 × 组内」
