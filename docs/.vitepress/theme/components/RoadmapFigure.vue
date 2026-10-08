@@ -44,7 +44,7 @@ const strip = [...layers].reverse()
     </header>
 
     <div class="rm-frame">
-      <ol class="rm-track">
+      <ol class="rm-track" :style="{ '--n': view.length }">
         <li v-for="s in view" :key="s.id">
           <button class="rm-node" :class="{ on: sel === s.id }" :aria-pressed="sel === s.id" @click="sel = s.id">
             <span class="rm-dot">{{ s.id }}</span>
@@ -112,7 +112,7 @@ const strip = [...layers].reverse()
 .rm-frame { border: 1px solid var(--rm-line); border-radius: 4px; background: var(--vp-c-bg); }
 
 /* ---- 阶段轨道 ---- */
-.rm-track { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); margin: 0; padding: 18px 8px 12px; list-style: none; }
+.rm-track { position: relative; display: grid; grid-template-columns: repeat(var(--n), 1fr); margin: 0; padding: 18px 8px 12px; list-style: none; }
 .rm-track::before {
   content: '';
   position: absolute;

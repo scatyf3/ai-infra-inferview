@@ -1,3 +1,4 @@
+import { slugOf } from './leetgpuPage'
 import raw from '@data/leetgpu-challenges.json'
 
 // 题目清单是 https://api.leetgpu.com/api/v1/challenges 的快照，只留 id / 标题 / 难度。
@@ -15,12 +16,6 @@ export interface LeetGPUChallenge {
 export const challenges = raw as LeetGPUChallenge[]
 export const challengeById = new Map(challenges.map((c) => [c.id, c]))
 
-/** 和 leetgpu.com 前端路由同一个规则：/challenges/:name 用 slug(title) 反查题目 */
-export function slugOf(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-}
+export { slugOf }
 
 export const urlOf = (c: LeetGPUChallenge) => `https://leetgpu.com/challenges/${slugOf(c.title)}`
