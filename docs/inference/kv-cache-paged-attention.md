@@ -71,7 +71,7 @@ class BlockAllocator:
     def release(self, b):
         self.ref[b] -= 1
         if self.ref[b] == 0:
-            self.free.append(b)                  # 实际实现会留在 hash 表里做 LRU 淘汰
+            self.free.append(b)                  # 简化版；带 prefix cache 的 LRU 版本见下一节
 
 
 class Sequence:
@@ -127,6 +127,107 @@ def attention(q, seq, B):                        # kernel 按 block table 间接
         k, v = K_cache[b][off], V_cache[b][off]
         ...                                      # 常规 online softmax
 ```
+
+上面的 `prefill` 只演示了「命中就共享」，下面把 prefix caching 完整的生命周期补全。
+
+### Prefix caching 伪代码
+
+核心是让 block 有三种状态，而不是简单的「占用 / 空闲」：
+
+| 状态 | `ref` | 在 hash 表里 | 在 free 队列里 | 含义 |
+|---|---|---|---|---|
+| 使用中 | > 0 | 满了就在 | 否 | 有请求正在用 |
+| **已缓存、空闲** | 0 | 是 | 是 | 没人用，但内容还在，可以被命中复活，也可以被淘汰 |
+| 空闲 | 0 | 否 | 是 | 纯空 block |
+
+请求结束时 block **不清空**，只是 `ref` 归零后进 free 队列尾部。新请求要分配时从队头拿（LRU），拿到的 block 如果还挂在 hash 表上，**这时才把它从 hash 表删掉**（淘汰）。
+
+```python
+from collections import OrderedDict
+
+class Block:
+    def __init__(self, bid):
+        self.id = bid
+        self.ref = 0
+        self.hash = None                         # 满了且登记过才有
+
+
+class PrefixCachingAllocator:
+    def __init__(self, num_blocks):
+        self.blocks = [Block(i) for i in range(num_blocks)]
+        self.free_q = OrderedDict((b.id, b) for b in self.blocks)   # LRU：队头最久没用
+        self.cached = {}                         # hash → Block
+
+    # ---------- 查缓存 ----------
+    def match_prefix(self, tokens, B):
+        """返回命中的 block 列表。链式 hash，第一次 miss 后面必然都 miss。"""
+        hits, h = [], None
+        # 至少留最后 1 个 token 不命中：要靠它跑一次 forward 拿 logits
+        n_full = (len(tokens) - 1) // B
+        for i in range(n_full):
+            h = hash((h, tuple(tokens[i * B:(i + 1) * B])))
+            blk = self.cached.get(h)
+            if blk is None:
+                break
+            hits.append(blk)
+        return hits
+
+    # ---------- 分配 ----------
+    def touch(self, blk):                        # 命中：引用 +1，从 free 队列复活
+        if blk.ref == 0:
+            del self.free_q[blk.id]
+        blk.ref += 1
+
+    def alloc(self):
+        if not self.free_q:
+            raise NoFreeBlocks                   # 交给调度器抢占
+        _, blk = self.free_q.popitem(last=False) # 从队头拿最久没用的
+        if blk.hash is not None:                 # 它还缓存着别人的前缀 → 淘汰
+            del self.cached[blk.hash]
+            blk.hash = None
+        blk.ref = 1
+        return blk
+
+    # ---------- 登记 ----------
+    def register_full(self, blk, h):
+        """block 写满时调用（prefill 和 decode 都会触发）。"""
+        if h in self.cached:                     # 别的请求同时算出了同一块，保留先来的
+            return
+        blk.hash = h
+        self.cached[h] = blk
+
+    # ---------- 释放 ----------
+    def free(self, block_table):
+        # 倒序放回：序列尾部的 block 先被淘汰，开头的公共前缀活得最久
+        for blk in reversed(block_table):
+            blk.ref -= 1
+            if blk.ref == 0:
+                self.free_q[blk.id] = blk        # 进队尾，内容和 hash 都保留
+
+
+def schedule_new_request(req, A, B):
+    hits = A.match_prefix(req.tokens, B)
+    for blk in hits:
+        A.touch(blk)
+    req.block_table = list(hits)
+    req.num_computed = len(hits) * B             # 这些 token 直接跳过 prefill
+
+    n_need = cdiv(len(req.tokens), B) - len(hits)
+    req.block_table += [A.alloc() for _ in range(n_need)]
+    # 只对 tokens[num_computed:] 跑 prefill，attention 照常读前面命中的 KV
+
+
+def on_block_full(req, logical_idx, A, B):       # 每写满一个 block 调一次
+    h = chain_hash(req.tokens[:(logical_idx + 1) * B])  # 实际实现会增量地缓存上一块的 hash
+    A.register_full(req.block_table[logical_idx], h)
+```
+
+几个容易漏的点：
+
+- **命中要留一个 token**：prompt 全部命中时也得至少算最后一个 token 的 forward，否则拿不到第一个输出 token 的 logits。所以 `match_prefix` 最多匹配到 `(len - 1) // B` 个 block。
+- **淘汰发生在 alloc，不在 free**：free 只把 `ref` 降到 0，内容保留，这才让「上一轮对话结束、下一轮马上来」能命中。
+- **hash 要包含前缀，而且要包含额外的 key**：同样的 16 个 token 出现在不同前缀后面，KV 不同。多模态输入（图片 hash）、LoRA id、cache salt 也要拌进 hash，否则会错误命中。
+- **decode 生成的 token 也能被缓存**：`on_block_full` 在 decode 阶段同样会触发，所以多轮对话里上一轮的回答也能被下一轮命中。
 
 SGLang 的 **RadixAttention** 把这个做得更进一步：用 radix tree 管理所有前缀，支持任意长度的部分匹配（不止 block 对齐），并用 LRU 淘汰。收益场景：多轮对话（每轮复用全部历史）、agent 的长 system prompt、树搜索类的推理（共享分支前缀）。
 

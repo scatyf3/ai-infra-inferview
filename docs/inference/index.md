@@ -21,3 +21,4 @@ title: 推理系统核心
 - [Speculative Decoding](./speculative-decoding) — draft-target、acceptance rate、EAGLE / Medusa / MTP 的区别
 - [量化：GPTQ / AWQ / SmoothQuant / FP8](./quantization) — W4A16 vs W8A8、per-group vs per-tensor、为什么 decode 场景 weight-only 就够
 - [指标与 Benchmark：TTFT / TPOT / ITL / Goodput](./metrics-benchmark) — 怎么做 benchmark，SLA 下怎么调 batch
+- [Omni Serving：多模态输入输出的推理系统](./omni-serving) — Thinker-Talker 流水线、EPD 分离、首包延迟与 RTF
