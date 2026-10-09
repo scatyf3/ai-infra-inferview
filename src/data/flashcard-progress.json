@@ -671,6 +671,18 @@
     "due": "2026-10-10T12:43:50.633Z",
     "last_review": "2026-10-09T12:43:50.633Z"
   },
+  "torch-read-contiguous": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-09T12:59:53.751Z",
+    "last_review": "2026-10-09T12:49:53.751Z"
+  },
   "torch-read-copy": {
     "stability": 8.2956,
     "difficulty": 1,
