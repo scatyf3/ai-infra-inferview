@@ -895,13 +895,13 @@ export const baguCards: Card[] = [
     `,
     code: lines`
       # 一个训练 step（省略 Adam 的偏差修正）
-      loss = model(x, weights=w)         # w: bf16
-      g = grad(loss, w)                  # g: bf16，和 w 一样多
+      loss = model(x, weights=w)
+      g = grad(loss, w)
       g32 = g.float()
-      m = b1 * m + (1 - b1) * g32        # fp32，跨 step 保留
-      v = b2 * v + (1 - b2) * g32 ** 2   # fp32，跨 step 保留
-      w32 -= lr * m / (v.sqrt() + eps)   # 在 fp32 主权重上更新
-      w = w32.to(bfloat16)               # 给下一步前向用
+      m = b1 * m + (1 - b1) * g32
+      v = b2 * v + (1 - b2) * g32 ** 2
+      w32 -= lr * m / (v.sqrt() + eps)
+      w = w32.to(bfloat16)
     `,
     ref: TMEM,
   }),
@@ -1029,7 +1029,7 @@ export const baguCards: Card[] = [
       seg = torch.tensor([0, 0, 0, 1, 1, 2, 2, 2])   # 每个 token 属于第几条样本
       i = torch.arange(8)[:, None]                   # (8, 1) query 下标
       j = torch.arange(8)[None, :]                   # (1, 8) key 下标
-      allowed = (seg[i] == seg[j]) & (j <= i)        # (8, 8) 同一样本 且 因果
+      allowed = (seg[i] == seg[j]) & (j <= i)        # (8, 8)
       scores = scores.masked_fill(~allowed, float('-inf'))
 
       starts = torch.tensor([0, 3, 5])               # 每条样本的起点

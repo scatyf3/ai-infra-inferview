@@ -174,11 +174,7 @@ prefill和decode的形态决定了两者的优化不同
 
 prefill 和 decode 抢同一块卡。一个长 prompt 的 prefill 会把所有正在 decode 的请求卡住几百毫秒，表现为 ITL 尖刺。解法是 **chunked prefill**（把 prefill 切成小块，和 decode 拼在同一个 batch 里）或 **PD 分离**（prefill 和 decode 跑在不同的卡上，KV 通过网络传）。
 
-## 交互
-
-把 batch 从 1 调到 256，看 decode 的点沿着斜坡向右爬；调到 ridge 附近时，继续加 batch 就不再提升单卡吞吐了。
-
-<MemoryCalculator />
+想代入具体模型、GPU、batch 算 AI 和 TTFT / TPOT，用 [显存账页面的计算器](./memory-accounting)。
 
 ## 面试追问
 

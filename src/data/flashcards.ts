@@ -144,7 +144,7 @@ const primitiveCards: Card[] = [
     code: lines`
       i = torch.arange(S, device=x.device)[:, None]   # (S, 1) query 下标
       j = torch.arange(S, device=x.device)[None, :]   # (1, S) key 下标
-      allowed = j <= i                                # (S, S) True = 能看
+      allowed = j <= i                                # (S, S)
       attn = attn.masked_fill(~allowed, float('-inf'))
       # 等价的旧写法：mask = ones(S, S, bool).triu(1) 直接表示「看不到」
     `,
@@ -462,13 +462,6 @@ const primitiveCards: Card[] = [
     topic: 'repeat · 写代码',
     q: '写代码：`x = torch.tensor([[1, 2, 3], [4, 5, 6]])`，shape `(2, 3)`。想把它**整块**上下摞两份，得到 `(4, 3)`：前两行是 x，后两行还是 x。',
     a: '`x.repeat(2, 1)`。\n`repeat` 的参数是**每一维各铺几份**，有几维就写几个数，输出 shape = 输入 shape 逐维乘这些数：\n1. 第 0 维（行，往下数）铺 2 份：2 × 2 = 4 行。\n2. 第 1 维（列，往右数）铺 1 份，也就是不变：3 × 1 = 3 列。\n所以 `(2, 3)` → `(4, 3)`。「铺」是把**整块** x 当瓷砖往下贴，顺序是 x、x；想要每一行自己连着复制（行 0、行 0、行 1、行 1）用的是 `repeat_interleave`（见图）。',
-    code: lines`
-      >>> x.repeat(2, 1)
-      tensor([[1, 2, 3],
-              [4, 5, 6],
-              [1, 2, 3],
-              [4, 5, 6]])
-    `,
     fig: lines`
       x rows: r0 = [1 2 3], r1 = [4 5 6]
 
@@ -497,17 +490,6 @@ const primitiveCards: Card[] = [
         r0  [1 2]         [1  1  2  2]
         r1  [3 4]         [3  3  4  4]
         r1  [3 4]
-    `,
-    code: lines`
-      >>> x.repeat_interleave(2, dim=0)
-      tensor([[1, 2],
-              [1, 2],
-              [3, 4],
-              [3, 4]])
-
-      >>> x.repeat_interleave(2, dim=1)
-      tensor([[1, 1, 2, 2],
-              [3, 3, 4, 4]])
     `,
     ref: `${TP}#只改元数据-vs-会拷贝`,
   },
