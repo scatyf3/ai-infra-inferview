@@ -29,6 +29,17 @@
       "at": 1791470197452
     }
   ],
+  "/ai-infra-inferview/inference/prefill-decode-roofline": [
+    {
+      "id": "mv11zf8up89p",
+      "exact": "roofline",
+      "prefix": "hmetic intensity 约等于序列长度（上千），落在 ",
+      "suffix": " 的右侧，compute-bound；decode 的 AI 约",
+      "note": "",
+      "created": 1791555661038,
+      "at": 1791555661038
+    }
+  ],
   "/ai-infra-inferview/parallel/megatron-tp": [
     {
       "id": "muzmu07e0s5o",
