@@ -409,15 +409,15 @@
   },
   "bagu-w4a16-vs-w8a8": {
     "stability": 6.14141419,
-    "difficulty": 6.73389818,
-    "elapsed_days": 4,
-    "scheduled_days": 0,
-    "reps": 3,
+    "difficulty": 6.72239265,
+    "elapsed_days": 0,
+    "scheduled_days": 6,
+    "reps": 4,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-09T03:45:55.604Z",
-    "last_review": "2026-10-09T03:39:55.604Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-15T04:25:00.347Z",
+    "last_review": "2026-10-09T04:25:00.347Z"
   },
   "bagu-weight-rule": {
     "stability": 24.3227276,
