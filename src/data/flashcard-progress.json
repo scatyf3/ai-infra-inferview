@@ -1188,16 +1188,16 @@
     "last_review": "2026-10-09T12:47:59.711Z"
   },
   "triton-arange-pow2": {
-    "stability": 2.36913529,
-    "difficulty": 3.4509278,
-    "elapsed_days": 0,
-    "scheduled_days": 2,
-    "reps": 3,
+    "stability": 15.94072638,
+    "difficulty": 3.44270524,
+    "elapsed_days": 5,
+    "scheduled_days": 16,
+    "reps": 4,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-06T06:10:35.965Z",
-    "last_review": "2026-10-04T06:10:35.965Z"
+    "due": "2026-10-25T12:52:34.377Z",
+    "last_review": "2026-10-09T12:52:34.377Z"
   },
   "triton-atomic-cost": {
     "stability": 3.94605407,
