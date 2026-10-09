@@ -516,16 +516,16 @@
     "last_review": "2026-10-05T00:00:01.606Z"
   },
   "bagu-tokenize-event-loop": {
-    "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "stability": 3.94605407,
+    "difficulty": 1,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 4,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-09T16:26:23.553Z",
-    "last_review": "2026-10-09T16:16:23.553Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T16:44:32.679Z",
+    "last_review": "2026-10-09T16:44:32.679Z"
   },
   "bagu-torch-compile": {
     "stability": 2.3065,
