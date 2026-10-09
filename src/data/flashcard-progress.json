@@ -1392,15 +1392,15 @@
     "last_review": "2026-10-04T18:52:50.524Z"
   },
   "triton-you-vs-compiler": {
-    "stability": 2.3065,
-    "difficulty": 2.11121424,
-    "elapsed_days": 0,
-    "scheduled_days": 2,
-    "reps": 2,
+    "stability": 18.18015363,
+    "difficulty": 2.1043314,
+    "elapsed_days": 5,
+    "scheduled_days": 18,
+    "reps": 3,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-06T17:05:26.844Z",
-    "last_review": "2026-10-04T17:05:26.844Z"
+    "due": "2026-10-27T12:52:42.773Z",
+    "last_review": "2026-10-09T12:52:42.773Z"
   }
 }
