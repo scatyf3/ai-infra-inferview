@@ -211,6 +211,10 @@
     "text": "这啥玩意，有这个场景吗？",
     "at": 1791173564200
   },
+  "torch-write-masked-fill": {
+    "text": "为啥qto padding k的mask选dim=-1",
+    "at": 1791549821036
+  },
   "torch-write-reduce": {
     "text": ".values是啥玩意",
     "at": 1791549397294
