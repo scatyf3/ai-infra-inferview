@@ -875,6 +875,18 @@
     "due": "2026-10-30T12:19:41.193Z",
     "last_review": "2026-10-09T12:19:41.193Z"
   },
+  "torch-read-where": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-09T12:57:53.948Z",
+    "last_review": "2026-10-09T12:47:53.948Z"
+  },
   "torch-softmax-fn": {
     "stability": 8.2956,
     "difficulty": 1,
