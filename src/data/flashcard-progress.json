@@ -204,16 +204,16 @@
     "last_review": "2026-10-04T15:21:45.432Z"
   },
   "bagu-lora": {
-    "stability": 2.3065,
-    "difficulty": 2.11810397,
-    "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "stability": 16.17726312,
+    "difficulty": 2.11121424,
+    "elapsed_days": 4,
+    "scheduled_days": 16,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-05T01:21:31.906Z",
-    "last_review": "2026-10-05T01:11:31.906Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-25T03:41:10.926Z",
+    "last_review": "2026-10-09T03:41:10.926Z"
   },
   "bagu-metrics": {
     "stability": 8.2956,
