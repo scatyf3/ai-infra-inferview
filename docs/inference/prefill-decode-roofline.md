@@ -18,19 +18,30 @@ stack: [hw-mem, k-gemm]
 
 ## 推导
 
-### 一条链
+### 一个算子被什么卡住
+
+一个算子要做两件事：在 SM 上算 FLOPs，从 HBM 搬字节。两件事可以重叠，所以耗时取决于更慢的那件：
 
 $$
-\text{shape} \to \text{bytes} + \text{FLOPs} \to \text{AI} = \frac{\text{FLOPs}}{\text{Bytes}} \to \text{AI} \lessgtr \text{ridge} \to \text{优化手段}
+t \approx \max\left(\frac{\text{FLOPs}}{\text{peak}},\ \frac{\text{Bytes}}{\text{BW}}\right)
 $$
 
-roofline 的上界是
+两项一比，算子和硬件各剩一个数。算子这边是**算术强度** $\text{AI} = \text{FLOPs} / \text{Bytes}$，也就是每读 1 字节做几次运算。硬件这边是 **ridge point** $= \text{peak} / \text{BW}$。AI 小于 ridge 时搬字节更慢，算子是 memory-bound；大于 ridge 时算得更慢，是 compute-bound。换成吞吐，就是 roofline 模型给出的上界（Williams et al., 2009）：
 
 $$
 \text{attainable FLOP/s} = \min(\text{peak}, \ \text{BW} \times \text{AI})
 $$
 
-拐点（ridge point）在 $\text{AI} = \text{peak} / \text{BW}$。H100 SXM：$989\ \text{TFLOP/s} \div 3.35\ \text{TB/s} \approx 295\ \text{FLOP/B}$。**这个数要记住**：AI 低于 295 就是浪费算力，高于 295 就是浪费带宽。
+所以分析 prefill 和 decode 的步骤一样：从 shape 数出 FLOPs 和字节数，相除得到 AI，再和 ridge 比较。比较的结果决定该省算力还是省字节。
+
+ridge 不用背，拿规格表现算就行。H100 SXM 的 bf16 dense 峰值是 989 TFLOP/s，HBM3 带宽 3.35 TB/s，所以 ridge $= 989 \div 3.35 \approx 295\ \text{FLOP/B}$。AI 低于 295 时算力闲着，高于 295 时带宽闲着。
+
+下图是 H100 的 roofline，标出了后面要推的三个点。两个轴都取对数。斜线段是带宽上界 $\text{BW} \times \text{AI}$，水平段是算力峰值，两段的交点就是 ridge。
+
+- **decode 的点在斜线上**：要往上走，只能加 batch（点向右移），或者换带宽更大的卡（斜线整体上移）。
+- **prefill 的点在平台上**：已经顶到算力上限，再提速只能靠提高 MFU 或换更低精度。
+
+<RooflineChart :peak="989e12" :bw="3.35e12" peak-label="H100 bf16 989 TFLOP/s" :points="[{ label: 'decode B=1', ai: 1, color: '#ef4444' }, { label: 'decode B=64', ai: 64, color: '#f59e0b' }, { label: 'prefill S=2048', ai: 2048, color: '#22c55e' }]" />
 
 ### prefill
 

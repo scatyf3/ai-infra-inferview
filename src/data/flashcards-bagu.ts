@@ -123,7 +123,7 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-layer-params',
     topic: '显存账',
-    q: '一层 decoder（GQA + SwiGLU）的参数量怎么算？常见算错点是什么？',
+    q: '用 d、H_kv、d_h、d_ff 写出一层 decoder（GQA + SwiGLU）的参数量公式，并用 Llama-3-70B 验算。常见算错点是什么？',
     a: '符号：d hidden 维度，H / H_kv 是 Q / KV head 数，d_h head 维度（H·d_h = d），d_ff MLP 中间维度，V 词表大小。按矩阵一个个数（见图）：\n1. attention：W_q、W_o 各 $d^2$；W_k、W_v 各 $d \\cdot H_{kv} d_h$。\n2. MLP（SwiGLU）：gate、up、down 三个矩阵，各 $d \\cdot d_{ff}$。\n3. 两个 RMSNorm：各 d。\n每层 $= 2d^2 + 2 d H_{kv} d_h + 3 d\\, d_{ff} + 2d$。模型再加 embedding 和 lm_head 各 $Vd$（共享就只算一次）。\n算错点：**SwiGLU 是三个矩阵**，不是两个；GQA 下 K、V 投影比 Q 小。\n验算 Llama-3-70B（d = 8192，H_kv = 8，d_h = 128，d_ff = 28672，80 层，V = 128256）：每层约 0.86 B，80 层 68.4 B，加 embedding 和 lm_head 2.1 B，共约 **70.6 B**。',
     fig: lines`
       x [d]
@@ -551,10 +551,24 @@ export const baguCards: Card[] = [
 
   // ---------------- GPU ----------------
   b({
-    id: 'bagu-gpu-three-basics',
+    id: 'bagu-gpu-coalescing',
     topic: 'GPU',
-    q: '写 CUDA kernel 的三个基本功是什么？',
-    a: '1. **访存合并（coalescing）**：一个 warp 的 32 个线程读连续地址，合成一次 128 B 事务（32 × 4 B）。\n例：行主序矩阵，线程 t 读 `A[row][t]` 是连续的；读 `A[t][col]` 每个线程隔一整行，变成 32 次事务。\n优化：转置这类必须跨行读的，先合并地读进 shared memory，再从 shared memory 按列取。\n2. **避免 bank conflict**：shared memory 分 32 个 bank，地址按 4 B 轮流落到各个 bank。同一 warp 的多个线程打到同一 bank 的不同地址会串行。\n例：`float tile[32][32]`，一个 warp 读一列 `tile[t][c]`，相邻线程地址差 32 个 float，全落在同一个 bank，32 路冲突。\n优化：声明成 `tile[32][33]`，每行错开一个 bank，一列的 32 个元素落在 32 个不同的 bank。\n3. **occupancy 够用**：每个 SM 要驻留足够多的 warp，一个 warp 等内存时换另一个上。\n例：H100 每个 SM 有 65536 个寄存器、最多 64 个 warp。kernel 每线程用 128 个寄存器，一个 SM 只能放 512 个线程 = 16 个 warp，occupancy 25%。\n优化：用 `__launch_bounds__` 限制寄存器、少用 shared memory，或者让每个线程多发几个独立的 load。够藏住延迟就行，不是越高越好。',
+    q: '行主序 float 矩阵，一个 warp 的 32 个线程（t = 0..31）分别读 `A[row][t]` 和 `A[t][col]`，各要读多少个 32 B sector？转置怎么避开不合并的那一边？',
+    a: 'global memory 按 32 B sector 读，一个 warp 的访问会合并成尽量少的 sector。\n1. `A[row][t]`：32 个 float 地址连续，共 128 B = **4 个 sector**，每个字节都有用。\n2. `A[t][col]`：相邻线程差一整行，每个线程落在不同的 sector，要 **32 个 sector**，每个 32 B 只用 4 B，带宽利用率 4 / 32 = **12.5%**。\n转置必然有一边按列：读和写里总有一个跨行。做法是让 global 的读和写都按行：一个 block 先按行把 32×32 的 tile 读进 shared memory，再从 shared memory 按列取出、按行写回。跨行的那一步挪到了片上，shared memory 没有 sector 浪费（但要处理 bank conflict，见下一张）。\n出处：Mark Harris《How to Access Global Memory Efficiently in CUDA C/C++ Kernels》 https://developer.nvidia.com/blog/how-access-global-memory-efficiently-cuda-c-kernels/ 和《An Efficient Matrix Transpose in CUDA C/C++》 https://developer.nvidia.com/blog/efficient-matrix-transpose-cuda-cc/ （有各版本的带宽实测）；CUDA C++ Best Practices Guide「Coalesced Access to Global Memory」 https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/ 。',
+    ref: GPU,
+  }),
+  b({
+    id: 'bagu-gpu-bank-conflict',
+    topic: 'GPU',
+    q: '`__shared__ float tile[32][32]`，一个 warp 读一列 `tile[t][c]`（t = 0..31），是几路 bank conflict？为什么声明成 `tile[32][33]` 就没了？',
+    a: 'shared memory 分 32 个 bank，每 4 B 一个 bank，下标 i 的 float 落在 bank `i % 32`。同一 warp 里多个线程访问同一 bank 的**不同地址**会串行（同一地址是广播，不冲突）。\n1. `[32][32]`：`tile[t][c]` 下标 `32t + c`，bank 都是 `c`，32 个线程打到同一个 bank，**32 路冲突**，这次读要串行 32 次。\n2. `[32][33]`：下标 `33t + c`，bank 是 `(t + c) % 32`，t 从 0 到 31 各不相同，32 个线程落在 32 个 bank，**无冲突**。代价只是每行多 1 个 float（3%）。\n按行读 `tile[r][t]` 两种声明都没冲突，所以 padding 专门解决矩阵转置这种按列读 tile 的情况。\n出处：Mark Harris《Using Shared Memory in CUDA C/C++》 https://developer.nvidia.com/blog/using-shared-memory-cuda-cc/ ；转置博客里 `[32][32]` → `[32][33]` 的带宽对比 https://developer.nvidia.com/blog/efficient-matrix-transpose-cuda-cc/ 。',
+    ref: GPU,
+  }),
+  b({
+    id: 'bagu-gpu-occupancy',
+    topic: 'GPU',
+    q: 'H100 每个 SM 有 65536 个寄存器、最多驻留 64 个 warp。kernel 每线程用 128 个寄存器，occupancy 是多少？要不要想办法提到 100%？',
+    a: 'occupancy = SM 上驻留的 warp 数 / 上限。warp 多，一个 warp 等内存时就有别的 warp 可换上，延迟被藏住。\n1. 每个 warp 要 128 × 32 = 4096 个寄存器，65536 / 4096 = **16 个 warp**，occupancy 16 / 64 = **25%**。\n2. 要 100% 得把寄存器压到 65536 / 2048 = 32 个/线程，多数计算 kernel 放不下，会溢出（spill）到 local memory，反而变慢。\n**不一定要提**：目标是藏住延迟，不是 occupancy 本身。每个线程多发几个互不依赖的 load（ILP），少量 warp 也能跑满带宽；matmul、FlashAttention 这类 kernel 常年低 occupancy、用大量寄存器存 tile。确实是延迟没藏住时，再用 `__launch_bounds__` 限制寄存器或减少 shared memory 用量，并用 Nsight Compute 确认。\n出处：Vasily Volkov《Better Performance at Lower Occupancy》（GTC 2010） https://www.nvidia.com/content/GTC-2010/pdfs/2238_GTC2010.pdf ；CUDA C++ Best Practices Guide「Occupancy」 https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/ ；Simon Boehm 的 matmul worklog 在真实 kernel 上按寄存器和 shared memory 算 occupancy https://siboehm.com/articles/22/CUDA-MMM 。',
     ref: GPU,
   }),
   b({

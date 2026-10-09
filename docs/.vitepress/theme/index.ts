@@ -14,6 +14,7 @@ import RoadmapFigure from './components/RoadmapFigure.vue'
 import TritonProgramViz from './components/TritonProgramViz.vue'
 import Flashcards from './components/Flashcards.vue'
 import QuantGranularity from './components/QuantGranularity.vue'
+import RooflineChart from './components/ui/RooflineChart.vue'
 import StackPageExtras from './components/StackPageExtras.vue'
 import ReaderNotes from './components/ReaderNotes.vue'
 import SyncControl from './components/SyncControl.vue'
@@ -46,5 +47,6 @@ export default {
     app.component('TritonProgramViz', TritonProgramViz)
     app.component('Flashcards', Flashcards)
     app.component('QuantGranularity', QuantGranularity)
+    app.component('RooflineChart', RooflineChart)
   },
 } satisfies Theme
