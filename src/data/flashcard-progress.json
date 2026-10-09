@@ -552,16 +552,16 @@
     "last_review": "2026-10-09T16:44:32.679Z"
   },
   "bagu-torch-compile": {
-    "stability": 2.3065,
-    "difficulty": 2.11121424,
-    "elapsed_days": 0,
-    "scheduled_days": 2,
-    "reps": 2,
+    "stability": 28.30520394,
+    "difficulty": 1,
+    "elapsed_days": 4,
+    "scheduled_days": 28,
+    "reps": 3,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-07T01:16:26.130Z",
-    "last_review": "2026-10-05T01:16:26.130Z"
+    "due": "2026-11-06T23:16:01.960Z",
+    "last_review": "2026-10-09T23:16:01.960Z"
   },
   "bagu-ttft-parts": {
     "stability": 10.65484778,
