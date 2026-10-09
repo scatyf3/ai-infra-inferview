@@ -15,18 +15,20 @@
       "exact": "KV Cache 与 PagedAttention",
       "prefix": "",
       "suffix": " 布局、PagedAttention、prefix cachin",
-      "note": "删掉傻傻的图，给个伪代码",
+      "note": "",
       "created": 1791470066631,
-      "at": 1791470082347
+      "at": 1791571602437,
+      "deleted": true
     },
     {
       "id": "muzn3bb49g9a",
       "exact": "写的时候要小心：refCount > 1 的 block 不能原地写，必须 copy-on-write 先复制出一份。只有满 block 才参与共享，因为未满 block 还会被追加。",
       "prefix": "号填进新序列的 block table，refCount 加一。",
       "suffix": "SGLang 的 RadixAttention 把这个做得更进一",
-      "note": "啥玩意，何prefix cache相关的吗",
+      "note": "",
       "created": 1791470182144,
-      "at": 1791470197452
+      "at": 1791571602437,
+      "deleted": true
     }
   ],
   "/ai-infra-inferview/inference/prefill-decode-roofline": [
@@ -77,18 +79,20 @@
       "exact": "两种切法",
       "prefix": "一个这样的 pair，所以每层两次 all-reduce。推导 ",
       "suffix": " 对 Y=XA，X∈RS×d，A∈Rd×h：Column par",
-      "note": "写下矩阵默认按行还是按列存啊",
+      "note": "",
       "created": 1791469747850,
-      "at": 1791469765035
+      "at": 1791571602437,
+      "deleted": true
     },
     {
       "id": "muzmvb4obmn2",
       "exact": "关键：column parallel 的输出恰好是 row parallel 需要的输入形式（都是按 hidden 维度分块）。MLP 是 Y=GeLU(XA)B：",
       "prefix": "l-reduce 才能得到正确结果。为什么组合起来只要一次通信 ",
       "suffix": "X (完整) ──column parallel A──> [X",
-      "note": "wok这个设计有点好",
+      "note": "",
       "created": 1791469808664,
-      "at": 1791469814251
+      "at": 1791571602437,
+      "deleted": true
     }
   ],
   "/ai-infra-inferview/parallel/parallelism-overview": [
@@ -97,18 +101,20 @@
       "exact": "p 是 stage 数，m 是 micro-batch 数。m≫p 才划算，所以 PP 需要大 batch 来摊薄",
       "prefix": "级，可以跨节点走 IB。代价是流水线气泡：bubble=p−1m",
       "suffix": "。1F1B 调度能把峰值激活显存从 O(m) 降到 O(p)，i",
-      "note": "何意味，batch大不是batch数小吗",
+      "note": "",
       "created": 1791469153984,
-      "at": 1791469170335
+      "at": 1791571602437,
+      "deleted": true
     },
     {
       "id": "muzmimoqqj0o",
       "exact": "注意 DP attention：MoE 模型上 attention 部分用 DP（因为 attention 的权重小）、expert 部分用 EP，能避免 attention 的 KV 被 TP 复制，DeepSeek 的部署方案就是这么做的。",
       "prefix": "有完整模型，请求按负载分流，副本之间零通信。推理扩容的默认手段。",
       "suffix": "EP：all-to-all 是新瓶颈 每个 MoE 层两次 al",
-      "note": "这里af分离了吗？",
+      "note": "",
       "created": 1791469217114,
-      "at": 1791469223080
+      "at": 1791571602437,
+      "deleted": true
     }
   ],
   "/ai-infra-inferview/parallel/zero-fsdp": [
@@ -117,9 +123,10 @@
       "exact": "ZeRO 1 / 2 / 3 与 FSDP",
       "prefix": "",
       "suffix": " 通信-显存 tradeoff一句话结论 数据并行每张卡都存一份",
-      "note": "这可能要从最通俗讲起了，不懂",
+      "note": "",
       "created": 1791469977580,
-      "at": 1791469988246
+      "at": 1791571602437,
+      "deleted": true
     }
   ]
 }

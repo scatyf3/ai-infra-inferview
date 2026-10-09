@@ -1,19 +1,19 @@
 {
   "bagu-activation-small": {
-    "text": "这对吗，为了graph化，中间结果的内存地址也要固定吧",
-    "at": 1791156154485
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-benchmark-design": {
-    "text": "1. 泊松到达展示下 2. 4啥意思",
-    "at": 1791161703179
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-bf16-fp16": {
-    "text": "要不先问下各个权重的格式",
-    "at": 1791162504343
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-caching-allocator": {
-    "text": "类似java的管理吗，说详细点",
-    "at": 1791162386562
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-decode-ai": {
     "text": "",
@@ -24,239 +24,239 @@
     "at": 1791556130632
   },
   "bagu-flash-decoding": {
-    "text": "flashdecoding是基于flashattn加了splitk吗",
-    "at": 1791157327274
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-flat-input": {
-    "text": "padding的例子",
-    "at": 1791162299611
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-goodput": {
-    "text": "看情况了，offline就看吞吐，online看sla",
-    "at": 1791161501647
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-gptq-awq": {
-    "text": "可视化？",
-    "at": 1791159431065
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-gpu-three-basics": {
-    "text": "直觉举例和优化例子",
-    "at": 1791161934598
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-gqa": {
-    "text": "不明，主要就是节约kv吧，q没啥浪费",
-    "at": 1791157060620
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-gqa-tp": {
-    "text": "TP小于等于头数",
-    "at": 1791157988995
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-how-many-gpus": {
-    "text": "粒度太醋了，不适合做闪卡，适合展示，给个code demo",
-    "at": 1791156117897
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-kernel-fusion": {
-    "text": "这个在哪里啊，sa前，lm的第一个吗，直接norm+linear add？",
-    "at": 1791162053105
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-kv-per-token": {
-    "text": "b是啥，size of bf16吗",
-    "at": 1791127399612
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-kv-quant": {
-    "text": "per tensor啥意思，2解释下",
-    "at": 1791156878088
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-layer-params": {
-    "text": "可视化",
-    "at": 1791160306241
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-lora": {
-    "text": "latex公式和可视化",
-    "at": 1791162681117
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-mla": {
-    "text": "需要细节",
-    "at": 1791157146157
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-preempt-whom": {
-    "text": "对吗，有source吗",
-    "at": 1791157545575
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-prefill-ai": {
     "text": "",
     "at": 1791556130632
   },
   "bagu-prefix-cache": {
-    "text": "code，第二段啥意思啊",
-    "at": 1791156347639
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-quant-granularity": {
-    "text": "先说定义再说取舍",
-    "at": 1791160345536
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-request-lifecycle": {
-    "text": "可视化和更粗粒度的阶段（大阶段+例子）",
-    "at": 1791162112645
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-ridge-point": {
-    "text": "写个genral的公式呗，或者让我算，我不需要背诵这个吧",
-    "at": 1791127192930
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-sd-routing": {
-    "text": "路由到持有这段 KV 的副\n1. 需要核心router吗\n2. 每个server都要维护自己有哪些prefix kv吗",
-    "at": 1791163010795
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-sft-packing": {
-    "text": "mask可视化",
-    "at": 1791162789427
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-spec-exact": {
-    "text": "可视化和数学公式",
-    "at": 1791158423944
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-spec-expected": {
-    "text": "数学公式\n你这个公式为啥不算bonus",
-    "at": 1791554582916
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-spec-why": {
-    "text": "浪费算力，换mem",
-    "at": 1791158400374
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-tokenize-event-loop": {
-    "text": "asyncio 事件 是啥，你想问的是为啥不串行，而是单独搞个线程对吗",
-    "at": 1791162246784
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-torch-compile": {
-    "text": "这部分能写个细节note吗",
-    "at": 1791519743517
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-train-memory": {
-    "text": "啥意思，搞不明白",
-    "at": 1791162482242
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-ttft-parts": {
-    "text": "采样 + detokenize + 网络 啥意思",
-    "at": 1791161791836
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-vllm-v1": {
-    "text": "要图",
-    "at": 1791162255631
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-warp-divergence": {
-    "text": "例子",
-    "at": 1791161969337
+    "text": "",
+    "at": 1791571602437
   },
   "bagu-weight-rule": {
-    "text": "billion是10^？来这",
-    "at": 1791127562489
+    "text": "",
+    "at": 1791571602437
   },
   "kernel-cross-program-reduce": {
-    "text": "splitk 解释下",
-    "at": 1791094403472
+    "text": "",
+    "at": 1791571602437
   },
   "kernel-elementwise-bound": {
-    "text": "感觉类似llm的decode阶段",
-    "at": 1791094385899
+    "text": "",
+    "at": 1791571602437
   },
   "kernel-parallel-vs-reduce": {
-    "text": "格式不好看，写下1.2.3",
-    "at": 1791094319751
+    "text": "",
+    "at": 1791571602437
   },
   "torch-broadcast-rule": {
-    "text": "维度数不够的在左边补 1，这是核心吧",
-    "at": 1791163300824
+    "text": "",
+    "at": 1791571602437
   },
   "torch-keepdim": {
-    "text": "这个错我犯过了吗，感觉很怪啊",
-    "at": 1791164630748
+    "text": "",
+    "at": 1791571602437
   },
   "torch-masked-fill": {
-    "text": "~allowed 啥意思，mask_fill语义是啥",
-    "at": 1791164843989
+    "text": "",
+    "at": 1791571602437
   },
   "torch-meta-vs-copy": {
-    "text": "x.unsqueeze(0)、x.expand(4, -1) 啥意思",
-    "at": 1791163183111
+    "text": "",
+    "at": 1791571602437
   },
   "torch-read-cat": {
-    "text": "看不懂啊，这里的dim是哪个dim的shape不变吗",
-    "at": 1791548696901
+    "text": "",
+    "at": 1791571602437
   },
   "torch-read-index": {
-    "text": "这玩意我们也用不到啊，删掉吧",
-    "at": 1791173388250
+    "text": "",
+    "at": 1791571602437
   },
   "torch-read-repeat-interleave": {
-    "text": "这也看不懂，主要解释下维度，还有可视化",
-    "at": 1791517421200
+    "text": "",
+    "at": 1791571602437
   },
   "torch-read-stack": {
-    "text": "这里有无dim有区别吗",
-    "at": 1791174769711
+    "text": "",
+    "at": 1791571602437
   },
   "torch-transpose-meta": {
-    "text": "对调哪几个维度啊，最后俩吗",
-    "at": 1791092837609
+    "text": "",
+    "at": 1791571602437
   },
   "torch-view-vs-reshape": {
-    "text": "view本质上是啥啊",
-    "at": 1791163555706
+    "text": "",
+    "at": 1791571602437
   },
   "torch-write-cat": {
-    "text": "dim是从左索引",
-    "at": 1791174397608
+    "text": "",
+    "at": 1791571602437
   },
   "torch-write-full": {
-    "text": "为啥是这个shape",
-    "at": 1791549944606
+    "text": "",
+    "at": 1791571602437
   },
   "torch-write-index": {
-    "text": "这啥玩意，有这个场景吗？",
-    "at": 1791173564200
+    "text": "",
+    "at": 1791571602437
   },
   "torch-write-masked-fill": {
-    "text": "为啥qto padding k的mask选dim=-1",
-    "at": 1791549821036
+    "text": "",
+    "at": 1791571602437
   },
   "torch-write-reduce": {
-    "text": ".values是啥玩意",
-    "at": 1791549397294
+    "text": "",
+    "at": 1791571602437
   },
   "torch-write-repeat": {
-    "text": "看不懂",
-    "at": 1791173877628
+    "text": "",
+    "at": 1791571602437
   },
   "torch-write-repeat-interleave": {
-    "text": "看不明白，这个g是啥玩意",
-    "at": 1791174183038
+    "text": "",
+    "at": 1791571602437
   },
   "triton-atomic-cost": {
-    "text": "「很多线程对同一个内存地址做 atomic 时，硬件只能一个接一个地处理，没法并行。」",
-    "at": 1791550461862
+    "text": "",
+    "at": 1791571602437
   },
   "triton-atomic-init": {
-    "text": "add为啥不是0而是1啊",
-    "at": 1791139993836
+    "text": "",
+    "at": 1791571602437
   },
   "triton-grid-cdiv": {
-    "text": "这就是个num block",
-    "at": 1791550337421
+    "text": "",
+    "at": 1791571602437
   },
   "triton-no-grid-sync": {
-    "text": "CUDA 有吗，如果有的话咋同步来着",
-    "at": 1791094016398
+    "text": "",
+    "at": 1791571602437
   },
   "triton-online-merge": {
-    "text": "写下both数学公式和代码 ，删除流式，然后M和D咋allocate的写下",
-    "at": 1791165519945
+    "text": "",
+    "at": 1791571602437
   },
   "triton-softmax-largeN": {
-    "text": "max还是online好啊",
-    "at": 1791094128428
+    "text": "",
+    "at": 1791571602437
   },
   "triton-stream-order": {
-    "text": "1. 依赖肯定自动sync了呗\n2. cuda要手动sync对吧",
-    "at": 1791094060879
+    "text": "",
+    "at": 1791571602437
   }
 }
