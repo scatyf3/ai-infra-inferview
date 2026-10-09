@@ -44,9 +44,9 @@
       "exact": "一条链",
       "prefix": "ecode 的优化是「少读字节」，两者的手段几乎没有交集。推导 ",
       "suffix": " 优化手段shape→bytes+FLOPs→AI=FLOPsB",
-      "note": "",
+      "note": "太傻了，写点字就行了，不要「一条链」这种",
       "created": 1791555668993,
-      "at": 1791555668993
+      "at": 1791555685514
     }
   ],
   "/ai-infra-inferview/parallel/megatron-tp": [
