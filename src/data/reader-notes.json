@@ -1,4 +1,15 @@
 {
+  "/ai-infra-inferview/framework/cuda-graph": [
+    {
+      "id": "mv1cn8zw2glt",
+      "exact": "但 attention backend 必须支持被 capture",
+      "prefix": "整个 forward 一张图，attention 也在图里最快，",
+      "suffix": "FULL_AND_PIECEWISE（当前默认）纯 decode",
+      "note": "",
+      "created": 1791573568844,
+      "at": 1791573568844
+    }
+  ],
   "/ai-infra-inferview/handson/torch-primitives": [
     {
       "id": "murkt2qtx8ou",
