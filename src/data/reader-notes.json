@@ -71,6 +71,15 @@
       "created": 1791555693046,
       "at": 1791556130632,
       "deleted": true
+    },
+    {
+      "id": "mv1cfemjwfya",
+      "exact": "有",
+      "prefix": "，比如在teacher forcing序列上算ce/kl/ppl",
+      "suffix": "一部分优化就是想把decode往prefill方向转换 spec",
+      "note": "",
+      "created": 1791573202891,
+      "at": 1791573202891
     }
   ],
   "/ai-infra-inferview/parallel/megatron-tp": [
