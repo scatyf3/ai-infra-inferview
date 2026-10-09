@@ -971,6 +971,18 @@
     "due": "2026-10-25T03:43:59.041Z",
     "last_review": "2026-10-09T03:43:59.041Z"
   },
+  "torch-write-contiguous": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-09T13:00:00.980Z",
+    "last_review": "2026-10-09T12:50:00.980Z"
+  },
   "torch-write-copy": {
     "stability": 8.2956,
     "difficulty": 1,
