@@ -203,6 +203,18 @@
     "due": "2026-10-08T23:34:02.185Z",
     "last_review": "2026-10-04T23:34:02.185Z"
   },
+  "bagu-kernel-fusion": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-17T15:43:54.135Z",
+    "last_review": "2026-10-09T15:43:54.135Z"
+  },
   "bagu-kv-per-token": {
     "stability": 8.2956,
     "difficulty": 1,
