@@ -235,6 +235,10 @@
     "text": "add为啥不是0而是1啊",
     "at": 1791139993836
   },
+  "triton-grid-cdiv": {
+    "text": "这就是个num block",
+    "at": 1791550337421
+  },
   "triton-no-grid-sync": {
     "text": "CUDA 有吗，如果有的话咋同步来着",
     "at": 1791094016398
