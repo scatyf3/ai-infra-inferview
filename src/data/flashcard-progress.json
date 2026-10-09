@@ -421,15 +421,15 @@
   },
   "bagu-request-lifecycle": {
     "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "difficulty": 2.11121424,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 2,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-09T16:26:05.735Z",
-    "last_review": "2026-10-09T16:16:05.735Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-11T16:44:29.420Z",
+    "last_review": "2026-10-09T16:44:29.420Z"
   },
   "bagu-ridge-point": {
     "stability": 18.18015363,
