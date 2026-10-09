@@ -203,6 +203,18 @@
     "due": "2026-10-12T15:23:20.738Z",
     "last_review": "2026-10-04T15:23:20.738Z"
   },
+  "bagu-kv-quant": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-09T14:12:05.558Z",
+    "last_review": "2026-10-09T14:02:05.558Z"
+  },
   "bagu-layer-params": {
     "stability": 0.212,
     "difficulty": 6.4133,
