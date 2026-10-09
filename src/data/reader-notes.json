@@ -35,9 +35,9 @@
       "exact": "roofline",
       "prefix": "hmetic intensity 约等于序列长度（上千），落在 ",
       "suffix": " 的右侧，compute-bound；decode 的 AI 约",
-      "note": "",
+      "note": "画一下roofline",
       "created": 1791555661038,
-      "at": 1791555661038
+      "at": 1791555665233
     }
   ],
   "/ai-infra-inferview/parallel/megatron-tp": [
