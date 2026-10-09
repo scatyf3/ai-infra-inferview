@@ -29,7 +29,7 @@ stack: [d-intra]
 
 ### TP：通信在关键路径上
 
-Megatron 的组合让每层只需要两次 all-reduce（见 [Megatron Tensor Parallel](/parallel/megatron-tp)）。关键性质是**通信量与模型大小无关**，只和 $B \cdot S \cdot d$ 有关。70B、batch 8、2k token、bf16：$8 \times 2048 \times 8192 \times 2 = 256$ MiB 一次，ring all-reduce 下每卡实际发 $2(N-1)/N \times 256$ MiB。80 层 × 2 次 = 160 次，总量非常可观，所以 **TP 必须在 NVLink 域内**（900 GB/s），跨 PCIe 或跨节点做 TP 会被通信打死。
+Megatron 的组合让每层只需要两次 all-reduce（见 [Megatron Tensor Parallel](/parallel/megatron-tp)）。关键性质是**通信量与模型大小无关**，只和 $B \cdot S \cdot d$ 有关。70B、batch 8、2k token、bf16：$8 \times 2048 \times 8192 \times 2 = 256$ MiB 一次，ring all-reduce 下每卡实际发 $2(N-1)/N \times 256$ MiB。80 层 × 2 次 = 160 次，总量非常可观，所以 **TP 必须在 NVLink 域内**（H100 标称 900 GB/s 是双向合计，单向约 450 GB/s），跨 PCIe 或跨节点做 TP 会被通信打死。时间怎么算见 [集合通信](/parallel/collective-comm)。
 
 推论：TP 的上限通常是单节点的 8 张卡。
 
@@ -99,7 +99,7 @@ DeepSeek 做的分离是 **PD 分离**（prefill 和 decode 用不同集群）�
 ## 面试追问
 
 ::: details Q：为什么 TP 一定要在 NVLink 域内，PP 可以跨节点？
-TP 的通信在每层的关键路径上，且通信量与 batch × seq × hidden 成正比，80 层要做 160 次 all-reduce。NVLink 900 GB/s 下每次 256 MiB 的 all-reduce 约 0.5 ms，160 次就是 80 ms；换成 100 Gbps 的 IB（12.5 GB/s）要 36 倍的时间，完全不可接受。PP 只在 stage 边界传一次激活，且能和下一个 micro-batch 的计算 overlap，所以跨节点没问题。
+TP 的通信在每层的关键路径上，且通信量与 batch × seq × hidden 成正比，80 层要做 160 次 all-reduce。ring all-reduce 下每卡要发 $2 \times \frac{7}{8} \times 256 \text{ MiB} \approx 470$ MB。NVLink 标称 900 GB/s 是双向合计，单向约 450 GB/s，每次约 1 ms，160 次就是约 170 ms；换成 100 Gbps 的 IB（12.5 GB/s）要 36 倍的时间，完全不可接受。PP 只在 stage 边界传一次激活，且能和下一个 micro-batch 的计算 overlap，所以跨节点没问题。
 :::
 
 ::: details Q：推理时 TP=8 和 DP=8 怎么选？

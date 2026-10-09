@@ -125,12 +125,24 @@ const primitiveCards: Card[] = [
     deck: 'torch',
     topic: 'mask',
     q: '`masked_fill` 的语义？布尔版 causal mask 怎么写？',
-    a: '`x.masked_fill(mask, value)`：mask 为 True 的位置换成 value，其余不变；mask 会广播成 x 的 shape。\ncausal mask 要盖掉的是「看不到」的位置，也就是主对角线右上方，用 `triu(1)`。放在 softmax **之前**，$e^{-\infty} = 0$。',
-    code: lines`
-      mask = torch.ones(S, S, dtype=torch.bool, device=x.device).triu(1)   # True = 看不到
-      attn = attn.masked_fill(mask, float('-inf'))
+    a: '1. `x.masked_fill(mask, value)` 的语义：mask 是 bool，**True 的位置换成 value**，False 的位置保留 x 原值；mask 先广播成 x 的 shape；返回新 tensor（原地版是 `masked_fill_`）。\n2. 本站约定先造 `allowed`（True = 能看）：行下标 `i = arange(S)[:, None]` 是 `(S, 1)`，列下标 `j = arange(S)[None, :]` 是 `(1, S)`，比较时广播成 `(S, S)`，`allowed[i, j]` 就是「query i 能不能看 key j」。causal 就是 `j <= i`。\n3. `~allowed` 是 bool 取反（逐元素 NOT）：True = **不能看**。所以 `masked_fill(~allowed, -inf)` 读作「不能看的位置填 -inf」。\n4. 放在 softmax **之前**：$e^{-\\infty} = 0$，这些位置的概率为 0。对角线 `j == i` 是 True，每行至少能看自己，不会整行 -inf 出 NaN。',
+    fig: lines`
+      S = 4, allowed = j <= i   (1 = True)
+              j: 0 1 2 3
+      i = 0      1 0 0 0
+      i = 1      1 1 0 0
+      i = 2      1 1 1 0
+      i = 3      1 1 1 1
+      ~allowed flips 1<->0 -> filled with -inf
     `,
-    ref: `${TP}#mask`,
+    code: lines`
+      i = torch.arange(S, device=x.device)[:, None]   # (S, 1) query 下标
+      j = torch.arange(S, device=x.device)[None, :]   # (1, S) key 下标
+      allowed = j <= i                                # (S, S) True = 能看
+      attn = attn.masked_fill(~allowed, float('-inf'))
+      # 等价的旧写法：mask = ones(S, S, bool).triu(1) 直接表示「看不到」
+    `,
+    ref: '/leetgpu/mask',
   },
   {
     id: 'torch-full-device',

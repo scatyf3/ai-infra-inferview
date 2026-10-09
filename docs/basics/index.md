@@ -14,5 +14,6 @@ Python / C++ / OS / 网络 + 系统设计。这些题不加分但会扣分，保
 
 - [Python：GIL、asyncio、多进程 vs 多线程](./python) — CPython 对象模型
 - [C++：RAII、智能指针、移动语义、虚函数表](./cpp) — kernel / framework 岗常问
+- [Rust：所有权、借用、trait、并发与 PyO3](./rust) — tokenizer / router / gateway 常用
 - [OS 与网络：进程线程、虚拟内存、锁与原子操作、TCP / RPC / gRPC](./os-network) — 基础系统知识
 - [系统设计：设计一个 LLM 推理服务](./system-design-llm-serving) — 几乎必出

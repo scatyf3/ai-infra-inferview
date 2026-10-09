@@ -67,7 +67,7 @@ export const baguCards: Card[] = [
     id: 'bagu-decode-step-time',
     topic: 'roofline',
     q: '算一下：70B 参数、bf16、TP = 4，每张 H100 带宽 3.35 TB/s，忽略 KV 和通信，decode 一步最少要多久？',
-    a: 'decode 是 memory-bound，一步的时间 ≈ 每张卡要读的字节 ÷ 带宽。\n1. 权重：70 × 10⁹ 参数 × 2 字节 = 140 GB。\n2. TP = 4，每张卡读 1/4：35 GB。\n3. 35 × 10⁹ ÷ 3.35 × 10¹² ≈ **10 ms**。\n实际还要读 KV、每层做两次 all-reduce，TPOT 一般在 15–25 ms。\n结论：decode 的时间看读多少字节，不看算多少 FLOPs。',
+    a: 'decode 是 memory-bound，一步的时间 ≈ 每张卡要读的字节 ÷ 带宽。通用公式（P 参数量，$b_w$ 每参数字节，BW 单卡带宽）：\n$$t_{\\text{step}} \\gtrsim \\frac{P \\cdot b_w / \\text{TP}}{\\text{BW}}$$\n代入算：\n1. 权重：70 × 10⁹ 参数 × 2 字节 = 140 GB。\n2. TP = 4，每张卡读 1/4：35 GB。\n3. 35 × 10⁹ ÷ 3.35 × 10¹² ≈ **10 ms**。\n要算 KV 就在分子上加每卡要读的 KV 字节 = batch × 上下文长度 × KV/token ÷ TP。再加上每层两次 all-reduce，实际 TPOT 比这个下界高。\n结论：decode 的时间看读多少字节，不看算多少 FLOPs。',
     ref: SD,
   }),
   b({
@@ -96,8 +96,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-how-many-gpus',
     topic: '显存账',
-    q: '推理显存的四项里，哪一项决定了要几张卡？为什么？',
-    a: '**KV cache**。四项是权重 + KV cache + 激活 + 固定开销（CUDA context、通信 buffer、CUDA Graph）：\n1. 权重：常数，只看模型和精度。\n2. 激活和固定开销：每卡几 GB，不随请求数涨。\n3. KV cache：**唯一随 batch × 序列长度线性涨的**。\n所以「要几张卡」就是：扣掉权重和开销后，剩下的显存能放下多少 token 的 KV，够不够要的并发。下面按 Llama-3-70B 算；文章里有能调参数的计算器。',
+    q: '算一下：Llama-3-70B bf16 跑在 80 GB 的 H100 上，每卡留 4 GB 给激活和固定开销。TP = 2 / 4 / 8 时各能放多少 token 的 KV？要同时服务 32 个 8k 上下文的请求，最少几张卡？',
+    a: '公式：KV 能放的 token 数 = (N × (单卡显存 − 开销) − 权重) ÷ KV/token。\n1. 权重 70 × 10⁹ × 2 B = 140 GB；KV/token = 2 × 80 × 8 × 128 × 2 B = 320 KiB（见 KV/token 那张卡）。\n2. TP = 2：2 × 76 − 140 = 12 GB，约 3.7 万 token，只够 4 个 8k 请求。\n3. TP = 4：4 × 76 − 140 = 164 GB，约 50 万 token，61 个。\n4. 32 × 8192 = 26 万 token 的 KV 约 86 GB，加权重 140 GB = 226 GB，÷ 76 ≈ 3 张，TP 要整除 head 数，取 **4 张**。\n规律：权重是常数，激活和开销每卡固定，**只有 KV 随并发 × 长度线性涨**，所以「要几张卡」由 KV 定。代码可以直接改参数跑。',
     code: lines`
       GB = 1e9
       P, b_w = 70e9, 2                   # 参数量, 每参数字节 (bf16)
@@ -114,6 +114,9 @@ export const baguCards: Card[] = [
       # TP=2: 36,621 token = 4 个 8k 请求
       # TP=4: 500,488 token = 61 个 8k 请求
       # TP=8: 1,428,222 token = 174 个 8k 请求
+
+      need = 32 * 8192 * kv_per_token + P * b_w      # 32 个 8k 请求 + 权重
+      print(need / GB, need / (76 * GB))             # 226 GB, 2.97 -> 取 TP=4
     `,
     ref: `${MEM}#交互`,
   }),
@@ -322,7 +325,7 @@ export const baguCards: Card[] = [
     id: 'bagu-preempt-whom',
     topic: '调度',
     q: '抢占时踢谁？频繁抢占说明什么？',
-    a: '**踢最新进来的**（LIFO）：它算得最少，丢掉重算浪费最小；老请求也不会被反复踢、饿死。\n出处：vLLM V1 的 `vllm/v1/core/sched/scheduler.py`，`schedule()` 给 running 请求分配 block 失败时：\n1. FCFS 策略：`self.running.pop()`，弹出 running 列表末尾，也就是最后被调度进来的请求。\n2. priority 策略：踢优先级最低的，同优先级踢到达最晚的。\n被踢的请求 KV 全部释放，放回 waiting 队首，之后重新 prefill（V1 只有 recompute，没有 swap）。\n频繁抢占说明 `max_num_seqs` 设得太激进或 KV 空间不够，该调参或加卡，而不是让调度器反复抖动。',
+    a: '**踢最新进来的**（LIFO）：它算得最少，丢掉重算浪费最小；老请求也不会被反复踢、饿死。\n对的，出处是 vLLM V1 源码 https://github.com/vllm-project/vllm/blob/main/vllm/v1/core/sched/scheduler.py ，`schedule()` 里 `allocate_slots` 给 running 请求分配 block 失败时：\n1. FCFS 策略：`self.running.pop()`，弹出 running 列表末尾，也就是最后被调度进来的请求。\n2. priority 策略：踢优先级最低的，同优先级踢到达最晚的。\n被踢的请求 KV 全部释放、`num_computed_tokens` 清零，`waiting.prepend_request` 放回 waiting 队首，之后重新 prefill（V1 只有 recompute，没有 swap）。\n频繁抢占说明 `max_num_seqs` 设得太激进或 KV 空间不够，该调参或加卡，而不是让调度器反复抖动。',
     ref: SCHED,
   }),
 
@@ -850,6 +853,13 @@ export const baguCards: Card[] = [
 
       position_ids = 0 1 2 0 1 0 1 2
       cu_seqlens   = [0, 3, 5, 8]
+    `,
+    code: lines`
+      seg = torch.tensor([0, 0, 0, 1, 1, 2, 2, 2])   # 每个 token 属于第几个样本
+      i = torch.arange(8)[:, None]                   # (8, 1) query 下标
+      j = torch.arange(8)[None, :]                   # (1, 8) key 下标
+      allowed = (seg[:, None] == seg[None, :]) & (j <= i)   # 同一样本 且 因果
+      attn = attn.masked_fill(~allowed, float('-inf'))
     `,
     ref: SFT,
   }),

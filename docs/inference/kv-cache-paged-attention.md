@@ -229,7 +229,20 @@ def on_block_full(req, logical_idx, A, B):       # 每写满一个 block 调一�
 - **hash 要包含前缀，而且要包含额外的 key**：同样的 16 个 token 出现在不同前缀后面，KV 不同。多模态输入（图片 hash）、LoRA id、cache salt 也要拌进 hash，否则会错误命中。
 - **decode 生成的 token 也能被缓存**：`on_block_full` 在 decode 阶段同样会触发，所以多轮对话里上一轮的回答也能被下一轮命中。
 
-SGLang 的 **RadixAttention** 把这个做得更进一步：用 radix tree 管理所有前缀，支持任意长度的部分匹配（不止 block 对齐），并用 LRU 淘汰。收益场景：多轮对话（每轮复用全部历史）、agent 的长 system prompt、树搜索类的推理（共享分支前缀）。
+### RadixAttention：另一种组织方式
+
+[SGLang 的 RadixAttention](https://arxiv.org/abs/2312.07104) 解决的是同一个问题，但数据结构不同：
+
+| | vLLM（block hash） | SGLang（radix tree） |
+|---|---|---|
+| 索引 | 扁平 hash 表：链式 hash → block | 一棵前缀树：边上是 token 序列，节点挂着对应的 KV |
+| 匹配粒度 | 满 block（16 token）对齐，尾巴不足一个 block 的部分不共享 | 论文里每页 1 个 token，**按 token 匹配**，能命中任意长度的前缀 |
+| 淘汰 | free 队列 LRU，按 block | 从叶子往上按 LRU 淘汰，只淘汰没人引用的叶子 |
+| 代价 | 实现简单，查找就是逐 block 算 hash | 树的维护和 1 token 一页的元数据开销更大 |
+
+「任意长度匹配」的本质就是**页大小为 1**：原理上 block hash 方案把 block size 缩到 1 也能做到同样的粒度（实际引擎支持的 block size 有下限），代价是 kernel 的间接寻址开销变大（见下方面试追问「block_size 该设多大」）。SGLang 的 `--page-size` 也可以调大，调大后同样只缓存整页，取舍和 vLLM 一样（以你所用版本的参数说明为准）。
+
+两种结构的收益场景相同：多轮对话（每轮复用全部历史）、agent 的长 system prompt、树搜索类推理（多个分支共享前缀，radix tree 天然对应这种树形结构）。
 
 ### 抢占：swap vs recompute
 
@@ -239,14 +252,16 @@ SGLang 的 **RadixAttention** 把这个做得更进一步：用 radix tree 管�
 |---|---|---|
 | 做法 | 把 block 拷到 CPU 内存，之后拷回 | 直接丢弃 block，恢复时把已生成的 token 当 prompt 重新 prefill |
 | 代价 | 2 × block 字节 / PCIe 带宽 | 重新 prefill 的算力 |
-| 适合 | 序列很长（重算贵） | 序列短，或有 prefix cache 能命中 |
+| 适合 | 序列很长（重算贵） | 序列短，或有 prefix cache 能命中（命中的部分不用重算） |
 | 副作用 | 占 CPU 内存，PCIe 和 H2D 拷贝争带宽 | 无额外内存，但 TTFT 尖刺 |
 
-vLLM 默认 recompute，因为 PCIe 往返通常比重算更慢，而且 recompute 能吃到 prefix cache。
+vLLM V1 的默认抢占模式是 recompute 而不是 swap，官方的理由是在 V1 架构下重算比换出换入更便宜（[vLLM 优化文档](https://docs.vllm.ai/en/latest/configuration/optimization/)）。
+
+**recompute 和 prefix cache 是互相成全的**：被抢占的请求释放 block 时，block 只是 `ref` 归零进了 free 队列，内容和 hash 还在（见上面的 Prefix caching 伪代码）。如果它被重新调度前这些 block 还没被别人淘汰，重新 prefill 时会直接命中，实际要重算的只有被淘汰掉的那一部分。所以 recompute 的真实代价往往比「整段重新 prefill」小得多。
 
 ### KV 量化
 
-KV 从 bf16 降到 fp8 直接让 KV 访存和显存减半，等于 decode 的 AI 翻倍。注意点：
+KV 从 bf16 降到 fp8 直接让 KV 访存和显存减半。decode 阶段 attention 的 **arithmetic intensity（AI，每读 1 字节做多少次浮点运算，FLOPs / bytes）** 很低，是 memory-bound 的：每个 KV 元素读进来只做一次乘加。字节数减半而 FLOPs 不变，AI 就翻倍，在 roofline 上往右移、同样的带宽能撑起两倍的计算（推导见 [Prefill vs Decode 与 Roofline](/inference/prefill-decode-roofline)）。注意点：
 - **FP8 用 per-tensor scale 就够**：fp8 自带指数位，动态范围大，vLLM 的 `kv_cache_dtype="fp8"` 每层 K、V 各一个 scale。int4 / int2 这类整数格式才需要细粒度：K 的 outlier 集中在少数几个 channel，所以 K 按 per-channel、V 按 per-token（KIVI）。
 - K 比 V 更难量化：k 上的误差 $\delta$ 让 score 偏 $q \cdot \delta / \sqrt{d_h}$，过了 softmax 变成乘性的 $e^{q \cdot \delta / \sqrt{d_h}}$；V 的误差只是线性混进加权平均。有些方案对 K 用更高精度。
 - 误差会累积：早期 token 的 KV 被后续每一步反复读，长 context 下影响更大。
