@@ -935,6 +935,18 @@
     "due": "2026-10-25T12:17:53.524Z",
     "last_review": "2026-10-09T12:17:53.524Z"
   },
+  "torch-write-masked-fill": {
+    "stability": 0.212,
+    "difficulty": 6.4133,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-09T12:38:50.468Z",
+    "last_review": "2026-10-09T12:37:50.468Z"
+  },
   "torch-write-matmul": {
     "stability": 8.2956,
     "difficulty": 1,
