@@ -1,186 +1,186 @@
 {
   "bagu-bf16-fp16": {
-    "suspended": true,
-    "at": 1791565378347
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-decode-ai": {
-    "suspended": true,
-    "at": 1791520146498
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-dpo": {
-    "suspended": true,
-    "at": 1791162713851
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-fa-v2-v3": {
-    "suspended": true,
-    "at": 1791157219365
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-gemv": {
-    "suspended": true,
-    "at": 1791560625446
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-gpu-three-basics": {
     "suspended": true,
     "at": 1791555560695
   },
   "bagu-grpo": {
-    "suspended": true,
-    "at": 1791162716237
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-how-many-gpus": {
     "suspended": true,
     "at": 1791519772789
   },
   "bagu-layer-params": {
-    "suspended": true,
-    "at": 1791554434475
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-megatron-tp": {
-    "suspended": true,
-    "at": 1791161802648
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-mla": {
-    "suspended": true,
-    "at": 1791157147578
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-mla-rope": {
-    "suspended": true,
-    "at": 1791157149744
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-moe-batch": {
-    "suspended": true,
-    "at": 1791161879632
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-multi-lora": {
-    "suspended": true,
-    "at": 1791162707508
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-parallel-choice": {
-    "suspended": true,
-    "at": 1791161822488
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-pp-bubble": {
-    "suspended": true,
-    "at": 1791161812259
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-ppo-four-models": {
-    "suspended": true,
-    "at": 1791162712409
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-ring-allreduce": {
-    "suspended": true,
-    "at": 1791161807436
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-sd-order": {
-    "suspended": true,
-    "at": 1791566595298
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-sft-packing": {
-    "suspended": true,
-    "at": 1791566592699
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-sp-cp": {
-    "suspended": true,
-    "at": 1791161813606
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-spec-exact": {
-    "suspended": true,
-    "at": 1791554546999
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-spec-expected": {
-    "suspended": true,
-    "at": 1791554584888
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-torch-compile": {
-    "suspended": true,
-    "at": 1791519746324
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-tp-comm-size": {
-    "suspended": true,
-    "at": 1791161806236
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-tp-intra-node": {
-    "suspended": true,
-    "at": 1791161811321
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-train-memory": {
-    "suspended": true,
-    "at": 1791565359270
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-warp-divergence": {
-    "suspended": true,
-    "at": 1791560616518
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-zero": {
-    "suspended": true,
-    "at": 1791161880803
+    "suspended": false,
+    "at": 1791572576835
   },
   "bagu-zero3-vs-tp": {
-    "suspended": true,
-    "at": 1791161881664
+    "suspended": false,
+    "at": 1791572576835
   },
   "torch-keepdim": {
-    "suspended": true,
-    "at": 1791164634173
+    "suspended": false,
+    "at": 1791572576835
   },
   "torch-read-index": {
     "suspended": true,
     "at": 1791173390769
   },
   "torch-read-repeat-interleave": {
-    "suspended": true,
-    "at": 1791517424137
+    "suspended": false,
+    "at": 1791572576835
   },
   "torch-read-stack": {
-    "suspended": true,
-    "at": 1791548725587
+    "suspended": false,
+    "at": 1791572576835
   },
   "torch-write-full": {
-    "suspended": true,
-    "at": 1791549946539
+    "suspended": false,
+    "at": 1791572576835
   },
   "torch-write-index": {
     "suspended": true,
     "at": 1791173565337
   },
   "torch-write-masked-fill": {
-    "suspended": true,
-    "at": 1791549821949
+    "suspended": false,
+    "at": 1791572576835
   },
   "torch-write-reduce": {
-    "suspended": true,
-    "at": 1791550063773
+    "suspended": false,
+    "at": 1791572576835
   },
   "torch-write-repeat": {
-    "suspended": true,
-    "at": 1791173879620
+    "suspended": false,
+    "at": 1791572576835
   },
   "torch-write-repeat-interleave": {
-    "suspended": true,
-    "at": 1791174185330
+    "suspended": false,
+    "at": 1791572576835
   },
   "torch-write-triu": {
-    "suspended": true,
-    "at": 1791549638426
+    "suspended": false,
+    "at": 1791572576835
   },
   "triton-2d-ptrs": {
-    "suspended": true,
-    "at": 1791093916665
+    "suspended": false,
+    "at": 1791572576835
   },
   "triton-group-m": {
-    "suspended": true,
-    "at": 1791094297450
+    "suspended": false,
+    "at": 1791572576835
   },
   "triton-matmul-program": {
-    "suspended": true,
-    "at": 1791094294396
+    "suspended": false,
+    "at": 1791572576835
   },
   "triton-no-grid-sync": {
-    "suspended": true,
-    "at": 1791094019431
+    "suspended": false,
+    "at": 1791572576835
   },
   "triton-num-warps": {
-    "suspended": true,
-    "at": 1791093997190
+    "suspended": false,
+    "at": 1791572576835
   }
 }
