@@ -56,6 +56,15 @@
       "note": "",
       "created": 1791555689797,
       "at": 1791555689797
+    },
+    {
+      "id": "mv1203xy7pis",
+      "exact": "roofline",
+      "prefix": "hmetic intensity 约等于序列长度（上千），落在 ",
+      "suffix": " 的右侧，compute-bound；decode 的 AI 约",
+      "note": "123",
+      "created": 1791555693046,
+      "at": 1791555694889
     }
   ],
   "/ai-infra-inferview/parallel/megatron-tp": [
