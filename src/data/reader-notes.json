@@ -27,9 +27,9 @@
       "exact": "FLOPs 没少（反向还要重算一遍 score）",
       "prefix": "新 max 和分母，整个过程不把 score 矩阵写回 HBM。",
       "suffix": "，省的是 HBM 读写：下面的例子里，标准实现的算术强度约 63",
-      "note": "",
+      "note": "这啥，还涉及到backward？",
       "created": 1791588163078,
-      "at": 1791588163078
+      "at": 1791588178829
     }
   ],
   "/ai-infra-inferview/inference/kv-cache-paged-attention": [
