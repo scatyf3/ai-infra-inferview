@@ -1,4 +1,8 @@
 {
+  "bagu-bf16-fp16": {
+    "suspended": true,
+    "at": 1791565378347
+  },
   "bagu-decode-ai": {
     "suspended": true,
     "at": 1791520146498
