@@ -59,8 +59,16 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-decode-ai',
     topic: 'roofline',
-    q: 'decode 的算术强度怎么推？batch = 1 和 64 时各是多少，和 H100 的 ridge 比呢？',
-    a: '先算 ridge：峰值算力 ÷ 显存带宽。H100 SXM 的 bf16 是 989 TFLOP/s、3.35 TB/s：\n$$\\text{ridge} = \\frac{989 \\times 10^{12}}{3.35 \\times 10^{12}} \\approx 295 \\ \\text{FLOP/B}$$\n再算 decode 的 AI。符号：$P$ 参数量，$B$ batch，$b_w$ 每个参数的字节数（bf16 = 2）。decode 每步每个序列只算 1 个新 token：\n1. FLOPs ≈ $2PB$：每个权重对每个 token 一次乘加。\n2. 访存 ≈ $P b_w$：权重整读一遍，KV 先忽略。\n3. $AI = \\dfrac{2PB}{P b_w} = B$（bf16）。\n代入：B = 1 时 AI = 1，B = 64 时 AI = 64，都远小于 295，**memory-bound**。要 B 接近 295 才到 ridge，算上读 KV 还更难。',
+    q: 'Llama-3-70B bf16 decode，把读 KV 也算上，算术强度怎么随 batch 和上下文长度变？8k 上下文时 batch 再大，AI 最多到多少？',
+    a: '符号：$P$ 参数量，$b_w$ 每参数字节（bf16 = 2），$B$ batch，$S$ 每个序列已有的上下文长度，$\\text{KV}$ 每 token 的 KV 字节（70B 是 320 KiB = 327,680 B，见 KV/token 那张卡），$L$ 层数，$d$ hidden 维度。\n每步每个序列算 1 个新 token：\n1. FLOPs：线性层 $2PB$；attention 还要和 S 个历史 token 算 $q \\cdot k$ 和 $p \\cdot v$，每层每个历史 token 各 $2d$，共 $4LdSB$。\n2. 字节：权重读一遍 $P b_w$，每个序列的 KV 各读一遍 $B S \\cdot \\text{KV}$。\n$$\\text{AI} = \\frac{(2P + 4LdS)\\,B}{P b_w + B S \\cdot \\text{KV}}$$\n3. B 小时分母是权重，bf16 下 AI ≈ $2PB / 2P = B$；B 大时分母变成 KV，AI 趋于上限\n$$\\text{AI}_{\\max} = \\frac{2P}{S \\cdot \\text{KV}} + \\frac{4Ld}{\\text{KV}}$$\n第二项是 attention 自己的强度，70B 是 4 × 80 × 8192 ÷ 327680 = 8。\n4. 读 KV 和读权重一样多的 batch：$B^* = P b_w / (S \\cdot \\text{KV})$，8k 上下文时约 52。batch 过了它，每步读的主要是 KV。\n代入 P = 70 × 10⁹（见表）：8k 上下文 batch 再大，AI 也只到 **约 60**，离 H100 的 ridge 295 很远；32k 只有 21。\n原因：权重是所有序列共用的，batch 越大摊得越薄；KV 是每个序列自己的，batch 翻倍 KV 也翻倍，摊不薄。要提高上限只能减 KV 字节：GQA / MLA，或者 KV 量化到 fp8（上限约翻倍）。',
+    fig: lines`
+      AI (FLOP/B), Llama-3-70B, bf16
+
+      S \ B    1     64    256   inf
+      2k      1.0    51    119   217
+      8k      1.1    33     50    60
+      32k     1.5    18     20    21
+    `,
     ref: ROOF,
   }),
   b({
@@ -92,33 +100,6 @@ export const baguCards: Card[] = [
     q: '70B 参数的模型，bf16 权重多少 GB？int4 呢？GB 和 GiB 差多少？',
     a: '1 B（billion）= **10⁹**。1 GB = 10⁹ 字节，1 GiB = 2³⁰ ≈ 1.074 × 10⁹ 字节，两者差约 7%。\n1. bf16 每参数 2 字节：70 × 10⁹ × 2 = 140 × 10⁹ 字节 = **140 GB**，约 130 GiB。\n2. int4 每参数 0.5 字节：**35 GB**，再加一点 per-group scale。\n口算规则：bf16 下 GB 数 = 参数量（B）× 2。',
     ref: MEM,
-  }),
-  b({
-    id: 'bagu-how-many-gpus',
-    topic: '显存账',
-    q: '算一下：Llama-3-70B bf16 跑在 80 GB 的 H100 上，每卡留 4 GB 给激活和固定开销。TP = 2 / 4 / 8 时各能放多少 token 的 KV？要同时服务 32 个 8k 上下文的请求，最少几张卡？',
-    a: '公式：KV 能放的 token 数 = (N × (单卡显存 − 开销) − 权重) ÷ KV/token。\n1. 权重 70 × 10⁹ × 2 B = 140 GB；KV/token = 2 × 80 × 8 × 128 × 2 B = 320 KiB（见 KV/token 那张卡）。\n2. TP = 2：2 × 76 − 140 = 12 GB，约 3.7 万 token，只够 4 个 8k 请求。\n3. TP = 4：4 × 76 − 140 = 164 GB，约 50 万 token，61 个。\n4. 32 × 8192 = 26 万 token 的 KV 约 86 GB，加权重 140 GB = 226 GB，÷ 76 ≈ 3 张，TP 要整除 head 数，取 **4 张**。\n规律：权重是常数，激活和开销每卡固定，**只有 KV 随并发 × 长度线性涨**，所以「要几张卡」由 KV 定。代码可以直接改参数跑。',
-    code: lines`
-      GB = 1e9
-      P, b_w = 70e9, 2                   # 参数量, 每参数字节 (bf16)
-      L, H_kv, d_h, b = 80, 8, 128, 2    # 层数, KV head 数, head 维度, KV 每元素字节
-      kv_per_token = 2 * L * H_kv * d_h * b   # K 和 V 各一份: 327,680 B
-
-      def kv_tokens(n_gpu, mem=80 * GB, overhead=4 * GB):
-          free = n_gpu * (mem - overhead) - P * b_w   # 权重按 TP 切到 n_gpu 张卡上
-          return int(free // kv_per_token)
-
-      for n in (2, 4, 8):
-          t = kv_tokens(n)
-          print(f"TP={n}: {t:,} token = {t // 8192} 个 8k 请求")
-      # TP=2: 36,621 token = 4 个 8k 请求
-      # TP=4: 500,488 token = 61 个 8k 请求
-      # TP=8: 1,428,222 token = 174 个 8k 请求
-
-      need = 32 * 8192 * kv_per_token + P * b_w      # 32 个 8k 请求 + 权重
-      print(need / GB, need / (76 * GB))             # 226 GB, 2.97 -> 取 TP=4
-    `,
-    ref: `${MEM}#交互`,
   }),
   b({
     id: 'bagu-layer-params',
@@ -236,15 +217,42 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-mla',
     topic: 'attention 变体',
-    q: 'MLA 缓存什么？decode 时怎么避免把 K 展开？',
-    a: '符号（DeepSeek-V3）：$h$ 是 token 的 hidden（7168 维），128 个 head，每个 head 128 维；latent 维度 $d_c = 512$，RoPE 部分 $d_r = 64$，61 层。\n缓存什么：\n1. 下投影 $c_{kv} = W_{DKV} h$，7168 → 512 维，**缓存它**。\n2. 位置部分 $k^R = \\text{RoPE}(W_{KR} h)$，64 维，所有 head 共享，**也缓存**。\n3. 用的时候再上投影：第 i 个 head 的 $k_i = W_{UK,i}\\, c_{kv}$，$v_i = W_{UV,i}\\, c_{kv}$。\n每 token 每层 512 + 64 = 576 个数，61 层、bf16 共 **68.6 KiB**；同样 61 层、8 个 KV head 的 GQA 是 244 KiB。\n怎么不展开 K（weight absorption）：\n$$q_i^\\top k_i = q_i^\\top W_{UK,i}\\, c_{kv} = (W_{UK,i}^\\top q_i)^\\top c_{kv}$$\n先把 q 投到 512 维的 latent 空间，直接和缓存的 $c_{kv}$ 点积。V 同理：先对 $c_{kv}$ 加权求和，最后再乘 $W_{UV,i}$，它还能并进 $W_O$。\n效果：decode 时相当于 128 个 Q head 共用**一个 576 维的 KV head**，像 MQA。点积维度从 192（128 + 64）变成 576，算得更多，但 decode 是 memory-bound，拿算力换带宽划算。prefill 是 compute-bound，反而展开成每 head 128 维更快。',
+    q: 'MLA 每个 token 缓存什么？用 DeepSeek-V3 的配置算每 token 的 KV 字节，和 MHA、GQA 比。',
+    a: '符号（DeepSeek-V3 的 config.json）：hidden $d = 7168$，$n_h = 128$ 个 head，每个 head 的 K、V 是 $d_h = 128$ 维，latent 维度 $d_c = 512$，RoPE 部分 $d_r = 64$，$L = 61$ 层，bf16（每个数 2 B）。$h_t$ 是第 t 个 token 进 attention 前的 hidden。\nMHA 每层要缓存每个 head 的 $k_{t,i}$ 和 $v_{t,i}$。MLA（DeepSeek-V2 提出，arXiv 2405.04434 第 2.1 节）把 K、V 拆成「先压缩、用时再展开」（见图）：\n1. 下投影：$c_t = W^{DKV} h_t$，7168 → 512 维。**缓存 $c_t$**。\n2. 上投影：用的时候第 i 个 head 的 $k^C_{t,i} = W^{UK}_i c_t$、$v_{t,i} = W^{UV}_i c_t$，各 128 维，不缓存。\n3. 位置部分：$k^R_t = \\text{RoPE}(W^{KR} h_t)$，64 维，128 个 head 共用一份，**也缓存**（为什么要单独这一份，见 decoupled RoPE 那张卡）。\n每 token 每层存 $d_c + d_r = 576$ 个数：\n$$\\text{KV/token} = L\\,(d_c + d_r)\\cdot 2 = 61 \\times 576 \\times 2 = 70{,}272\\ \\text{B} \\approx 68.6\\ \\text{KiB}$$\n对比（同样 61 层、bf16）：\n1. 不压缩、每个 head 存完整的 K（128 + 64 维）和 V（128 维）：每层 $128 \\times 320 = 40{,}960$ 个数，共 **4.77 MiB**，是 MLA 的 71 倍。\n2. GQA、8 个 KV head：$2 \\times 61 \\times 8 \\times 128 \\times 2$ = **244 KiB**，是 MLA 的 3.6 倍。\nlatent 是所有 head 共用的一份，大小像 MQA；但每个 head 用自己的 $W^{UK}_i, W^{UV}_i$ 从它还原出不同的 K、V，所以不像 MQA 那样掉效果。decode 时怎么不展开见下一张卡。',
+    fig: lines`
+      one token, one layer; [ ] = cached
+
+      h (7168)
+      ├ W_DKV -> [c 512] ┬ W_UK_i -> k_i 128
+      │                  └ W_UV_i -> v_i 128
+      └ W_KR -> RoPE -> [kR 64]  all heads
+
+      cached: 512 + 64 = 576 numbers
+    `,
+    ref: ATTN,
+  }),
+  b({
+    id: 'bagu-mla-2',
+    topic: 'attention 变体',
+    q: 'MLA decode 时不把 K、V 展开成每个 head 的 128 维，直接拿缓存的 latent 算 attention，怎么做到的？这样每读 1 字节 KV 做多少 FLOP？',
+    a: '符号同上一张：$c_t$ 是缓存的 512 维 latent，$k^R_t$ 是缓存的 64 维 RoPE key；第 i 个 head 的 $k^C_{t,i} = W^{UK}_i c_t$、$v_{t,i} = W^{UV}_i c_t$，$W^{UK}_i, W^{UV}_i$ 都是 128 × 512。当前 token 第 i 个 head 的 query 分成 $q^C_i$（128 维）和 $q^R_i$（64 维）。\n1. score 不带位置的那部分，按矩阵乘结合律换个括号（weight absorption）：\n$$q^{C\\top}_i k^C_{t,i} = q^{C\\top}_i W^{UK}_i c_t = \\big(W^{UK\\top}_i q^C_i\\big)^\\top c_t$$\n括号里的 $\\tilde q_i = W^{UK\\top}_i q^C_i$ 是 512 维，每个 head 每步只算一次，之后直接和每个历史 token 的 $c_t$ 点积。再加上 $q^{R\\top}_i k^R_t$，相当于在 576 维上点积。\n2. 输出同理：$\\sum_t p_t\\, v_{t,i} = W^{UV}_i \\big(\\sum_t p_t\\, c_t\\big)$。先在 512 维上加权求和，最后乘一次 $W^{UV}_i$（它还能并进输出投影 $W^O$）。DeepSeek-V2 第 2.1.2 节写的就是这两种吸收（arXiv 2405.04434）。\n3. 结果：128 个 head 读同一份 576 维的 KV，形状上就是只有一个 KV head 的 MQA（代码见下）。\n算一下每层每个历史 token：\n1. 吸收后：读 576 × 2 = 1152 B；FLOPs = 128 head × 2 × (576 + 512) = 278,528；**AI ≈ 242 FLOP/B**，接近 H100 的 ridge 295。\n2. 展开成每 head 128 维：读 40,960 × 2 B，FLOPs = 128 × 2 × (192 + 128)，**AI = 1**。\n代价：每个历史 token 的计算从 192 + 128 维变成 576 + 512 维，多约 3.4 倍。decode 是 memory-bound，拿闲着的算力换带宽划算；prefill 本来就 compute-bound，所以 prefill 仍然展开成每 head 128 维来算。',
+    code: lines`
+      # decode 一步、一层。缓存 c: [S, 512], kR: [S, 64]
+      # 当前 token: qC: [H, 128], qR: [H, 64]; H = 128
+      # W_UK, W_UV: [H, 128, 512]
+      q_lat = einsum('hd,hdc->hc', qC, W_UK)         # [H, 512]
+      score = (q_lat @ c.T + qR @ kR.T) / sqrt(192)  # [H, S]
+      p = softmax(score, dim=-1)
+      o_lat = p @ c                                  # [H, 512]
+      o = einsum('hc,hdc->hd', o_lat, W_UV)          # [H, 128]
+    `,
     ref: ATTN,
   }),
   b({
     id: 'bagu-mla-rope',
     topic: 'attention 变体',
-    q: 'MLA 为什么需要 decoupled RoPE？',
-    a: 'RoPE 是位置相关的旋转，夹在 `c_kv` 和 `W_UK` 之间就没法把 `W_UK` 吸收进 Q 侧（矩阵乘的顺序换不过来）。\n解法：另拿一小段维度（d_r = 64）单独加 RoPE，所有 head 共享、单独缓存；其余部分不带位置信息，照常吸收。',
+    q: 'MLA 为什么要 decoupled RoPE？直接给上投影出来的 K 加 RoPE，会坏在哪一步？',
+    a: '先回顾 RoPE：位置 t 的向量乘一个只和 t 有关的旋转矩阵 $R_t$，并且 $R_m^\\top R_n = R_{n-m}$，所以 score 只依赖相对位置 n − m。\n1. MLA 在 decode 时能不展开 K，靠的是 $q^\\top W^{UK} c_n$ 中间的 $W^{UK}$ 是**常数矩阵**，可以提前并到 q 那边（见上一张卡）。\n2. 如果对上投影后的 K 加 RoPE：$k_n = R_n W^{UK} c_n$，当前位置 m 的 query 是 $R_m q$，score 变成\n$$(R_m q)^\\top R_n W^{UK} c_n = q^\\top R_{n-m}\\, W^{UK} c_n$$\n夹在中间的 $R_{n-m} W^{UK}$ 对**每个历史位置 n** 都不一样，没法提前算成一个矩阵。要算就只能对每个 n 把 $W^{UK} c_n$ 展开，又回到存完整 K 的代价。DeepSeek-V2 第 2.1.3 节就是这么说的：RoPE 和低秩 KV 压缩不兼容（arXiv 2405.04434）。\n3. 解法：K 拆成两段，score 是两段点积之和：\n内容段 $k^C_{n,i} = W^{UK}_i c_n$（128 维）：不加 RoPE，照常吸收。\n位置段 $k^R_n = \\text{RoPE}(W^{KR} h_n)$（64 维）：只这一段加 RoPE，所有 head 共用，直接缓存。\n$$\\text{score}_i = \\frac{q^{C\\top}_i k^C_{n,i} + q^{R\\top}_i k^R_n}{\\sqrt{128 + 64}}$$\n代价：每 token 每层多缓存 64 个数，512 → 576，多 12.5%。',
     ref: ATTN,
   }),
   b({
@@ -266,8 +274,29 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-fa-v2-v3',
     topic: 'FlashAttention',
-    q: 'FlashAttention v2、v3 分别改了什么？',
-    a: '**v2**：调换循环顺序，外层遍历 Q 块（每个 warp 负责一段 Q 行），K/V 在内层流过；减少 shared memory 同步和非 matmul 的 FLOPs，约快 2 倍。\n**v3**：针对 Hopper，用 TMA 异步搬数据、wgmma、warp specialization 让 softmax 和 GEMM 流水重叠，并支持 FP8。',
+    q: 'FlashAttention v1 在 A100 上只跑到峰值的 25–40%。v2 改了哪三处？每一处为什么能提速？',
+    a: '符号：Q、K、V 是 [S, d]；Q 按 $B_r$ 行一块，K/V 按 $B_c$ 行一块，块数 $T_r = S/B_r$、$T_c = S/B_c$；$m$ 是每行的最大值，$\\ell$ 是 softmax 的分母（online softmax 见 FlashAttention 那张卡）。\n1. **少做非 matmul 的 FLOP**。A100 上 bf16 矩阵乘峰值 312 TFLOP/s，fp32 的普通运算只有 19.5，一次非 matmul FLOP 相当于 16 次 matmul FLOP。v1 每处理一块 K/V 都把 O 除以 $\\ell$ 重新归一化；v2 让 O 一直保持**没除 $\\ell$** 的状态，每块只乘一个修正系数 $e^{m_{\\text{old}} - m_{\\text{new}}}$，循环结束才除一次 $\\ell$（代码见下）。\n2. **沿序列长度也并行**。v1 一个 thread block 管一个 (batch, head)，grid 只有 $B \\cdot H$ 个 block；长序列时 batch 往往很小，B = 1、H = 16 只有 16 个 block，A100 有 108 个 SM。v2 外层循环改成 Q 块，每块 Q 由一个 block 独立算完，grid 变成 $B \\cdot H \\cdot T_r$；S = 16k、$B_r$ = 128 时是 2048 个 block。顺带 O 一直留在寄存器里，最后写一次 HBM。\n3. **block 内按 Q 分给 warp**。v1 的 4 个 warp 各拿一段 K/V，每个 warp 只得到部分结果，要写进 shared memory、同步、再加起来；v2 每个 warp 拿一段 Q 行、看全部 K/V，各自算出自己那几行的输出，warp 之间不用通信。\n效果（作者自测，arXiv 2307.08691）：比 v1 快约 2 倍，A100 上到峰值的 50–73%。',
+    code: lines`
+      # v2 前向：一个 thread block 算一块 Qi [Br, d]
+      m = full(Br, -inf); l = zeros(Br); O = zeros(Br, d)
+      for j in range(Tc):                    # K/V 块在内层流过
+          S = Qi @ K[j].T                    # [Br, Bc]
+          m_new = maximum(m, S.max(-1))
+          P = exp(S - m_new[:, None])
+          scale = exp(m - m_new)
+          l = scale * l + P.sum(-1)
+          O = scale[:, None] * O + P @ V[j]  # 不除 l
+          m = m_new
+      O = O / l[:, None]                     # 循环结束只除一次
+      write(O); write(m + log(l))            # 反向只需要 logsumexp
+    `,
+    ref: FA,
+  }),
+  b({
+    id: 'bagu-fa-v2-v3-2',
+    topic: 'FlashAttention',
+    q: 'FlashAttention-2 在 H100 上只有约 35% 利用率。FA3 用了 Hopper 的哪些新硬件、做了哪几件事？',
+    a: '先说 Hopper 新增的两样：\n1. **TMA**：专门搬数据的硬件单元，一条指令把一整块 tile 从 HBM 异步拷进 shared memory，不用线程逐个算地址。\n2. **wgmma**：一个 warpgroup（4 个 warp，128 个线程）一起发的**异步**矩阵乘，操作数直接从 shared memory 读；发出去以后线程可以先干别的。\n瓶颈在哪：H100 SXM 的 bf16 矩阵乘是 989 TFLOP/s，exp 这类特殊函数只有 3.9 TFLOP/s。head 维度 128 时，每个 score 元素有 $2 \\times 128$（$QK^\\top$）+ $2 \\times 128$（$PV$）= 512 次 matmul FLOP、1 次 exp：\n$$\\frac{1 / 3.9}{512 / 989} \\approx 0.5$$\nexp 的耗时是 matmul 的一半，串着做就多出 50% 的时间。FA3（arXiv 2407.08608）做了三件事：\n1. **warp specialization**：一部分 warp 只发 TMA 加载（producer），其余 warpgroup 只做计算（consumer），中间用 shared memory 里的环形缓冲，搬数据和计算重叠。\n2. **把 softmax 藏进 GEMM**：两个 warpgroup 乒乓，一个在算 exp 时，另一个的 wgmma 在跑；同一个 warpgroup 内也让下一块的 $QK^\\top$ 和这一块的 softmax 重叠。\n3. **FP8**：按块量化，并给 Q、K 乘一个随机正交矩阵（Hadamard）把离群值摊开，降低量化误差。\n效果（作者自测）：bf16 到 740 TFLOP/s（75% 利用率），FP8 接近 1.2 PFLOP/s。',
     ref: FA,
   }),
   b({
@@ -340,23 +369,39 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-spec-exact',
     topic: '投机解码',
-    q: '投机采样怎么保证输出分布和 target 单独采样完全一样？',
-    a: '符号：draft 模型给 token x 的概率 $q(x)$，target 给的 $p(x)$。对 draft 猜的每个位置依次：\n1. 以概率 $\\min\\left(1, \\frac{p(x)}{q(x)}\\right)$ 接受 draft 的 x。\n2. 拒绝时从残差分布重新采样，后面的 draft token 全部作废：\n$$\\tilde x \\sim \\frac{\\max(0,\\ p - q)}{\\sum_y \\max(0,\\ p(y) - q(y))}$$\n3. k 个全接受时，target 在第 k+1 个位置的分布已经算出来了，顺手再采一个。\n为什么严格等于 p：拒绝的总概率正好是 $\\sum_y \\max(0, p(y) - q(y))$，代进去\n$$P(x) = \\min(p(x), q(x)) + \\max(0,\\ p(x) - q(x)) = p(x)$$\n前一项是 draft 猜到 x 且被接受，后一项是拒绝后补采到 x。\n例（见图）：draft 猜 A 的概率 0.6，接受率 0.3 / 0.6 = 0.5；拒绝的总概率 0.3，按 B : C = 0.2 : 0.1 重采。每个 token 最后的概率都等于 p。',
+    q: '投机采样里 draft 猜的 token 按什么规则接受？证明这样采出来的分布和 target 自己采样完全一样。',
+    a: '符号：在某个位置，draft 模型给出分布 $q$，target 给出 $p$（都是词表上的概率）；draft 已经按 q 采了一个 token x。\n规则（Leviathan et al. arXiv 2211.17192；Chen et al. arXiv 2302.01318）：\n1. 以概率 $\\min\\big(1, p(x) / q(x)\\big)$ 接受 x。也就是 p(x) ≥ q(x) 一定接受，p(x) < q(x) 按比例接受。\n2. 拒绝时从残差分布重采一个 token，这个位置之后的 draft token 全部作废：\n$$\\tilde x \\sim \\frac{\\max(0,\\ p - q)}{\\sum_y \\max(0,\\ p(y) - q(y))}$$\n证明：最后输出 x 只有两条路。\n1. draft 采到 x 且被接受：$q(x) \\cdot \\min\\big(1, \\frac{p(x)}{q(x)}\\big) = \\min(p(x), q(x))$。\n2. 先被拒绝，再重采到 x。拒绝的总概率是 $1 - \\sum_y \\min(p(y), q(y))$。因为每个 y 都有 $p(y) = \\min(p, q) + \\max(0, p - q)$，对 y 求和得 $1 - \\sum_y \\min(p, q) = \\sum_y \\max(0, p - q)$，正好等于残差分布的分母，所以这条路的概率是 $\\max(0, p(x) - q(x))$。\n两条加起来：\n$$P(\\text{out} = x) = \\min(p, q) + \\max(0,\\ p - q) = p(x)$$\n看图（每个 # 是 0.1）：p 的每一格，要么被「接受」那一行盖住（min 部分），要么由「重采」那一行补上（p 超出 q 的部分），合起来正好是 p。A 被 draft 高估了，多出的 0.3 概率被拒绝，挪给了被低估的 B 和 C。',
     fig: lines`
-      token          A     B     C
-      q (draft)     0.6   0.3   0.1
-      p (target)    0.3   0.5   0.2
-      accepted      0.3   0.3   0.1   min(p,q)
-      resampled     0     0.2   0.1   max(0,p-q)
-      total         0.3   0.5   0.2   = p
+      each # = 0.1
+
+                 A      B      C
+      q (draft)  ###### ###    #
+      p (target) ###    #####  ##
+      accept     ###    ###    #     min(p,q)
+      resample          ##     #     p-q > 0
+      output     ###    #####  ##    = p
+
+      reject prob = 0.6 - 0.3 = 0.3
     `,
     ref: SPEC,
   }),
   b({
     id: 'bagu-spec-expected',
     topic: '投机解码',
-    q: '接受率 α、猜 k 个，一轮平均产出几个 token？k 越大越好吗？',
-    a: '假设每个 draft token 独立地以概率 α 被接受。前 i 个都被接受的概率是 $\\alpha^i$；不管停在哪，target 都会再补 1 个 token（拒绝位置的重采样，或全接受后的第 k+1 个）：\n$$E[\\text{tokens}] = \\sum_{i=0}^{k} \\alpha^i = \\frac{1 - \\alpha^{k+1}}{1 - \\alpha}$$\n算一下：α = 0.8、k = 4 时 $(1 - 0.8^5) / 0.2 \\approx 3.4$；α = 0.5 时约 1.9。\n加速比还要除以一轮的成本 $ck + 1$（c 是 draft 一步和 target 一步的耗时比）：\n$$\\text{speedup} = \\frac{1 - \\alpha^{k+1}}{(1 - \\alpha)(ck + 1)}$$\nk 大了 $\\alpha^k$ 越来越小、分母线性涨，典型最优 k 在 **3–5**；α 低、draft 又不够便宜时净收益为负。',
+    q: '接受率 α、一轮猜 k 个 token，一轮平均产出几个 token？bonus token 算在哪？k 越大越好吗？',
+    a: '假设每个 draft token 独立地以概率 α 被接受（Leviathan et al. 的简化假设，arXiv 2211.17192）。一轮的产出 = **接受的 draft token 数 N** + **target 自己出的 1 个 token**。\n1. N 的分布：前 i 个都接受才有 N ≥ i，所以 $P(N \\ge i) = \\alpha^i$（i = 1..k）。\n2. 期望用尾概率求和：$E[N] = \\sum_{i=1}^{k} P(N \\ge i) = \\sum_{i=1}^{k} \\alpha^i$。\n3. bonus：不管停在哪，target 这次前向都会多给 1 个 token。在第 j 个位置被拒，就在那个位置从残差分布重采一个；k 个全接受，target 在第 k + 1 个位置的分布已经顺手算好了，再采一个。所以每轮**恰好 +1**。\n4. 合起来：\n$$E[\\text{tokens}] = 1 + \\sum_{i=1}^{k} \\alpha^i = \\sum_{i=0}^{k} \\alpha^i = \\frac{1 - \\alpha^{k+1}}{1 - \\alpha}$$\n求和从 i = 0 开始，多出来的 $\\alpha^0 = 1$ 就是 bonus token。\n算一下：α = 0.8、k = 4，接受 0.8 + 0.64 + 0.512 + 0.41 = 2.36，加 bonus 共 **3.36**。\nk 越大越好吗：一轮的成本是 draft 跑 k 步加 target 跑 1 步。记 c = draft 一步的耗时 ÷ target 一步，并假设 target 一次验证 k + 1 个 token 和算 1 个一样快（decode 是 memory-bound）：\n$$\\text{speedup} = \\frac{1 - \\alpha^{k+1}}{(1 - \\alpha)(ck + 1)}$$\n分子随 k 饱和（上限 $\\frac{1}{1-\\alpha}$），分母随 k 线性涨，所以有最优 k（见表）：α 高、draft 便宜时 k 可以大一些；α = 0.6、c = 0.2 时 k = 2 最好，也只有 1.4 倍，k = 8 反而变慢。',
+    fig: lines`
+      speedup by k
+
+           α=0.8   α=0.8   α=0.6
+      k    c=0.1   c=0.2   c=0.2
+      1    1.64    1.50    1.33
+      2    2.03    1.74    1.40
+      3    2.27    1.85    1.36
+      4    2.40    1.87    1.28
+      6    2.47    1.80    1.10
+      8    2.40    1.66    0.95
+    `,
     ref: SPEC,
   }),
   b({
@@ -432,8 +477,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-metrics',
     topic: '指标',
-    q: 'TTFT、TPOT、ITL、E2E 分别是什么？各自主要受什么影响？',
-    a: '**TTFT**：第一个 token 返回的时间，受排队和 prefill 影响。\n**TPOT**：后续每个 token 的平均间隔，受 decode 每步时间（batch 大小、读多少字节）影响。\n**ITL**：单个 token 间隔，看 P99 抖动，受混进来的 prefill 影响。\n**E2E** = TTFT + TPOT × 输出长度。',
+    q: '一个请求 0 ms 发出，在 300、320、340、500、520 ms 收到第 1 到第 5 个 token。TTFT、TPOT、ITL、E2E 各是多少？各自主要受什么影响？',
+    a: '符号：$t_0$ 是发出请求的时刻，$t_1 \\ldots t_n$ 是收到第 1 到第 n 个 token 的时刻，n = 5。\n1. **TTFT** $= t_1 - t_0 = 300$ ms。包含排队、tokenize、prefill、第一次采样和网络，高负载下大头通常是排队，其次是 prefill。\n2. **ITL**：相邻两个 token 的间隔 $t_k - t_{k-1}$，这里是 20、20、160、20 ms，共 n − 1 = 4 个样本。中间那个 160 ms 一般是这一步 batch 里混进了别人的长 prefill，所以看 ITL 要看 P99。\n3. **TPOT**：除首 token 外的平均间隔 $\\frac{t_n - t_1}{n - 1} = \\frac{220}{4} = 55$ ms，每个请求只算 1 个数。它受 decode 每步的时间影响，也就是 batch 多大、每步读多少字节。\n4. **E2E** $= t_n - t_0 = 520$ ms $=$ TTFT $+ (n - 1) \\times$ TPOT。常见写法「TPOT × 输出长度」多算了一个 token，n 大时可以忽略。\nTPOT 和 ITL 的区别在加权：TPOT 每个请求一票，ITL 每个间隔一票，长输出的请求在 ITL 里权重更大。vLLM 压测脚本 `vllm/benchmarks/serve.py` 就按这个定义算。',
     ref: METRIC,
   }),
   b({
@@ -474,50 +519,104 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-megatron-tp',
     topic: '并行',
-    q: 'Megatron TP 为什么每层只需要两次 all-reduce？',
-    a: '**先 column 后 row**。第一个矩阵按列切，每卡拿完整输入、算出输出的一部分列，无通信；第二个矩阵按行切，输入正好是上一步的列分块，每卡得到部分和，最后一次 all-reduce。\nMLP（up/gate 列切，down 行切）一次，attention（QKV 按 head 列切，W_o 行切）一次，每层共两次。\n前提：中间的激活是 elementwise 的；顺序反过来就要两次。',
+    q: 'MLP 是 $Y = \\text{GeLU}(XA)\\,B$，用 TP 切到 N 张卡上。A 按列切、B 按行切，为什么整个 MLP 只要一次 all-reduce？反过来 A 按行切会怎样？',
+    a: '符号：X 是 [T, d] 的输入（每行一个 token），A 是 [d, f]，B 是 [f, d]，N 张卡。「按列切」是把 A 竖着切成 N 条，「按行切」是把 B 横着切成 N 条（说的是数学上的矩阵，和存储布局无关）。\n1. **A 按列切**：$A = [A_1, \\dots, A_N]$，每卡 $A_k$ 是 [d, f/N]。每卡拿完整的 X 算 $XA_k$，得到中间结果的第 k 段列，**不用通信**。\n2. **GeLU 逐元素**：第 k 段列的 GeLU 只依赖第 k 段，每卡各算各的 $\\text{GeLU}(XA_k)$。\n3. **B 按行切**：$B_k$ 是 [f/N, d]，正好接住第 k 段：\n$$Y = \\sum_{k=1}^{N} \\text{GeLU}(XA_k)\\, B_k$$\n每卡算出一个 [T, d] 的部分和，最后**一次 all-reduce** 求和（见图）。\n反过来 A 按行切：X 也得按列切，每卡得到的是部分和 $X_k A_k$，但\n$$\\text{GeLU}\\Big(\\sum_k X_k A_k\\Big) \\ne \\sum_k \\text{GeLU}(X_k A_k)$$\n所以 GeLU 之前就得 all-reduce，后面还要再通信一次。\nattention 同理：$W_q, W_k, W_v$ 按列切就是按 head 切，每卡算自己的 H/N 个 head，head 之间不用通信；$W_o$ 按行切，一次 all-reduce。所以每层前向共 **2 次**（Megatron-LM，arXiv 1909.08053 第 3 节）。\n例：Llama-3-70B（d = 8192，f = 28672，SwiGLU 的 gate、up 用同样的列切法，SiLU(gate) × up 仍是逐元素），TP = 4 时每卡的 gate、up 是 [8192, 7168]，down 是 [7168, 8192]。',
+    fig: lines`
+      TP = 2, Y = GeLU(X A) B
+
+      card 0          card 1
+      X  [T,d]        X  [T,d]     copy
+      A1 [d,f/2]      A2 [d,f/2]   col
+      GeLU            GeLU         local
+      B1 [f/2,d]      B2 [f/2,d]   row
+      Y1 [T,d]        Y2 [T,d]     partial
+       └── all-reduce: Y = Y1+Y2 ──┘
+    `,
     ref: TP,
   }),
   b({
     id: 'bagu-tp-comm-size',
     topic: '并行',
-    q: 'TP 每次 all-reduce 的通信量和什么有关？和模型大小有关吗？',
-    a: '消息大小是一份完整激活 `B · S · d · b`，**和参数量无关**。参数量靠加层变大，只增加通信次数；序列变长才让单次变大。\n70B、batch 8、2k token、bf16：一次 256 MiB，每层两次、80 层就是 160 次，所以 TP 必须在 NVLink 域内。',
+    q: '70B（d = 8192，80 层）TP = 8、bf16，prefill 一步 8 条 × 2k token。每次 all-reduce 多大、每卡发多少、NVLink 上要多久？参数量变大，这个数怎么变？',
+    a: '符号：T 是这一步的 token 数（batch × 序列长度），d hidden 维度，b 每元素字节，N = TP 度。\n1. 消息大小：TP 的 all-reduce 求和的是一层的输出激活 [T, d]，$D = T d b$ = 16384 × 8192 × 2 = **256 MiB**。\n2. 每卡发送（ring）：$\\frac{2(N-1)}{N} D$ = 1.75 × 256 MiB ≈ 470 MB。\n3. 时间：NVLink 单向 450 GB/s，约 **1.04 ms**。每层前向 2 次，80 层 160 次，约 **167 ms**。\n对比计算：$2PT$ = 2 × 70 × 10⁹ × 16384 ≈ 2.3 PFLOP，8 卡、50% MFU 约 0.58 s。通信不和计算重叠的话，占三成左右。\n和模型大小的关系：$D$ 里只有 d，没有参数量。参数量 ∝ $L d^2$：靠加层数 L 变大时，单次消息不变，只是次数变多；d 翻倍时参数翻 4 倍，消息只翻 2 倍。真正让单次变大的是 **T**。\ndecode 时 T = batch：batch 64 只有 64 × 8192 × 2 = 1 MiB，带宽项约 4 µs，比每次通信的固定延迟还小，这时拼的是延迟（见 ring all-reduce 那张卡）。',
     ref: PAR,
   }),
   b({
     id: 'bagu-ring-allreduce',
     topic: '并行',
-    q: 'ring all-reduce 每张卡的通信量是多少？为什么说它带宽最优？',
-    a: '拆成 reduce-scatter + all-gather 两个阶段，各 N−1 步，每步收发 1/N 的数据，每卡总量 **`2(N−1)/N × D`**，几乎和卡数无关。\n缺点是延迟随 N 线性增长，小消息用 tree 算法更好。NCCL 会按拓扑和消息大小自动选。',
+    q: '8 张卡 ring all-reduce 一份 256 MiB 的数组，每张卡发多少字节？换成 64 张卡呢？为什么说 ring 带宽最优？',
+    a: '符号：N 张卡，每张卡上的数组 D 字节；all-reduce 之后每张卡都拿到 N 份逐元素求和的结果。\n做法：N 张卡连成环，每张卡只发给右边、只从左边收；数组切成 N 块，每块 D/N（4 卡的过程见图）。\n1. **reduce-scatter**，N − 1 步：每步每张卡把一块发给右边，右边加到自己同编号的块上。一块沿环走 N − 1 步，正好加齐 N 份。结束时每张卡各持有一块完整的和。\n2. **all-gather**，N − 1 步：加好的块沿环再转一圈，收到的直接覆盖。\n3. 每张卡共发 $2(N-1)$ 次、每次 D/N：\n$$\\text{每卡发送} = \\frac{2(N-1)}{N} D$$\n代入：N = 8 时 1.75 × 256 = **448 MiB**；N = 64 时 1.97 × 256 = **504 MiB**。卡多了 8 倍，每卡流量只多 12%。NVLink 单向 450 GB/s 下，448 MiB（约 470 MB）约 **1.04 ms**。\n为什么带宽最优：每张卡的结果都需要其余 N − 1 张卡的贡献。求和阶段每卡至少要收 $\\frac{N-1}{N}D$，把结果发到所有卡的阶段每卡至少再收 $\\frac{N-1}{N}D$，合计就是上式，ring 正好达到这个下界（Patarasuk & Yuan 2009 https://www.cs.fsu.edu/~xyuan/paper/09jpdc.pdf ）。\n代价是步数 $2(N-1)$：每步有固定延迟 α，总时间 $2(N-1)\\alpha + \\frac{2(N-1)}{N} \\cdot \\frac{D}{BW}$。消息小（比如 decode 时 1 MiB）或卡很多时延迟项占大头，NCCL 会改用 tree。',
+    fig: lines`
+      N = 4, array in chunks 0..3 (D/4 each)
+      every step: each card sends 1 chunk
+      to its right neighbour
+
+      reduce-scatter (receiver adds)
+        step 0: a chunk holds 2 of 4 parts
+        step 1: 3 of 4
+        step 2: 4 of 4, each card owns 1 sum
+      all-gather (receiver copies)
+        3 more steps
+      per card: 6 sends x D/4 = 1.5 D
+    `,
     ref: COMM,
   }),
   b({
     id: 'bagu-tp-intra-node',
     topic: '并行',
-    q: '为什么 TP 一般不跨节点，PP 可以？',
-    a: 'TP 每层两次 all-reduce，量大且在关键路径上；节点内 NVLink（H100 900 GB/s），跨节点 IB 每端口约 50 GB/s，差一个数量级，跨节点会被通信打死，所以 TP ≤ 8。\nPP 只在 stage 边界传一次激活（P2P），量小两个数量级，还能和计算流水重叠，可以走 IB。',
+    q: '同一份 256 MiB 的 TP all-reduce，在节点内 NVLink 和跨节点 IB 上各要多久？PP 跨节点每步传多少？据此说明为什么 TP 不跨节点、PP 可以。',
+    a: '带宽（每个方向）：H100 节点内 NVLink 约 450 GB/s（标称 900 GB/s 是双向合计），跨节点 IB NDR 每张网卡 400 Gb/s ≈ 50 GB/s，差 9 倍。\n沿用 70B、TP = 8、一步 16384 个 token 的例子（d = 8192，bf16，见 TP 通信量那张卡）：\n1. **TP**：一次 all-reduce 每卡发 1.75 × 256 MiB ≈ 470 MB。NVLink 约 1.04 ms，IB 约 **9.4 ms**。每层 2 次、80 层共 160 次：NVLink 0.17 s，IB **1.5 s**，比这一步的计算（约 0.58 s）还长。而且它在关键路径上：下一层要等这次求和完才能开始。\n2. **PP**：只在 stage 边界把激活 [T, d] 用 P2P 发给下一个 stage，一次 256 MiB，IB 上约 5 ms。p = 2 时整个前向只传 1 次，TP 是 160 次，差两个数量级；还能和别的 micro-batch 的计算重叠。\n结论：TP 组放在一个节点里（≤ 8 卡），跨节点用 PP 或 DP。Llama 3 405B 的 bf16 推理就是这么摆的：节点内 TP，两台机器之间 PP（arXiv 2407.21783 第 6.1 节）。',
     ref: COMM,
   }),
   b({
     id: 'bagu-pp-bubble',
     topic: '并行',
-    q: 'PP 的 bubble 有多大？怎么减小？',
-    a: '`bubble = (p − 1) / m`，p 是 stage 数，m 是 micro-batch 数，要 m ≫ p 才划算。\n**1F1B** 把峰值激活显存从 O(m) 降到 O(p)；**interleaved**（virtual pipeline）把 bubble 再除以 v，代价是通信次数 ×v。\n推理里 decode 的 batch 小、bubble 摊不掉，PP 只在显存实在放不下时用。',
+    q: 'PP 切成 p 个 stage，一个 batch 拆成 m 个 micro-batch。bubble 占多少时间？p = 4 时 m = 8 和 m = 32 各是多少？',
+    a: '符号：p 是 stage 数（模型按层切成 p 段，每段一张卡），m 是 micro-batch 的**个数**，$t_f, t_b$ 是一个 micro-batch 在一个 stage 上前向、反向的时间。\n1. 前向像流水线（见图，GPipe 的调度，arXiv 1811.06965）：第 1 个 micro-batch 要依次走过 p 个 stage，最后一个 stage 要等 p − 1 格才有活干；第一个 stage 送走最后一个 micro-batch 后，也要空等 p − 1 格。\n2. 前向共 $m + p - 1$ 格，每个 stage 只有 m 格在干活；反向一样。总时间 $(m + p - 1)(t_f + t_b)$，有用的是 $m(t_f + t_b)$。\n3. bubble 和有用时间之比：\n$$\\frac{(p - 1)(t_f + t_b)}{m\\,(t_f + t_b)} = \\frac{p - 1}{m}$$\n占总时间是 $\\frac{p - 1}{m + p - 1}$。\n代入 p = 4：m = 8 时 3/8 = 37.5%（占总时间 27%）；m = 32 时 9.4%（8.6%）。所以要 $m \\gg p$。\n怎么减：\n1. **1F1B**（PipeDream，arXiv 1806.03377）：每个 stage 前向反向交替做。bubble 不变，但每个 stage 同时只存最多 p 个 micro-batch 的激活，不是 m 个，m 才敢开大。\n2. **interleaved**（Megatron，arXiv 2104.04473）：每张卡放 v 段不连续的层，bubble 降到 $\\frac{p - 1}{m v}$，代价是 stage 间通信多 v 倍。\n推理时 decode 每步的 batch 本来就小，拆不出很多 micro-batch，PP 主要用在显存放不下的时候。',
+    fig: lines`
+      forward, p = 4, m = 4
+      digit = micro-batch, . = idle
+
+      time     1 2 3 4 5 6 7
+      stage 0  1 2 3 4 . . .
+      stage 1  . 1 2 3 4 . .
+      stage 2  . . 1 2 3 4 .
+      stage 3  . . . 1 2 3 4
+
+      each stage: m busy + (p-1) idle
+    `,
     ref: PAR,
   }),
   b({
     id: 'bagu-sp-cp',
     topic: '并行',
-    q: 'sequence parallel（SP）和 context parallel（CP）都切序列，区别在哪？',
-    a: '**SP** 是 TP 的补充：TP 下 LayerNorm、dropout 在每卡重复算、激活完整复制。SP 把这段按序列切，把 all-reduce 拆成 reduce-scatter + all-gather，**通信总量不变、激活降到 1/N**，基本白捡。\n**CP / Ring Attention** 给超长上下文用：序列切 N 段，每卡持一段 Q/K/V，环形轮转 K/V，每轮算局部 attention、用 online softmax 合并，通信和计算 overlap。',
+    q: 'TP = 8 时，LayerNorm、dropout 那段的激活在每张卡上都是完整的一份。sequence parallel（SP）怎么把它降到 1/8？为什么通信量不变？',
+    a: '先看 TP 的一层（见 Megatron TP 那张卡）：attention 和 MLP 里的矩阵乘按 head / 列切开，每卡只有 1/N；但两段之间的 LayerNorm、dropout、残差加，每张卡都拿着**完整的** [T, d] 激活，重复做同样的计算。\n例：T = 8192 个 token，d = 8192，bf16，一个这样的张量是 8192 × 8192 × 2 B = **128 MiB**，每层有好几个，8 张卡各存一份一样的。\nSP（Korthikanti et al. arXiv 2205.05198）：\n1. LayerNorm 和 dropout 对每个 token **独立**计算，所以这段可以按序列切：每卡只拿 T/N 个 token，[T/N, d]，128 MiB → 16 MiB。\n2. 进入 TP 区需要完整的输入：用 **all-gather** 把 T/N 拼回 T。\n3. 离开 TP 区本来是 all-reduce 求部分和；改成 **reduce-scatter**：求和的同时按 token 切开，每卡只拿自己那 T/N 行，直接进下一段 LayerNorm。\n4. 通信量：ring 上 all-reduce 每卡发 $\\frac{2(N-1)}{N} D$，reduce-scatter、all-gather 各 $\\frac{N-1}{N} D$，加起来一样。all-reduce 本来就是这两步拼成的。\n所以 SP 是白捡的：这段激活降到 1/N，通信不变（见图）。它只管 attention 外面那段；attention 里面还是按 head 切，每卡仍要处理完整的序列长度，那是 CP 解决的（下一张卡）。',
+    fig: lines`
+      one TP layer, N cards
+
+      [T/N, d]  LayerNorm, dropout  (SP)
+         | all-gather
+      [T, d]    attn / MLP by head  (TP)
+         | reduce-scatter
+      [T/N, d]  LayerNorm, dropout  (SP)
+
+      all-reduce = reduce-scatter + all-gather
+    `,
+    ref: PAR,
+  }),
+  b({
+    id: 'bagu-sp-cp-2',
+    topic: '并行',
+    q: 'Llama-3-70B 做 128k 上下文的 prefill，context parallel（CP）= 8。每张卡算什么、传什么？通信能被计算藏住吗？',
+    a: '符号：S 序列长度，N 张卡，d hidden 维度；KV 是每 token 每层的 K、V 字节，70B 是 $2 \\times 8 \\times 128 \\times 2$ = 4 KiB。\n问题：S = 128k 时 attention 的 FLOPs ∝ $S^2$。TP 按 head 切，每卡仍要处理完整的 128k 个 token。CP 把**序列**切开：\n1. 每卡拿连续的 S/N = 16k 个 token，算这一段的 Q、K、V。\n2. Q 留在本卡；K、V 块沿环转 N − 1 步，每步每卡用自己的 Q 和手上那块 K、V 算一次局部 attention（因果时整块在后面的直接跳过）。\n3. 各块结果用 online softmax 合并（和 FlashAttention 块间合并一样），结果严格等于整段 attention。这就是 Ring Attention（arXiv 2310.01889）。\n能不能藏住，算一步的两边：\n1. 计算：$QK^\\top$ 和 $PV$ 每层约 $4d\\,(S/N)^2$ = 4 × 8192 × 16384² ≈ 8.8 TFLOP，H100 满算力约 **9 ms**。\n2. 通信：一块 K、V = 16384 × 4 KiB = 64 MiB，IB 50 GB/s 约 **1.3 ms**。\n计算是通信的约 7 倍，下一块 K、V 在算当前块的时候就收完了。这个比值 ∝ S/N，序列越长越好藏。\n和 SP 的区别：SP 切的是 attention **外面**的 LayerNorm、dropout，通信量和 TP 相同；CP 切的是 attention **里面**的序列，用传 K、V 换掉每卡 $S^2$ 的计算和激活。',
     ref: PAR,
   }),
   b({
     id: 'bagu-parallel-choice',
     topic: '并行',
-    q: '给一个大模型选并行方式，按什么顺序定？',
-    a: '1. **TP** 填满 NVLink 域（≤ 8），且不超过 H_kv。\n2. 还放不下就加 **PP**，跨节点走 IB。\n3. 剩下的卡都给 **DP** 扩吞吐（推理时副本间零通信）。\n4. MoE 的 expert 单独用 **EP**，和 attention 的并行解耦；超长上下文加 **CP**。\n原则：什么放不下、什么链路快，共同决定切哪一维。',
+    q: '用 H100（80 GB，每节点 8 卡）部署两个模型：Llama-3-70B bf16（权重 140 GB）和 Llama-3.1-405B bf16（约 810 GB）。TP、PP、DP 各怎么定？',
+    a: '先定三条约束，再代数字：\n1. TP 每层两次 all-reduce、在关键路径上，只能在 NVLink 域内：**TP ≤ 8**。GQA 下还要 **TP ≤ H_kv**（这两个模型都是 8），否则 KV head 要复制。\n2. PP 只在 stage 边界传一次激活，可以跨节点，但有 bubble：**放得下就不用**。\n3. 剩下的卡做 **DP**（多副本）：推理时副本之间不通信，吞吐线性涨。\n70B：单卡放不下 140 GB。按 90% 显存可用（72 GB）算：TP = 2 每卡权重 70 GB，只剩约 2 GB 给 KV；TP = 4 每卡 35 GB，再留几 GB 给激活，剩约 30 GB 给 KV。所以 **TP = 4**，一台 8 卡机器放 2 个副本（DP = 2）。更看重单请求延迟时用 TP = 8，每步读的权重更少、副本更少。\n405B：810 GB > 8 × 80 = 640 GB，一个节点放不下，TP 又不能跨节点，所以 **节点内 TP = 8 × 跨节点 PP = 2**。Llama 3 论文的 405B bf16 推理就是这么做的（arXiv 2407.21783 第 6.1 节）。换成 FP8 权重约 405 GB，一个节点 TP = 8 就放得下，PP 就省了。\nMoE 的专家另用 EP，超长上下文加 CP，原则一样：先看什么放不下，再看哪条链路快。',
     ref: PAR,
   }),
   b({
@@ -530,22 +629,38 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-moe-batch',
     topic: '并行',
-    q: '为什么 MoE 推理要大 batch、大 EP 才划算？DP attention 是什么？',
-    a: 'batch 小时每个专家只分到几个 token，读了整个专家权重却只算几个 token，AI 极低。大 EP 把所有卡的 HBM 带宽凑起来读专家权重，大 batch 让每个专家分到足够多的 token。\n**DP attention**：attention 权重小，用 DP 而不是 TP，避免 KV 被 TP 复制；expert 部分用 EP。DeepSeek 的部署就是这样。',
+    q: 'DeepSeek-V3 有 256 个路由专家，每个 token 选 8 个。单卡 batch 64 时每个专家分到几个 token、算术强度多少？要多少 token 才到 H100 的 ridge？',
+    a: '符号：E 路由专家数（256），k 每个 token 选几个（8），T 这一步的 token 总数，N 卡数，b 每卡的 token 数。\n1. 均匀路由时每个专家分到 $m = Tk/E$ 个 token。专家的 GEMM 读一遍专家权重、只算 m 个 token，bf16 下 AI ≈ m（推法同 decode：每个权重 2m FLOP、2 字节）。\n2. T = 64：m = 64 × 8 / 256 = **2**，AI ≈ 2，比同 batch 的 dense 模型（AI = 64）低 E/k = 32 倍。\n3. 更糟的是专家几乎全被点到：某个专家一个 token 都没分到的概率是 $(1 - k/E)^T$ = 0.969⁶⁴ ≈ 13%，所以约 **87%** 的专家权重都要读一遍，只为 64 个 token。\n4. 要 m ≈ 295，T ≈ 295 × 32 ≈ **9400** 个 token。一张卡的 KV 显存撑不住这么大的 batch。\n解法是 EP：N 张卡各跑 b 个 token，专家分散到各卡，token 用 all-to-all 发到专家所在的卡：\n$$m = \\frac{N b k}{E}$$\nDeepSeek 公开的 decode 配置是 EP128、每卡 128 个请求：m = 128 × 128 × 8 / 256 = **512**，越过 ridge；同时每卡只读 1/N 的专家权重（DeepSeek-V3 技术报告 arXiv 2412.19437，配置见 https://github.com/deepseek-ai/profile-data ）。',
     ref: MOE,
+  }),
+  b({
+    id: 'bagu-moe-batch-2',
+    topic: '并行',
+    q: 'DeepSeek-V3 部署时 attention 用 DP、专家用 EP（DP attention）。如果 attention 改用 TP = 8，MLA 的 KV cache 会出什么问题？',
+    a: '先说 TP 怎么切 KV：TP 按 head 切，每卡只存自己那几个 KV head 的缓存。GQA 有 8 个 KV head 时，TP = 8 每卡 1 个，KV 正好 1/8。\n1. MLA 的缓存是一份所有 head 共用的 576 维 latent（见 MLA 那张卡），没有 KV head 可切。TP = 8 时每张卡都要存**完整的** latent，KV 显存是 8 份一样的。\n2. **DP attention**：attention 不切，每张卡放一份完整的 attention 权重，只处理分给自己的那批请求，每个请求的 KV 只存在一张卡上。\n3. 权重放得下吗：V3 每层 attention 约 1.9 亿参数（$W^{DQ}, W^{UQ}, W^{DKV}, W^{UK}, W^{UV}, W^O$），61 层约 **114 亿**，FP8 约 11 GB，每卡复制一份可以接受。占大头的约 6500 亿专家参数才用 EP 切开。\n4. 层内流程：每卡算完自己请求的 attention → all-to-all 把 token 发给专家所在的卡 → 专家算完再发回原卡。\nSGLang 给 DeepSeek 模型做了 DP attention，报告 decode 吞吐最多提升 1.9 倍（作者自测，https://lmsys.org/blog/2024-12-04-sglang-v0-4/ ）。',
+    ref: PAR,
   }),
   b({
     id: 'bagu-zero',
     topic: '并行',
-    q: 'ZeRO 1 / 2 / 3 各切什么？每卡显存分别是多少？',
-    a: 'Adam 混合精度每参数 16 字节：参数 2 + 梯度 2 + 优化器 12（fp32 主权重、m、v）。\n**ZeRO-1** 切优化器状态：`4Ψ + 12Ψ/N`。\n**ZeRO-2** 再切梯度：`2Ψ + 14Ψ/N`。\n**ZeRO-3** 连参数也切：`16Ψ/N`，每层前向反向前 all-gather 参数，通信量是普通 DP 的 **1.5 倍**。FSDP 是 PyTorch 原生的 ZeRO-3。',
+    q: '7B 模型全参微调，8 张卡数据并行，混合精度 Adam。普通 DDP 每卡要 112 GB，放不下。ZeRO-1 / 2 / 3 各切掉什么，每卡剩多少？',
+    a: '符号：$\\Psi$ 是参数个数（7 × 10⁹），N 是数据并行的卡数（8）。混合精度 Adam 每个参数存 16 B：bf16 参数 2 + bf16 梯度 2 + 优化器状态 12（fp32 主权重、m、v 各 4，为什么要这些见训练显存那张卡）。下面都不含激活。\n1. **DDP**：每卡一份完整的 $16\\Psi$ = 112 GB。8 张卡存 8 份一模一样的东西，还做一模一样的优化器更新。\n2. 关键观察：Adam 更新第 i 个参数，只用到第 i 个参数自己的梯度、m、v、主权重，和别的参数无关。所以可以分工：参数均分成 N 段，卡 k 只更新第 k 段、只存第 k 段的状态（ZeRO，arXiv 1910.02054）。\n3. **ZeRO-1** 切优化器状态：$2\\Psi + 2\\Psi + 12\\Psi/N$ = 14 + 14 + 10.5 = **38.5 GB**。\n4. **ZeRO-2** 再切梯度（reduce-scatter 以后别人那段梯度用不上了，直接丢）：$2\\Psi + 14\\Psi/N$ = 14 + 12.25 = **26.3 GB**。\n5. **ZeRO-3** 连参数也切：$16\\Psi/N$ = **14 GB**。算某一层之前临时 all-gather 出这层的完整参数，算完就丢。\n通信（每卡约发多少，单位是 Ψ 个元素）：DDP 的梯度 all-reduce = reduce-scatter + all-gather，约 2Ψ。ZeRO-1/2 只是把这两半拆开，中间插进优化器更新，还是 2Ψ。ZeRO-3 前向、反向各 all-gather 一次参数，再 reduce-scatter 梯度，约 3Ψ，**多 50%**。PyTorch 的 FSDP 就是 ZeRO-3。',
+    fig: lines`
+      7B, N = 8: bytes per param -> per GPU
+
+              param  grad  optim  total
+      DDP       2     2     12    112 GB
+      ZeRO-1    2     2     12/8  38.5 GB
+      ZeRO-2    2     2/8   12/8  26.3 GB
+      ZeRO-3    2/8   2/8   12/8  14 GB
+    `,
     ref: ZERO,
   }),
   b({
     id: 'bagu-zero3-vs-tp',
     topic: '并行',
-    q: 'ZeRO-3 和 TP 都把参数切到多卡，本质区别？',
-    a: 'ZeRO-3 切的是**存储**：计算前把整层参数 gather 回来，每卡算完整的层，通信的是参数（和 batch 无关）。\nTP 切的是**计算**：每卡只算自己那片，all-reduce 合并结果，通信的是激活（和 batch 成正比）。\n所以小 batch 用 TP 划算，大 batch 用 ZeRO 划算。',
+    q: 'ZeRO-3 和 TP 都把参数切到 N 张卡上。Llama-2-7B（d = 4096，每层约 2 亿参数）、N = 8、一个 micro-batch 4096 个 token，两者每层各通信多少？token 多到多少时 ZeRO-3 反而更省？',
+    a: '先说定义上的区别：\n1. **ZeRO-3 切存储**：每卡平时只存 1/N 的参数，算某层前 all-gather 拼回完整参数，**每卡算完整的层**，处理自己那份数据。通信的是**参数**，和 token 数无关。\n2. **TP 切计算**：每卡一直只有 1/N 的参数，只算自己那一片，用 all-reduce 把部分结果加起来。通信的是**激活**，和 token 数成正比。\n每层的通信（ring，每卡发送；$P_\\ell$ 每层参数，T token 数，b = 2 字节）：\n1. ZeRO-3：前向 all-gather + 反向 all-gather + 梯度 reduce-scatter，各 $\\frac{N-1}{N} P_\\ell b$：\n$$3 \\times \\tfrac{7}{8} \\times 2.02 \\times 10^8 \\times 2 \\approx 1.06\\ \\text{GB}$$\n2. TP：前向 2 次、反向 2 次 all-reduce，各 $\\frac{2(N-1)}{N} T d b$：\n$$4 \\times 1.75 \\times 4096 \\times 4096 \\times 2 \\approx 0.23\\ \\text{GB}$$\n3. 两者相等时 $3P_\\ell = 8Td$，$T = 3P_\\ell / (8d) \\approx$ **1.85 万 token**。一个 micro-batch 的 token 比这多，ZeRO-3 的通信就更少。\n别的区别：ZeRO-3 的 all-gather 可以提前预取下一层、和计算重叠，也能跨节点；TP 的 all-reduce 在关键路径上、只能在 NVLink 内，但它把每卡的计算和激活也切成了 1/N，ZeRO-3 不切激活。大规模训练常把两者组合：节点内 TP，节点间 ZeRO / DP。',
     ref: ZERO,
   }),
 
@@ -574,34 +689,35 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-warp-divergence',
     topic: 'GPU',
-    q: '什么是 warp divergence？causal attention 为什么不怎么受影响？',
-    a: '同一 warp 的 32 个线程共用一条指令流。线程走不同分支时，硬件先让走 if 的线程执行（其余空等），再让走 else 的执行，两条路径**串行**，吞吐减半（例子见代码）。\ncausal attention 影响小，因为 mask 按 tile 处理（见图）：大多数 tile 要么全可见、要么全被 mask（整块跳过），这个判断按 tile 做，整个 warp 走同一路。只有对角线上的 tile 要逐元素 mask，而且用 `where(mask, s, -inf)` 这样的选择指令，不用分支。',
+    q: '下面两个版本，哪个会 warp divergence，各要多少周期？causal attention 在 S = 4096、tile 128 时，有多少个 tile 需要逐元素 mask？',
+    qcode: lines`
+      // a() 和 b() 各要 100 个周期
+      int t = threadIdx.x, w = t / 32;   // w: warp 编号
+      // 版本 1
+      if (t % 2 == 0) a(); else b();
+      // 版本 2
+      if (w % 2 == 0) a(); else b();
+    `,
+    a: 'warp 是 32 个线程，**共用一条指令流**：同一时刻发一条指令，32 个线程一起执行。分支时如果线程要走不同的路，硬件只能把每条路依次走一遍，不在当前这条路上的线程被屏蔽、空等，这就是 divergence（CUDA 编程指南 SIMT 一节 https://docs.nvidia.com/cuda/cuda-programming-guide/03-advanced/advanced-kernel-programming.html ）。\n1. 版本 1：同一个 warp 里偶数线程走 a、奇数线程走 b，**divergence**。这个 warp 先跑 a（一半线程闲着）再跑 b（另一半闲着），**200 个周期**，慢一倍。\n2. 版本 2：`w = threadIdx.x / 32` 是 warp 编号，同一个 warp 的 32 个线程条件相同，整个 warp 只走一条路，**100 个周期**。不同 warp 走不同的路没关系，warp 之间本来就各自调度。\n3. 常见的无害分支：边界检查 `if (i < n)`，只有最后一个 warp 里有部分线程为假，代价可以忽略。\ncausal attention 为什么基本不受影响：mask 先按 tile 判断（见图），一个 tile 要么全可见、要么全被 mask，这个判断对整个 warp 是一样的。S = 4096、tile 128：一共 32 × 32 个 tile，上三角 496 个整块跳过，下三角 496 个全可见、直接算，只有对角线上 **32 个**（要算的 528 个里的 6%）需要逐元素 mask。逐元素 mask 也用 `where(allowed, s, -inf)` 这样的选择指令，所有线程执行同一条指令，不分支。',
     fig: lines`
-                 K tile
-                 0  1  2  3
-      Q tile 0   D  .  .  .
-             1   F  D  .  .
-             2   F  F  D  .
-             3   F  F  F  D
+                   K tile
+                   0  1  2  3
+        Q tile 0   D  .  .  .
+               1   F  D  .  .
+               2   F  F  D  .
+               3   F  F  F  D
 
       F: fully visible, no mask
       D: diagonal, mask per element
       .: fully masked, skipped
-    `,
-    code: lines`
-      // divergence：同一 warp 里奇数、偶数线程走不同分支，两条路径串行
-      if (threadIdx.x % 2 == 0) a(); else b();
-
-      // 没有 divergence：按 warp 分界，同一 warp 的线程走同一路
-      if ((threadIdx.x / 32) % 2 == 0) a(); else b();
     `,
     ref: GPU,
   }),
   b({
     id: 'bagu-gemv',
     topic: 'GPU',
-    q: '为什么 decode 的 GEMV 打不满 Tensor Core？',
-    a: 'GEMM 靠 tiling 让 A、B 的块在 shared memory / 寄存器里反复复用，强度 ∝ `BM·BN / (BM + BN)`。GEMV 里 M = batch 很小，每个权重只用一次，没有复用，强度约等于 batch，带宽先打满，Tensor Core 大部分时间在等数据。\n对策：加大 batch、W4A16 少读字节、split-K 让更多 SM 参与读权重。',
+    q: 'decode 时 MLP 的 up 投影：x 是 [B, 8192]，W 是 [8192, 28672]，bf16。B = 1、16、256 时算术强度各是多少？为什么 Tensor Core 打不满？',
+    a: '符号：x 是 [B, K]，W 是 [K, N]，K = 8192，N = 28672，bf16 每个元素 2 B。B 是 batch（decode 时每个序列 1 个 token）。\n1. FLOPs：$2BKN$（每个权重对每个 token 一次乘加）。\n2. 字节：读 W 是 $2KN$，读 x 是 $2BK$，写 y 是 $2BN$。B 远小于 K、N 时几乎全是读 W。\n$$\\text{AI} = \\frac{2BKN}{2KN + 2B(K + N)} \\approx B$$\n代入：B = 1 → 1.0，B = 16 → 16.0，B = 256 → 246。\n3. 可达性能 = min(峰值, 带宽 × AI)。H100 上 B = 1 时是 3.35 TB/s × 1 = 3.35 TFLOP/s，只有峰值 989 的 **0.3%**；B 要到两三百才接近 ridge 295。\n为什么：GEMM 快，是因为每个权重从 HBM 读进来以后，在 shared memory 和寄存器里被很多行输入反复使用。B = 1 时每个权重只用一次（这就是 GEMV，矩阵乘向量），Tensor Core 算完马上就要等下一批数据。\n对策：\n1. 加大 B（continuous batching）：AI 直接跟着涨。\n2. 少读字节：W4A16 每个权重只读 0.5 B，同样的 B 下 AI 是 4 倍。\n3. 让足够多的 SM 一起读：比如 o_proj 的 W 是 [8192, 8192]，每个 block 负责 128 列输出时只有 64 个 block，H100 有 132 个 SM，一半闲着，连带宽都跑不满。**split-K** 再把 K 维切成 4 段，256 个 block 各读一段，最后把部分和加起来。',
     ref: GEMM,
   }),
   b({
@@ -733,8 +849,16 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-torch-compile',
     topic: '框架',
-    q: 'torch.compile 的三段分别做什么？什么是 graph break？',
-    a: '**Dynamo**：在 CPython 的 frame evaluation 钩子上符号执行字节码，抓出 FX 图，记下 guard，下次 guard 命中直接跑编译好的图。\n**AOTAutograd**：把前向和反向一起 trace 成 ATen 算子图。\n**Inductor**：融合 pointwise / reduction，生成 Triton（GPU）或 C++（CPU）kernel。\n**graph break**：遇到数据相关的控制流（如 `if x.sum() > 0`）、print、不支持的调用时切断图，前后各编一段；太多就退化成 eager。',
+    q: '下面的函数被 torch.compile 编译，会切成几段图？torch.compile 的三段（Dynamo、AOTAutograd、Inductor）各做什么？',
+    qcode: lines`
+      @torch.compile
+      def f(x):
+          y = torch.relu(x) * 2
+          if y.sum() > 0:
+              return y + 1
+          return y - 1
+    `,
+    a: '先说目标：eager 模式下每个算子是一次 Python 调用、一个 kernel，`relu`、`* 2`、`+ 1` 是三个 kernel，各自读写一遍显存。torch.compile 想先把 Python 函数抓成一张图，再把图编译成更少、更快的 kernel（PyTorch 2 论文 https://pytorch.org/assets/pytorch2-2.pdf ）。\n1. **Dynamo（抓图）**：在 Python 执行函数的字节码之前接管，逐条符号执行，把张量操作记进一张 FX 图，同时记下 **guard**，也就是这张图成立的前提，比如 x 是 float32、形状 [8, 4096]。下次调用先检查 guard：满足就直接跑编译好的代码；不满足（比如形状变成 [16, 4096]）就重新编译。\n2. **graph break**：Dynamo 只记录对张量做了什么，不知道张量里的**值**。`if y.sum() > 0` 要看值才能决定走哪支，图只能在这里断开：第一段图算到 `y.sum() > 0`，回到普通 Python 判断条件，再从分支里开第二段图。所以本题是 **2 段**：`relu, * 2, sum` 一段，`+ 1`（或 `- 1`）一段。`print`、不支持的第三方调用也会断。断得越多越接近 eager，用 `TORCH_LOGS=graph_breaks` 查断在哪。\n3. **AOTAutograd**：训练时提前把反向图也 trace 出来，前向、反向都拆成底层的 ATen 算子，交给后端一起优化。\n4. **Inductor（生成代码）**：把相邻的逐元素、归约算子融合，生成 Triton kernel（GPU）或 C++（CPU）；矩阵乘默认仍调 cuBLAS。\n融合省多少：x 是 100 万个 fp32（4 MB）。eager 下 relu、× 2、+ 1 三个 kernel 各读 4 MB、写 4 MB，共 24 MB；融合成一个 kernel 只读一次、写一次，8 MB。这类算子是 memory-bound，时间约降到 1/3。',
     ref: COMPILE,
   }),
   b({
@@ -758,8 +882,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-train-memory',
     topic: 'Post-train',
-    q: '混合精度 Adam 训练，每个参数占多少显存？7B 全参微调要多少？',
-    a: '每个参数要存 5 样东西（见图）：\n1. bf16 参数 w（2 B）：前向、反向用的权重。\n2. bf16 梯度 g（2 B）：反向算出的 $\\partial L / \\partial w$。\n3. fp32 主权重（4 B）：优化器在它上面更新，更新完再 cast 成 bf16 的 w（为什么见 bf16 那张卡）。\n4. Adam 的 m 和 v（各 4 B）：每个参数各有一个，更新公式：\n$$m \\leftarrow \\beta_1 m + (1 - \\beta_1) g,\\quad v \\leftarrow \\beta_2 v + (1 - \\beta_2) g^2,\\quad w \\leftarrow w - \\eta \\frac{m}{\\sqrt{v} + \\epsilon}$$\n合计 **16 字节 / 参数**。7B：7 × 10⁹ × 16 = 112 GB，超过一张 80 GB 的 H100，这还没算激活。',
+    q: '混合精度 Adam 训练，每个参数要存哪 5 样东西？各自为什么非存不可？7B 全参微调光这些就要多少？',
+    a: '从一个训练 step 走一遍（代码见下），看每一步用到什么：\n1. **bf16 参数 w（2 B）**：前向、反向的矩阵乘都用它。bf16 比 fp32 算得快、占一半显存。\n2. **bf16 梯度 g（2 B）**：反向给每个参数算出 $\\partial L / \\partial w$，个数和参数一样多，要一直存到优化器用完。\n3. **Adam 的 m（4 B）**：梯度的滑动平均 $m \\leftarrow \\beta_1 m + (1 - \\beta_1) g$，也就是「动量」，让更新方向更稳。它要跨 step 累积，所以**每个参数一个、一直存着**。\n4. **Adam 的 v（4 B）**：梯度平方的滑动平均 $v \\leftarrow \\beta_2 v + (1 - \\beta_2) g^2$。更新量是 $\\eta\\, m / (\\sqrt{v} + \\epsilon)$：梯度一直很大的参数步子小，一直很小的步子大，每个参数有自己的步长（Adam，arXiv 1412.6980）。同样跨 step 累积。\n5. **fp32 主权重（4 B）**：$\\eta\\, m / \\sqrt v$ 常常只有 1e-4 量级，直接加到 bf16 的 w 上会被舍入掉（见 bf16 主权重那张卡），所以在一份 fp32 副本上更新，再 cast 成 bf16 的 w。m、v 用 fp32 也是这个原因。\n合计 2 + 2 + 4 + 4 + 4 = **16 B / 参数**（ZeRO 论文的记法，arXiv 1910.02054）。7B：7 × 10⁹ × 16 = **112 GB**，一张 80 GB 的 H100 放不下，而且还没算激活（前向留给反向用的中间结果，另算）。\n各框架略有出入：Megatron 把梯度累加在 fp32 里（梯度 4 B，合计 18）；8-bit Adam 把 m、v 各压到 1 B（合计 10）。',
     fig: lines`
       per parameter   bytes   dtype
       w               2       bf16
@@ -768,6 +892,16 @@ export const baguCards: Card[] = [
       Adam m          4       fp32
       Adam v          4       fp32
       total           16
+    `,
+    code: lines`
+      # 一个训练 step（省略 Adam 的偏差修正）
+      loss = model(x, weights=w)         # w: bf16
+      g = grad(loss, w)                  # g: bf16，和 w 一样多
+      g32 = g.float()
+      m = b1 * m + (1 - b1) * g32        # fp32，跨 step 保留
+      v = b2 * v + (1 - b2) * g32 ** 2   # fp32，跨 step 保留
+      w32 -= lr * m / (v.sqrt() + eps)   # 在 fp32 主权重上更新
+      w = w32.to(bfloat16)               # 给下一步前向用
     `,
     ref: TMEM,
   }),
@@ -789,8 +923,15 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-bf16-fp16',
     topic: 'Post-train',
-    q: '为什么 fp16 训练要 loss scaling，bf16 不用？那 bf16 为什么还要 fp32 主权重？',
-    a: '位数见「浮点格式」那张卡：fp16 是 5 位指数 + 10 位尾数，bf16 是 8 位指数 + 7 位尾数。\n1. fp16 要 loss scaling：指数只有 5 位，小于约 6 × 10⁻⁸ 的数直接变成 0，小梯度会下溢。先把 loss 乘一个大数 S，梯度跟着放大 S 倍，更新前再除回去。\n2. bf16 不用：8 位指数，范围和 fp32 一样，梯度不会下溢。\n3. bf16 还要 fp32 主权重：尾数只有 7 位，1 附近相邻两个数差 $2^{-7} \\approx 0.008$。权重 w = 1.0、更新量 $\\eta g = 10^{-4}$，直接在 bf16 里算 $1.0 - 10^{-4}$ 会被舍入回 1.0，这次更新就丢了。所以在 fp32 主权重上累加更新，前向时再 cast 成 bf16。',
+    q: 'fp16 有 5 位指数，bf16 有 8 位（位数见浮点格式那张卡）。一个梯度是 1e-8，存成 fp16 和 bf16 各变成多少？fp16 训练的 loss scaling 怎么救它？',
+    a: '先回顾浮点数：值 = $(-1)^s \\times 2^{e - \\text{bias}} \\times 1.f$。指数 e 的位数决定能表示多大、多小的数，尾数 f 的位数决定精度。\n1. fp16 指数 5 位，最小的正规数是 $2^{-14} \\approx 6.1 \\times 10^{-5}$；再往下还有非正规数（尾数前面不补 1），最小到 $2^{-24} \\approx 6 \\times 10^{-8}$，更小就**下溢成 0**。\n2. 所以 1e-8 存成 fp16 是 **0**，这个梯度就丢了。Micikevicius et al. 统计过激活梯度的分布，有相当一部分落在 fp16 能表示的范围以下（arXiv 1710.03740，作者自测）。\n3. bf16 指数 8 位，和 fp32 一样，最小正规数约 $1.2 \\times 10^{-38}$。1e-8 存成 bf16 还是 **约 1e-8**（只有两三位有效数字，但不会变成 0）。\n**loss scaling**：反向之前把 loss 乘一个大数 S，比如 $2^{16}$ = 65536。由链式法则，所有梯度都跟着乘 S：1e-8 × 65536 ≈ 6.6e-4，进了 fp16 的正规范围。更新参数之前在 fp32 里除回 S。动态版本：梯度里出现 inf / NaN 就跳过这一步、S 减半；连续若干步正常就把 S 加倍。\nbf16 范围够大，**不需要 loss scaling**（Kalamkar et al. arXiv 1905.12322：bf16 不改超参就训到和 fp32 相当，作者自测）。bf16 的问题在精度，见下一张卡。',
+    ref: TMEM,
+  }),
+  b({
+    id: 'bagu-bf16-fp16-2',
+    topic: 'Post-train',
+    q: 'bf16 训练为什么还要一份 fp32 主权重？算一下：w = 1.0，这一步的更新量 η·g = 1e-4，直接在 bf16 里算 w − 1e-4 得到什么？',
+    a: '关键量是 **ulp**：某个数附近相邻两个可表示数的间隔。尾数有 m 位时，[1, 2) 之间的间隔是 $2^{-m}$，[0.5, 1) 之间是 $2^{-m-1}$。\n1. bf16 尾数 7 位：1.0 往上的下一个数是 $1 + 2^{-7} \\approx 1.0078$，往下是 $1 - 2^{-8} \\approx 0.9961$。\n2. $1.0 - 10^{-4} = 0.9999$，离 1.0 只有 1e-4，离 0.9961 有 0.0038，按最近舍入回到 **1.0**，这一步白更新了。\n3. 每一步都这样：100 步、每步 1e-4，本该挪 0.01，bf16 里的 w 一动不动。\n4. fp32 尾数 23 位，1.0 附近间隔约 $1.2 \\times 10^{-7}$，1e-4 的更新能留下、能累积。\n所以混合精度训练（Micikevicius et al. arXiv 1710.03740）这样分工：\n1. 前向、反向用 bf16 的 w：矩阵乘快、省显存。\n2. 优化器在 **fp32 主权重**上累加更新，更新完再 cast 成 bf16 给下一步用。\n3. Adam 的 m、v 也存 fp32，同样是为了小量能累积（v 是梯度的平方，数值更小）。\n代价是每个参数多 4 B，就是「每参数 16 字节」里的那一项（见训练显存那张卡）。',
     ref: TMEM,
   }),
   b({
@@ -814,29 +955,51 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-multi-lora',
     topic: 'Post-train',
-    q: '一个服务里同时跑很多个 LoRA adapter，怎么做？',
-    a: '所有请求共享同一份 base 权重，不合并 adapter；不同请求的 adapter 计算用 batched GEMV（Punica 的 SGMV、S-LoRA）合到一个 kernel 里，adapter 权重按需换入换出显存。\n只服务一个 adapter 时，直接把 BA 加回 W，零额外开销。',
+    q: '一个服务挂 100 个 LoRA adapter（Llama-2-7B，r = 16，7 个线性层都加）。每个 adapter 多大？为什么不把每个都合并进 W？一个 batch 里混着不同 adapter 的请求怎么算？',
+    a: 'LoRA 回顾：冻结的 $W_0$（d × k）旁边加 $BA$，B 是 d × r、A 是 r × k，输出 $h = W_0 x + \\frac{\\alpha}{r} BAx$（见 LoRA 那张卡）。每个线性层多 $r(d + k)$ 个参数。\n1. 一个 adapter 多大：每层 q、k、v、o 各 16 × (4096 + 4096)，gate、up 各 16 × (4096 + 11008)，down 16 × (11008 + 4096)，合计约 125 万；32 层约 4000 万参数，bf16 **80 MB**。base 是 13.5 GB。\n2. 为什么不合并：$W_0 + BA$ 对每个 adapter 都是一份新的 13.5 GB 权重，100 个就是 1.35 TB；而且一个 batch 里只能跑同一个 adapter 的请求。\n3. 不合并怎么算：所有请求共用 $W_0$，一个大 GEMM 算 $W_0 x$；每个请求再按自己的 adapter 编号加上 $B_a A_a x$（代码见下）。100 个 adapter 共 8 GB 放得下，更多的放 CPU 按需换入。\n4. 额外 FLOPs 很少：LoRA 部分和 base 之比是 $r(d + k) / (dk)$ = 16 × 8192 / 4096² ≈ 0.8%。难点是一个 batch 里各请求用不同的 A、B，要把「按 adapter 分段的小矩阵乘」做成一个 kernel：Punica 的 SGMV（arXiv 2310.18547）。S-LoRA 再把 adapter 权重和 KV cache 放进同一个分页显存池统一管理（arXiv 2311.03285）。\n只服务一个 adapter 时就直接合并，零额外开销。',
+    code: lines`
+      # x: [T, k]，batch 里所有请求的 token 拼在一起
+      # idx[t]: 第 t 个 token 用哪个 adapter
+      y = x @ W0.T                         # 共享的 base，一个大 GEMM
+      for a in idx.unique():               # SGMV 把这个循环做成一个 kernel
+          rows = idx == a
+          y[rows] += (x[rows] @ A[a].T) @ B[a].T * (alpha / r)
+    `,
     ref: LORA,
   }),
   b({
     id: 'bagu-ppo-four-models',
     topic: 'Post-train',
-    q: 'PPO-RLHF 里有哪四个模型？KL 约束的作用？',
-    a: '**policy**（训练）、**reference**（冻结，算 KL）、**reward**（冻结，打分）、**value / critic**（训练，估 advantage 的基线）。\nreward 里减去 `β · KL(policy ‖ reference)`，防止 policy 为了刷分跑偏（reward hacking）。β 太大学不动，太小会跑偏。',
+    q: '7B 模型做 PPO-RLHF，要同时放哪四个模型？每个做什么、训不训、占多少显存？',
+    a: '显存口径：要训练的模型每参数 16 B（bf16 参数 + 梯度 + fp32 主权重、Adam m、v），只做前向的 bf16 模型每参数 2 B。7B 分别是 112 GB 和 14 GB。\n1. **actor / policy**（训，112 GB）：被优化的 LLM，从 SFT 模型初始化，负责生成回答。\n2. **critic / value**（训，112 GB）：通常和 actor 一样大，在每个 token 位置输出一个数 $V(s_t)$，估计「从这里往下平均能拿几分」。用它算 advantage：$A_t$ ≈ 实际得分 − $V(s_t)$，比平均好的 token 推高、差的压低。\n3. **reward model**（冻，14 GB）：在人类偏好对上训好的打分器，给整条回答打一个分 $r(x, y)$。\n4. **reference**（冻，14 GB）：冻结的 SFT 模型，只用来算 KL，防止 policy 跑偏（见下一张卡）。\n合计约 **252 GB**，还不含激活和生成时的 KV cache，所以 PPO-RLHF 天然多卡、多引擎（InstructGPT，arXiv 2203.02155）。\n一个 PPO step：actor 生成回答 → reward model 打分 → reference 和 actor 算每个 token 的 log 概率，得到 KL → critic 算 V，用 GAE 得到 advantage → 用 PPO 的 clip loss 更新 actor、用回归 loss 更新 critic（PPO，arXiv 1707.06347）。\nGRPO 去掉了 critic；DPO 再去掉 reward model 和生成。',
+    ref: RLHF,
+  }),
+  b({
+    id: 'bagu-ppo-four-models-2',
+    topic: 'Post-train',
+    q: 'PPO-RLHF 里的 KL 惩罚为什么要加、加在哪？β 太大、太小各会怎样？',
+    a: '符号：$\\pi_{\\theta_{\\text{old}}}$ 是生成这批回答时的 policy（参数快照），$\\pi_{\\text{ref}}$ 是冻结的 SFT 模型，$s_t$ 是 prompt 加前 t − 1 个 token，$y_t$ 是第 t 个 token，T 是回答长度，$r_\\psi(x, y)$ 是 reward model 的分，β > 0。\n为什么要：reward model 只在 SFT 模型的输出附近训过，是人类偏好的不完美代理。policy 跑到它没见过的地方，会找到「打分高但人觉得烂」的回答，比如堆讨好的话、越写越长，这叫 **reward hacking**。KL 把 policy 拴在 reference 附近。\n加在哪：InstructGPT 放进每个 token 的 reward 里（arXiv 2203.02155）：\n$$r_t = -\\beta \\log \\frac{\\pi_{\\theta_{\\text{old}}}(y_t \\mid s_t)}{\\pi_{\\text{ref}}(y_t \\mid s_t)} + \\mathbb{1}[t = T]\\, r_\\psi(x, y)$$\n每个 token 都扣掉「偏离 reference 的程度」，最后一个 token 再加上 reward model 的分，一起交给 critic 和 GAE 算 advantage。\n例：某个 token policy 给 0.5、reference 给 0.05，log 比 = ln 10 ≈ 2.3，β = 0.05 时这个 token 扣 0.115。这样的 token 多了，扣分就抵掉 reward model 给的好处。\n1. β 太大：稍一偏离就扣分，policy 几乎不动，学不到东西。\n2. β 太小：拴不住，reward 分数一路涨，人工评估反而变差。\n和 PPO 的 clip 不重复：clip 只限制相邻两轮之间改多少，多轮累积下来照样能跑远；KL 管的是离固定锚点的总距离。',
     ref: RLHF,
   }),
   b({
     id: 'bagu-dpo',
     topic: 'Post-train',
-    q: 'DPO 的 loss 是什么？和 PPO 比优缺点？',
-    a: '把 Bradley-Terry 偏好模型和带 KL 约束的最优解代回去，只剩 policy 和 reference 的对数概率：\n`L = −log σ(β[(log π(y_w|x) − log π_ref(y_w|x)) − (log π(y_l|x) − log π_ref(y_l|x))])`\n优点：不用 reward model、不用采样，像 SFT 一样简单稳定。缺点：off-policy，依赖离线偏好数据的分布。',
+    q: 'DPO 的 loss 是什么，为什么不需要 reward model？算一个例子：β = 0.1，policy 相对 reference 把好回答的 log 概率提高了 2、把差回答的降低了 1，loss 是多少？',
+    a: '符号：x 是 prompt，$y_w$ 是被选中的好回答，$y_l$ 是被拒绝的差回答；$\\pi_\\theta$ 是在训的模型，$\\pi_{\\text{ref}}$ 是冻结的 SFT 模型；$\\log \\pi(y|x)$ 是整条回答每个 token 的 log 概率之和；σ 是 sigmoid；β 是 KL 约束的强度。\n推导三步（DPO，arXiv 2305.18290）：\n1. RLHF 的目标「最大化 reward − β · KL(π ‖ π_ref)」有闭式最优解：$\\pi^*(y|x) \\propto \\pi_{\\text{ref}}(y|x)\\, e^{r(x,y)/\\beta}$。\n2. 反过来把 reward 用策略表示：$r(x,y) = \\beta \\log \\frac{\\pi^*(y|x)}{\\pi_{\\text{ref}}(y|x)} + \\beta \\log Z(x)$。$Z(x)$ 是归一化常数，要对所有可能的回答求和，算不出来，但它只和 x 有关。\n3. 偏好模型（Bradley-Terry）只看两个回答的 reward 差：$P(y_w \\succ y_l) = \\sigma(r_w - r_l)$，同一个 x 的 $\\beta \\log Z(x)$ 正好相减抵消。把 $\\pi^*$ 换成 $\\pi_\\theta$，在偏好数据上做最大似然：\n$$\\mathcal{L} = -\\log \\sigma\\Big(\\beta \\log \\frac{\\pi_\\theta(y_w|x)}{\\pi_{\\text{ref}}(y_w|x)} - \\beta \\log \\frac{\\pi_\\theta(y_l|x)}{\\pi_{\\text{ref}}(y_l|x)}\\Big)$$\nreward 被「policy 和 reference 的 log 概率比」代替了，所以不用单独训 reward model，也不用生成回答。\n代入例子：括号里 = 0.1 × (2 − (−1)) = 0.3，$\\mathcal{L} = -\\log \\sigma(0.3) \\approx 0.55$。这一对的梯度权重是 $\\sigma(-0.3) \\approx 0.43$：已经排对了一些，权重就小于 0.5；排错时括号为负，权重接近 1。',
+    ref: RLHF,
+  }),
+  b({
+    id: 'bagu-dpo-2',
+    topic: 'Post-train',
+    q: '7B 模型做偏好对齐，DPO 和 PPO 各要放几个模型、多少显存？DPO 省掉了什么，代价是什么？',
+    a: '显存口径：要训练的模型每参数 16 B，只做前向的 bf16 模型每参数 2 B（7B 分别是 112 GB、14 GB），不含激活和 KV。\n1. **PPO-RLHF**：actor（训）112 + critic（训，同尺寸）112 + reward model 14 + reference 14 ≈ **252 GB**，外加生成回答时的 KV cache。\n2. **DPO**：policy（训）112 + reference 14 ≈ **126 GB**。reference 的 log 概率只和数据有关，可以提前算好存下来，训练时连它都不用放。训练形态和 SFT 一样：读数据、前向、算 loss、反向。\n省掉的：reward model（reward 隐含在 log 概率比里）、critic（不需要逐 token 的基线）、生成（只在固定数据上算 log 概率）。\n代价是**离线**（off-policy）：偏好对是别的模型事先生成的，训练过程中 policy 变了，数据不跟着变（DPO，arXiv 2305.18290）。\n1. policy 自己会生成、但数据里没有的回答，loss 管不到。常见现象是 $y_w$ 和 $y_l$ 的 log 概率**一起下降**，只是 $y_l$ 降得更多，概率流向了数据之外的回答。\n2. 学不到「自己试、按对错改」，推理类任务的提升有限。缓解办法是迭代 / online DPO：每轮用当前 policy 重新采样、打标签再训，但这又需要生成和打分器了。',
     ref: RLHF,
   }),
   b({
     id: 'bagu-grpo',
     topic: 'Post-train',
-    q: 'GRPO 相比 PPO 改了什么？适合什么任务？',
-    a: '去掉 value model：每个 prompt 采样一组 G 个回答，advantage = (r − 组内均值) / 组内标准差，用组内统计当基线。省掉 critic 的显存和训练不稳定。\n适合 **reward 可验证** 的任务（数学、代码对错），reward 噪声小，组内基线够用。DeepSeek-R1 用它。',
+    q: 'GRPO 不用 critic 怎么算 advantage？一道数学题采 4 个回答，对错是 [1, 0, 0, 1]，各自的 advantage 是多少？4 个全对呢？',
+    a: '先说 advantage：这个回答的 reward 减去一个基线（「平均能拿几分」）。高于平均的回答推高它的 token 概率，低于平均的压低。PPO 用一个和 policy 一样大的 critic 网络学这个基线。\nGRPO（DeepSeekMath，arXiv 2402.03300）：同一个 prompt 用当前 policy 采 G 个回答，reward 是 $r_1, \\dots, r_G$，直接拿组内的统计量当基线：\n$$\\hat A_i = \\frac{r_i - \\text{mean}(r)}{\\text{std}(r)}$$\n第 i 个回答的所有 token 共用这个 $\\hat A_i$。\n代入 [1, 0, 0, 1]：均值 0.5，标准差 0.5（按总体算），advantage = **[+1, −1, −1, +1]**：答对的两条推高，答错的压低。\n全对 [1, 1, 1, 1]：std = 0，advantage 全是 0（实现里分母会加一个小 ε），这一组**没有梯度**，白采了。题太简单或太难都会这样，DAPO 的动态采样就是把这种组过滤掉再补采（arXiv 2503.14476）。\n省了什么：7B 下 critic 要 7 × 10⁹ × 16 B = 112 GB（参数、梯度、Adam 状态）。GRPO 只剩 actor 112 + reference 14 ≈ 126 GB，PPO 约 252 GB。\n适合 reward **可验证**的任务（数学答案对不对、代码能不能过测试）：reward 由规则算，不用 reward model，噪声也小，组均值当基线够用。DeepSeek-R1 就用它做推理 RL（arXiv 2501.12948）。',
     ref: RLHF,
   }),
   b({
@@ -849,31 +1012,46 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-sft-packing',
     topic: 'Post-train',
-    q: 'SFT 做 packing 要注意什么？loss mask 怎么设？',
-    a: 'packing 把多条短样本拼成一条定长序列，GPU 利用率从三到五成提到九成以上。要注意三件事：\n1. **attention 不能跨样本**：用 block-diagonal 的因果 mask（见图），或者 varlen attention 传 `cu_seqlens`，否则后面的样本会 attend 到前面样本的 token。\n2. **位置编码按样本重置**：position_ids 每个样本从 0 开始。\n3. **loss mask**：prompt、system、用户轮的 label 设成 −100（PyTorch 的 cross entropy 默认忽略它），只在 assistant 的回答上算 loss。',
+    q: 'SFT packing 把 3 条样本拼成一条：a a a | b b | c c c。attention mask 和 position_ids 怎么设？不设会怎样？',
+    a: 'packing：把多条短样本首尾拼成一条定长序列，免得每条都 pad 到最大长度，GPU 利用率能从三到五成提到九成以上。拼起来以后有两件事要处理。\n1. **attention 不能跨样本**。只用普通的因果 mask（j ≤ i）的话，b 的 token 会看到 a 的内容，训练时多出推理时不存在的上下文（cross-contamination，Krell et al. arXiv 2107.02027）。允许 query i 看 key j 要同时满足两个条件（见图和代码）：\n同一条样本：`seg[i] == seg[j]`，seg 记每个 token 属于第几条；\n因果：`j <= i`。\n前一个条件是 block-diagonal 矩阵，后一个是下三角矩阵，按位与就是最终的 mask。\n2. **位置编码按样本重置**：position_ids = 0 1 2 0 1 0 1 2，每条从 0 开始，和单独推理时一样。\n实际训练不会物化这个 mask：FlashAttention 的 varlen 接口传 `cu_seqlens = [0, 3, 5, 8]`（每条样本在拼接序列里的起止位置），kernel 按段做因果 attention，效果和这个 mask 一样。',
     fig: lines`
-      3 samples packed:  a a a | b b | c c c
-      1 = can attend
+      first 5 tokens: a a a b b
+      row = query i, col = key j, 1 = allowed
 
-            a a a b b c c c
-         a  1 . . . . . . .
-         a  1 1 . . . . . .
-         a  1 1 1 . . . . .
-         b  . . . 1 . . . .
-         b  . . . 1 1 . . .
-         c  . . . . . 1 . .
-         c  . . . . . 1 1 .
-         c  . . . . . 1 1 1
-
-      position_ids = 0 1 2 0 1 0 1 2
-      cu_seqlens   = [0, 3, 5, 8]
+      same seg      j <= i        allowed
+      1 1 1 . .     1 . . . .     1 . . . .
+      1 1 1 . .     1 1 . . .     1 1 . . .
+      1 1 1 . .  &  1 1 1 . .  =  1 1 1 . .
+      . . . 1 1     1 1 1 1 .     . . . 1 .
+      . . . 1 1     1 1 1 1 1     . . . 1 1
     `,
     code: lines`
-      seg = torch.tensor([0, 0, 0, 1, 1, 2, 2, 2])   # 每个 token 属于第几个样本
+      seg = torch.tensor([0, 0, 0, 1, 1, 2, 2, 2])   # 每个 token 属于第几条样本
       i = torch.arange(8)[:, None]                   # (8, 1) query 下标
       j = torch.arange(8)[None, :]                   # (1, 8) key 下标
-      allowed = (seg[:, None] == seg[None, :]) & (j <= i)   # 同一样本 且 因果
-      attn = attn.masked_fill(~allowed, float('-inf'))
+      allowed = (seg[i] == seg[j]) & (j <= i)        # (8, 8) 同一样本 且 因果
+      scores = scores.masked_fill(~allowed, float('-inf'))
+
+      starts = torch.tensor([0, 3, 5])               # 每条样本的起点
+      position_ids = torch.arange(8) - starts[seg]   # 0 1 2 0 1 0 1 2
+    `,
+    ref: SFT,
+  }),
+  b({
+    id: 'bagu-sft-packing-2',
+    topic: 'Post-train',
+    q: '一条拼好的 SFT 序列里有 system、user、assistant 三种内容，labels 怎么设才能只在回答上算 loss？两条样本的接缝处要注意什么？',
+    a: '先说 label：语言模型在位置 t 预测第 t + 1 个 token。HF 的约定是 labels 和 input_ids 对齐，模型内部错开一位再算 cross entropy；label 为 **−100** 的位置不算 loss（PyTorch `cross_entropy` 的 `ignore_index` 默认就是 −100）。\n1. **只学回答**：system、user 的 token 是给定的条件，不该学着去生成，label 设 −100；assistant 的 token（包括结束符）保留原来的 token id（见图）。多轮对话一次前向就算完所有 assistant 轮的 loss，不用拆成多条样本、重复算前面的对话。\n2. **接缝**：错开一位以后，a 的最后一个 token 会被训练去预测 b 的第一个 token，这是两条无关样本之间的「预测」。所以每条样本**第一个 token 的 label 设 −100**。HF 的 `DataCollatorWithFlattening` 就是这样拼 labels 的：每条样本是 `[-100] + labels[1:]`（https://github.com/huggingface/transformers/blob/main/src/transformers/data/data_collator.py ）。\n如果每条样本都以 system / user 开头，第一个 token 本来就是 −100，接缝自然被盖住；不 mask prompt 的数据（比如续写式语料）就必须单独处理。',
+    fig: lines`
+      tok     label   role
+      <sys>   -100    system  (sample 1)
+      Hi      -100    user
+      Hello   Hello   assistant
+      <eos>   <eos>   assistant
+      <sys>   -100    system  (sample 2)
+      2+2?    -100    user
+      4       4       assistant
+      <eos>   <eos>   assistant
     `,
     ref: SFT,
   }),
@@ -882,8 +1060,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-sd-order',
     topic: '系统设计',
-    q: '「设计一个 LLM 推理服务」按什么顺序答？',
-    a: '1. **澄清**：模型规模、QPS 和输入输出长度分布、TTFT / TPOT 的 P99 目标、是否流式、是否多租户。\n2. **容量估算**：显存账定 TP 和单副本并发，roofline 定单副本吞吐，推出副本数。\n3. **分层架构**：网关 → 路由 → 推理副本 → KV 存储。\n4. **单副本内部**：continuous batching、chunked prefill、PagedAttention、流式输出。\n5. **多副本**：prefix 亲和路由、自动扩缩。\n6. **可观测性和降级**。',
+    q: '面试题：设计一个 70B 聊天模型的推理服务，峰值 100 QPS，平均输入 2k、输出 500 token，TTFT P99 < 1 s、TPOT < 50 ms。前几分钟应该算出哪几个数？它们怎么决定架构？',
+    a: '顺序：先把 SLA 和流量问清楚（这里题目已给），然后**先算容量**，架构从数字里推出来。以 H100 80 GiB、bf16 为例：\n1. **显存定 TP**：权重 132 GiB，单卡放不下。TP = 4 每卡 33 GiB；按 90% 显存可用、再留 3 GiB 给激活，每卡剩约 36 GiB 给 KV。KV 每 token 320 KiB，4 卡共约 **45 万 token**；每个请求最多约 2.5k token，单副本能同时放约 180 个请求。\n2. **roofline 定单副本吞吐**：decode 一步每卡读 33 GiB ÷ 3.35 TB/s ≈ 10 ms，加上读 KV 和 all-reduce，实际约 20 ms。batch 64 时 64 ÷ 0.02 s = **3200 token/s**。\n3. **副本数**：100 QPS × 500 = 5 万 token/s ÷ 3200 ≈ **16 个副本、64 张卡**。\n4. **核对 prefill**：100 QPS × 2000 token × 2 × 70 × 10⁹ = **28 PFLOP/s**；64 卡 × 989 TFLOP/s × 50% MFU ≈ 31.6 PFLOP/s。prefill 几乎吃满算力，这是最关键的发现。\n由数字推架构：\n1. prefill 是瓶颈 → prefix caching（复用 system prompt 和多轮历史），考虑 PD 分离给 prefill 单独配卡。\n2. TPOT 要求 → chunked prefill，避免长 prompt 的 prefill 卡住正在 decode 的请求。\n3. 多副本 → 网关 + 按前缀亲和路由，命中 prefix cache；按排队长度扩缩容。\n4. 最后是可观测性（TTFT / TPOT 分位数、KV 使用率）和过载降级（准入控制，直接返回 429）。',
     ref: SD,
   }),
   b({

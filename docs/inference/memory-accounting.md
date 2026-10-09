@@ -82,6 +82,58 @@ $$
 
 TP 下权重和 KV 都按 $1/\text{TP}$ 分，激活不分（每卡都要完整的 $[B, S, d]$）。**陷阱**：KV 按 head 切，$H_{kv} < \text{TP}$ 时 KV head 只能复制，每卡 KV 不再是 $1/\text{TP}$。Llama-3-70B 的 $H_{kv} = 8$，所以 TP=16 时 KV 在每两张卡上是重复的。
 
+#### 代码演示
+
+把上面几项串起来，回答两个问题：Llama-3-70B bf16 在 80 GiB 的 H100 上，TP = 2 / 4 / 8 时各能放多少 token 的 KV？同时服务 32 个 8k 上下文的请求最少几张卡？
+
+口径：每张卡按 `gpu_memory_utilization = 0.9` 只用 72 GiB，再留 3 GiB 给激活峰值和 CUDA Graph 内存池，剩 69 GiB 给权重和 KV；权重按 TP 均分。改参数可以直接重跑。
+
+```python
+import math
+
+GiB = 2**30
+
+# Llama-3-70B, bf16
+P, b_w = 70.6e9, 2                    # 参数量, 每参数字节
+L, H_kv, d_h, b_kv = 80, 8, 128, 2    # 层数, KV head 数, head 维度, KV 每元素字节
+kv_per_token = 2 * L * H_kv * d_h * b_kv     # K 和 V 各一份: 327,680 B = 320 KiB
+W = P * b_w                                  # 权重: 131.5 GiB
+
+HBM, util, act = 80 * GiB, 0.9, 3 * GiB
+usable = HBM * util - act                    # 每卡 69 GiB 给权重和 KV
+
+def kv_tokens(tp):
+    """TP 张卡合起来能放多少 token 的 KV。"""
+    free = tp * usable - W
+    return max(0, int(free // kv_per_token))
+
+for tp in (2, 4, 8):
+    t = kv_tokens(tp)
+    print(f"TP={tp}: KV {t * kv_per_token / GiB:5.1f} GiB = {t:>9,} token = {t // 8192:3d} 个 8k 请求")
+# TP=2: KV   6.5 GiB =    21,290 token =   2 个 8k 请求
+# TP=4: KV 144.5 GiB =   473,488 token =  57 个 8k 请求
+# TP=8: KV 420.5 GiB = 1,377,885 token = 168 个 8k 请求
+
+def min_tp(batch, ctx):
+    """同时服务 batch 个 ctx 长的请求，最少几张卡（TP 要整除 H_kv）。"""
+    need = W + batch * ctx * kv_per_token
+    n = math.ceil(need / usable)
+    tp = next((t for t in (1, 2, 4, 8) if t >= n), None)   # None: 一个节点放不下
+    return round(need / GiB, 1), tp
+
+print(min_tp(32, 8192))    # (211.5, 4)   权重 131.5 + KV 80 GiB
+print(min_tp(64, 8192))    # (291.5, 8)   batch 翻倍，只多 80 GiB
+print(min_tp(32, 32768))   # (451.5, 8)   上下文 ×4，KV ×4
+```
+
+怎么读这几个数：
+
+1. **TP = 2 基本不可用**。两张卡 138 GiB，权重就占了 131.5 GiB，只剩 6.5 GiB 给 KV，两个 8k 请求就满了。
+2. **TP 从 2 到 4，KV 空间涨 20 多倍**。权重是固定的一块，多出来的两张卡几乎全部变成 KV。这就是开头说的「要几张卡本质是 KV 要多少」。
+3. **32 × 8k 要 4 张卡**：$131.5 + 80 = 211.5$ GiB，÷ 69 ≈ 3.07，向上取到 3 张；但 TP 要整除 $H_{kv} = 8$（也要整除 Q head 数 64），只能取 4。
+4. **只有 KV 随并发和长度线性涨**。batch 翻倍或上下文 ×4，涨的全是 KV 那一项，权重和每卡的激活、固定开销都不变。所以算卡数时先算 KV，再加上常数项。
+5. 这里按每个请求都满 8k 算的是最坏情况。PagedAttention 按实际 token 数分配，真正的约束是所有活跃序列的 token 总数 × KV/token ≤ KV 空间（见下面的面试追问）。
+
 ## 交互
 
 改 batch、context、dtype，看哪一项先把显存吃满。把 KV dtype 调到 fp8 看 KV 减半，把模型换成 DeepSeek-V3 看 MLA 的 KV 有多小。

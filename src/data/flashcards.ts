@@ -95,7 +95,7 @@ const primitiveCards: Card[] = [
     deck: 'torch',
     topic: 'broadcasting',
     q: '`logits (B, V) - logits.max(dim=-1).values` 有什么问题？',
-    a: '想做的：每一行减去这一行的最大值。\n`logits.max(dim=-1).values` 的 shape 是 `(B,)`，被归约的那一维没了。广播先在左边补 1，变成 `(1, B)`，对上的是 `(B, V)` 的**最后一维 V**，不是 B。\n结果：B ≠ V 时报错；B = V 时不报错但算错。看代码里的数：第 0 行应该减 5、第 1 行减 3，实际变成了第 0 列减 5、第 1 列减 3。\n`keepdim=True` 让结果保留成 `(B, 1)`，对上的才是行。归约后还要和原 tensor 运算的，一律加 `keepdim=True`。\n你的 LeetGPU 解法里没出现过这个错，它是 stable-softmax 和 torch 原语页列的常见坑；NumPy 的 `keepdims` 也一样。',
+    a: '想做的：每一行减去这一行的最大值。\n1. `logits.max(dim=-1).values` 的 shape 是 `(B,)`：被归约的那一维没了。\n2. 和 `(B, V)` 运算时，广播先在**左边**补 1，`(B,)` 变成 `(1, B)`，于是它对上的是 `(B, V)` 的**最后一维 V**，不是 B。\n3. 结果：B ≠ V 时报错；B = V 时不报错但算错。代码里第 0 行应该减 5、第 1 行减 3，实际变成第 0 列减 5、第 1 列减 3。\n修法：`keepdim=True` 让结果保留成 `(B, 1)`，补 1 补在右边那一维上，对上的才是行。规则：归约之后还要和原 tensor 运算的，一律加 `keepdim=True`。',
     code: lines`
       logits = torch.tensor([[1., 5.], [3., 2.]])         # B = V = 2
       m = logits.max(dim=-1).values                       # tensor([5., 3.])，shape (2,)
@@ -116,9 +116,15 @@ const primitiveCards: Card[] = [
     id: 'torch-causal-triu',
     deck: 'torch',
     topic: 'mask',
-    q: '加法 causal mask 用 `triu` 怎么写？写成 `triu(0)` 会怎样？',
-    a: '`torch.full((S, S), -inf).triu(1)`：保留主对角线**右上方**为 -inf。`triu(0)` 把对角线也盖掉，第一行全是 -inf，softmax 出 **NaN**。',
-    ref: `${TP}#mask`,
+    q: 'causal mask 的标准写法？为什么不用 `triu`？',
+    a: '1. 本站模板：行下标 `i = arange(S)[:, None]`，列下标 `j = arange(S)[None, :]`，`allowed = j <= i`（True = 能看），`attn.masked_fill(~allowed, -inf)`。规则直接照公式写，不用推对角线编号。\n2. `triu` 版本只是备选：`full((S, S), -inf).triu(1)`。要记住 `k=1` 才不含主对角线；写成 `triu(0)` 会把对角线也盖掉，第一行全是 -inf，softmax 出 **NaN**。sliding window 这类规则要推两条对角线，最容易差一。\n3. 加法 mask 只能取交集；规则里有「或」（sink | window）只能用 bool `allowed`。',
+    code: lines`
+      i = torch.arange(S, device=x.device)[:, None]   # (S, 1) query
+      j = torch.arange(S, device=x.device)[None, :]   # (1, S) key
+      allowed = j <= i
+      attn = attn.masked_fill(~allowed, float('-inf'))
+    `,
+    ref: '/leetgpu/mask',
   },
   {
     id: 'torch-masked-fill',
@@ -455,13 +461,19 @@ const primitiveCards: Card[] = [
     deck: 'torch',
     topic: 'repeat · 写代码',
     q: '写代码：`x = torch.tensor([[1, 2, 3], [4, 5, 6]])`，shape `(2, 3)`。想把它**整块**上下摞两份，得到 `(4, 3)`：前两行是 x，后两行还是 x。',
-    a: '`x.repeat(2, 1)`：每个参数是这一维铺几份。第 0 维（行）铺 2 份，第 1 维（列）铺 1 份，也就是不变。',
+    a: '`x.repeat(2, 1)`。\n`repeat` 的参数是**每一维各铺几份**，有几维就写几个数，输出 shape = 输入 shape 逐维乘这些数：\n1. 第 0 维（行，往下数）铺 2 份：2 × 2 = 4 行。\n2. 第 1 维（列，往右数）铺 1 份，也就是不变：3 × 1 = 3 列。\n所以 `(2, 3)` → `(4, 3)`。「铺」是把**整块** x 当瓷砖往下贴，顺序是 x、x；想要每一行自己连着复制（行 0、行 0、行 1、行 1）用的是 `repeat_interleave`（见图）。',
     code: lines`
       >>> x.repeat(2, 1)
       tensor([[1, 2, 3],
               [4, 5, 6],
               [1, 2, 3],
               [4, 5, 6]])
+    `,
+    fig: lines`
+      x rows: r0 = [1 2 3], r1 = [4 5 6]
+
+      x.repeat(2, 1)                  r0 r1 r0 r1   whole block tiled
+      x.repeat_interleave(2, dim=0)   r0 r0 r1 r1   each row copied in place
     `,
     ref: `${TP}#只改元数据-vs-会拷贝`,
   },
@@ -475,7 +487,17 @@ const primitiveCards: Card[] = [
       x.repeat_interleave(2, dim=0)
       x.repeat_interleave(2, dim=1)
     `,
-    a: '`repeat_interleave(n, dim)`：沿第 dim 维，把每一片原地连着复制 n 份，只有这一维变长。\n1. `dim=0`：每一**行**复制 2 份：行 0、行 0、行 1、行 1，(2, 2) 变成 (4, 2)。\n2. `dim=1`：每一**列**复制 2 份，(2, 2) 变成 (2, 4)。\n不写 dim 会先展平成一维再复制，所以一般都要写。',
+    a: '先认维度：x 是 `(2, 2)`，第 0 维是**行**（往下数，r0 = [1, 2]、r1 = [3, 4]），第 1 维是**列**（往右数，c0 = [1, 3]、c1 = [2, 4]）。\n`repeat_interleave(n, dim)`：沿第 dim 维，把每一片**原地连着**复制 n 份。只有第 dim 维的长度乘 n，其他维不变。\n1. `dim=0`：切片是行，每行复制 2 份，顺序 r0 r0 r1 r1，`(2, 2)` → `(4, 2)`。\n2. `dim=1`：切片是列，每列复制 2 份，顺序 c0 c0 c1 c1，`(2, 2)` → `(2, 4)`。\n不写 dim 会先展平成一维再复制，得到 `[1, 1, 2, 2, 3, 3, 4, 4]`，所以一般都要写。',
+    fig: lines`
+      x (2, 2)     r0 = [1 2]
+                   r1 = [3 4]
+
+      dim=0 -> (4, 2)    dim=1 -> (2, 4)
+        r0  [1 2]          c0 c0 c1 c1
+        r0  [1 2]         [1  1  2  2]
+        r1  [3 4]         [3  3  4  4]
+        r1  [3 4]
+    `,
     code: lines`
       >>> x.repeat_interleave(2, dim=0)
       tensor([[1, 2],
@@ -494,7 +516,7 @@ const primitiveCards: Card[] = [
     deck: 'torch',
     topic: 'repeat_interleave · 写代码',
     q: '写代码：GQA 里 Q 有 4 个 head，K 只有 2 个 head：Q head 0、1 共用 K head 0，Q head 2、3 共用 K head 1。k 的 shape 是 `(2, S, dk)`，第 0 维是 head。想展开成 `(4, S, dk)`，让第 i 个位置正好是 Q head i 要用的 K。',
-    a: '`k.repeat_interleave(2, dim=0)`：每个 K head 原地连着复制 2 份，顺序变成 0, 0, 1, 1（见图）。2 是每个 K head 要给几个 Q head 用：4 ÷ 2。\n用 `k.repeat(2, 1, 1)` 会变成 0, 1, 0, 1，Q head 1 拿到的是 K head 1，错了还不报错。',
+    a: '`k.repeat_interleave(2, dim=0)`。\n1. 复制几份：每个 K head 要给几个 Q head 用，叫**组大小** g = Q head 数 ÷ K head 数 = 4 ÷ 2 = 2。一般写法 `k.repeat_interleave(H // H_kv, dim=0)`。\n2. 沿哪一维：head 是第 0 维，所以 `dim=0`。\n3. 结果：每个 K head 原地连着复制 g 份，顺序 0, 0, 1, 1，第 i 个位置正好是 Q head i 要的（见图），shape `(2, S, dk)` → `(4, S, dk)`。\n易错：`k.repeat(2, 1, 1)` 是整块平铺，顺序 0, 1, 0, 1，Q head 1 拿到的是 K head 1，shape 对、不报错，但算错了。',
     fig: lines`
       Q head                      0  1  2  3
       repeat_interleave(2, dim=0) 0  0  1  1   right
@@ -538,20 +560,21 @@ const primitiveCards: Card[] = [
     topic: 'stack · 读代码',
     q: '读代码：每个表达式输出什么？（stack）',
     qcode: lines`
-      a = torch.tensor([1, 2])
-      b = torch.tensor([3, 4])
+      a = torch.tensor([1, 2, 3])    # shape (3,)
+      b = torch.tensor([4, 5, 6])    # shape (3,)
       torch.stack([a, b], dim=0)
       torch.stack([a, b], dim=1)
     `,
-    a: '有区别。stack 会**新插一维**，dim 是新维插在哪，不写就是 0：\n1. `dim=0`：结果的第 i **行**是第 i 个 tensor，a、b 各占一行。\n2. `dim=1`：结果的第 i **列**是第 i 个 tensor，a、b 各占一列。\n两个结果 shape 都是 (2, 2)，内容互为转置。',
+    a: '`stack` 把 n 个同 shape 的 tensor 摞起来，**新插一维**，长度是 n（这里 n = 2）。dim 是新维插在第几个位置，不写默认 0。\n1. `dim=0`：新维插在最前，`(3,)` → `(2, 3)`。新维是行，第 i **行**是第 i 个 tensor。\n2. `dim=1`：新维插在最后，`(3,)` → `(3, 2)`。新维是列，第 i **列**是第 i 个 tensor。\n两个结果互为转置。对比 `cat`：cat 不插新维，只把已有的一维接长，`cat([a, b])` 是 `(6,)`。',
     code: lines`
-      >>> torch.stack([a, b], dim=0)
-      tensor([[1, 2],
-              [3, 4]])
+      >>> torch.stack([a, b], dim=0)    # (2, 3)
+      tensor([[1, 2, 3],
+              [4, 5, 6]])
 
-      >>> torch.stack([a, b], dim=1)
-      tensor([[1, 3],
-              [2, 4]])
+      >>> torch.stack([a, b], dim=1)    # (3, 2)
+      tensor([[1, 4],
+              [2, 5],
+              [3, 6]])
     `,
     ref: `${TP}#只改元数据-vs-会拷贝`,
   },
@@ -657,7 +680,17 @@ const primitiveCards: Card[] = [
     deck: 'torch',
     topic: 'max / sum（dim、keepdim） · 写代码',
     q: '写代码：手写数值稳定的 softmax：`x` 是 `(B, V)`，每一行先减去这一行的最大值。',
-    a: '`x - x.max(dim=-1, keepdim=True).values`：减数是 `(B, 1)`，按行广播。漏了 keepdim 就是 `(B,)`，对上的是 V 那一维。',
+    a: '`x - x.max(dim=-1, keepdim=True).values`\n1. `.values` 是什么：`x.max(dim=...)` 返回的不是一个 tensor，而是一对 `(values, indices)`：每行的最大值，和最大值在第几列（同 argmax）。`.values` 取前者。也可以用 `x.amax(dim=-1, keepdim=True)`，它只返回值。\n2. `dim=-1`：沿最后一维 V 求 max，每行一个数。\n3. `keepdim=True`：结果是 `(B, 1)` 而不是 `(B,)`，按行广播到 `(B, V)`。漏了 keepdim 就是 `(B,)`，广播时对上的是 V 那一维（见 keepdim 那张卡）。',
+    code: lines`
+      >>> x = torch.tensor([[1., 5.], [3., 2.]])
+      >>> x.max(dim=-1)
+      torch.return_types.max(
+      values=tensor([5., 3.]),
+      indices=tensor([1, 0]))
+      >>> x - x.max(dim=-1, keepdim=True).values
+      tensor([[-4.,  0.],
+              [ 0., -1.]])
+    `,
     ref: `${TP}#容易踩的坑`,
   },
   {
@@ -686,10 +719,17 @@ const primitiveCards: Card[] = [
   {
     id: 'torch-write-triu',
     deck: 'torch',
-    topic: 'triu · 写代码',
+    topic: 'mask · 写代码',
     q: '写代码：加法 causal mask：`(S, S)`，query i 只能看 key j ≤ i；看不到的位置是 -inf、能看到的是 0，加到 score 上。要和 score `x` 在同一个 device。',
-    a: '`torch.full((S, S), float(\'-inf\'), device=x.device).triu(1)`：右上方（j > i）留 -inf，其余变 0。写成 `triu()` 会把对角线也盖成 -inf，第一行全是 -inf，softmax 出 NaN。',
-    ref: `${TP}#mask`,
+    a: '分三步（代码见下）：\n1. 造 bool `allowed`：`i` 是 `(S, 1)` 的 query 下标，`j` 是 `(1, S)` 的 key 下标，`j <= i` 广播成 `(S, S)`，True = 能看。\n2. 转成加法 mask：全 0 的 `(S, S)` 上，把不能看（`~allowed`）的位置填 -inf。\n3. 加到 score 上：能看的位置 +0 不变，不能看的变成 -inf，softmax 后概率是 $e^{-\\infty} = 0$。\n为什么要加法 mask：它是一个普通的浮点 tensor，可以预先算好，直接作为 `attn_mask` 传给 `F.scaled_dot_product_attention` 这类接口。\n备选写法 `torch.full((S, S), float("-inf"), device=x.device).triu(1)` 结果一样；写成 `triu()`（k = 0）会把对角线也盖成 -inf，第 0 行全是 -inf，softmax 出 NaN。',
+    code: lines`
+      i = torch.arange(S, device=x.device)[:, None]
+      j = torch.arange(S, device=x.device)[None, :]
+      allowed = j <= i
+      add_mask = torch.zeros(S, S, device=x.device).masked_fill(~allowed, float('-inf'))
+      x = x + add_mask
+    `,
+    ref: '/leetgpu/mask',
   },
   {
     id: 'torch-read-masked-fill',
@@ -713,9 +753,16 @@ const primitiveCards: Card[] = [
     id: 'torch-write-masked-fill',
     deck: 'torch',
     topic: 'masked_fill · 写代码',
-    q: '写代码：padding mask：`pad` 是 `(B, S)`，`True` 表示这个位置是补出来的 padding。score `s` 是 `(B, H, S, S)`（最后一维是 key），任何 query 都不能看 padding 的 key。',
-    a: '`s.masked_fill(pad[:, None, None, :], float(\'-inf\'))`：pad 变成 `(B, 1, 1, S)`，广播到每个 head、每个 query，只盖 key 那一维。',
-    ref: `${TP}#mask`,
+    q: '写代码：padding mask：`pad` 是 `(B, S)`，`True` 表示这个位置是补出来的 padding。score `s` 是 `(B, H, S, S)`（最后一维是 key），任何 query 都不能看 padding 的 key。再叠上 causal 呢？',
+    a: '1. 为什么只挡 key：s 的第 i 行、第 j 列是「query i 看 key j」的分数。padding 的 key 是假 token，任何 query 都不该看它，所以挡的是**列**，也就是最后一维。padding 的 query 不用挡：它这一行的输出最后会被丢掉（不算 loss、不返回）。要是连它的行也全挡成 -inf，这一行 softmax 是 0 / 0，出 NaN，反而会污染后面的计算。\n2. 怎么对齐维度：s 是 `(B, H, S_q, S_k)`，pad 是 `(B, S)`，要让 pad 的 S 落在最后一维 `S_k` 上。`pad[:, None, None, :]` 在中间插两个长度 1 的维，变成 `(B, 1, 1, S)`，广播到每个 head、每个 query。`allowed = ~pad[...]`：不是 padding 才能看。\n3. 叠 causal：再 `&` 一条规则 `j <= i`，`(S, S)` 和 `(B, 1, 1, S)` 广播成 `(B, 1, S, S)`。\n4. 最后统一 `masked_fill(~allowed, -inf)` 一次。',
+    code: lines`
+      i = torch.arange(S, device=s.device)[:, None]   # (S, 1) query
+      j = torch.arange(S, device=s.device)[None, :]   # (1, S) key
+      allowed = ~pad[:, None, None, :]                # (B, 1, 1, S)
+      allowed = allowed & (j <= i)                    # (B, 1, S, S)
+      s = s.masked_fill(~allowed, float('-inf'))
+    `,
+    ref: '/leetgpu/mask',
   },
   {
     id: 'torch-read-full',
@@ -745,8 +792,8 @@ const primitiveCards: Card[] = [
     id: 'torch-write-full',
     deck: 'torch',
     topic: 'full · 写代码',
-    q: '写代码：online softmax 的运行最大值 `m`：shape `(B, H)`，初值全是 -inf，和 `q` 同 dtype、同 device。',
-    a: '`m = torch.full((B, H), float(\'-inf\'), dtype=q.dtype, device=q.device)`。不传 device，和 GPU 上的 tensor 一运算就报 device 不一致。',
+    q: '写代码：decode 一步的 attention 要分块遍历 KV cache，用 online softmax 维护每个 query 的运行最大值 `m`。`q` 是 `(B, H, dk)`（每个序列、每个 head 只有 1 个新 token）。`m` 是什么 shape？初值全是 -inf，和 `q` 同 dtype、同 device。',
+    a: '`m = torch.full((B, H), float(\'-inf\'), dtype=q.dtype, device=q.device)`\n1. 为什么是 `(B, H)`：online softmax 给**每一行 score** 维护一个运行最大值，一行 score 对应一个 query。decode 时每个序列、每个 head 只有 1 个 query，一共 B × H 行，所以是 `(B, H)`。prefill 时每个 head 有 S 个 query，就是 `(B, H, S)`。\n2. 为什么初值是 -inf：它是 max 的单位元，`max(-inf, x) = x`，第一块进来就会被换掉。\n3. 为什么要传 device：不传就建在 CPU 上，和 GPU 上的 q 一运算就报 device 不一致。dtype 同理。',
     ref: `${TP}#构造-tensor`,
   },
   {
@@ -891,8 +938,8 @@ const primitiveCards: Card[] = [
     id: 'triton-grid-cdiv',
     deck: 'triton',
     topic: 'offs / mask',
-    q: 'grid 怎么写？块数为什么要向上取整？',
-    a: '`grid = (triton.cdiv(n, BLOCK),)`。向下取整会漏掉最后不满一块的元素（它们没有 program 负责，输出是垃圾值）；向上取整多开一块，越界部分用 mask 挡掉。`cdiv(a, b) = (a + b - 1) // b`。',
+    q: 'n = 1000 个元素、BLOCK = 256，grid 怎么写？要开几个 program？为什么向上取整？',
+    a: '`grid = (triton.cdiv(n, BLOCK),)`。`cdiv(n, BLOCK)` 就是**块数**，也就是 program 个数，相当于 CUDA 的 `gridDim.x`；grid 是 tuple，每个元素是那一维的块数。\n1. 向上取整：`cdiv(a, b) = (a + b - 1) // b`，`cdiv(1000, 256) = 4`。\n2. 前 3 块是满的，共 768 个元素；第 4 块的 `offs` 是 768..1023，只有 768..999 有效，剩下 24 个用 `mask = offs < n` 挡掉。\n3. 向下取整只有 3 块，最后 232 个元素没有 program 负责，输出是垃圾值。',
     ref: TR,
   },
   {
@@ -957,9 +1004,15 @@ const primitiveCards: Card[] = [
     id: 'triton-2d-ptrs',
     deck: 'triton',
     topic: '2D 指针',
-    q: '二维 tile 的指针矩阵怎么拼？',
-    a: '两个下标向量广播：`(BM, 1)` 加 `(1, BN)` 得 `(BM, BN)`，规则和 torch 一样。Triton 不认 shape，只认指针，地址靠 stride 自己算。',
-    code: 'ptrs = base + offs_m[:, None] * stride_m + offs_n[None, :] * stride_n',
+    q: 'A 是行主序的 `(M, K) = (4, 8)` 矩阵，stride 是 `(8, 1)`。一个 program 要读左上角 2 × 4 的 tile，指针矩阵怎么拼？元素偏移各是多少？',
+    a: 'Triton 不认 shape，只认指针：元素 `A[r][c]` 的地址是 `base + r * stride_m + c * stride_k`，行主序下 `stride_m = K = 8`，`stride_k = 1`。\n1. 行下标 `offs_m = [0, 1]`，列下标 `offs_k = [0, 1, 2, 3]`。\n2. `offs_m[:, None]` 是 `(2, 1)`，`offs_k[None, :]` 是 `(1, 4)`，相加时广播成 `(2, 4)`，规则和 torch 一样。\n3. 偏移矩阵是 `[[0, 1, 2, 3], [8, 9, 10, 11]]`：每行内部连续，换一行跳 8 个元素。\n边界：tile 可能伸出矩阵，mask 也用同样的广播拼：`(offs_m[:, None] < M) & (offs_k[None, :] < K)`。',
+    code: lines`
+      offs_m = pid_m * BM + tl.arange(0, BM)        # (BM,)
+      offs_k = tl.arange(0, BK)                     # (BK,)
+      ptrs = a_ptr + offs_m[:, None] * stride_m + offs_k[None, :] * stride_k   # (BM, BK)
+      mask = (offs_m[:, None] < M) & (offs_k[None, :] < K)
+      a = tl.load(ptrs, mask=mask, other=0.0)
+    `,
     ref: TR,
   },
   {
@@ -974,16 +1027,16 @@ const primitiveCards: Card[] = [
     id: 'triton-num-warps',
     deck: 'triton',
     topic: '编程模型',
-    q: '`num_warps` 怎么选？',
-    a: '每个线程处理 `BLOCK / (32 × num_warps)` 个元素。块小时 4 个 warp 够；块大时加 warp，降低每线程的寄存器压力。Triton 教程按 BLOCK 用启发式（2048 以上 8，4096 以上 16），生产上交给 autotune。',
+    q: '一个按行做 softmax 的 kernel，一个 program 处理一行，BLOCK = 1024，`num_warps = 4` 时每个线程负责几个元素？BLOCK = 16384 呢？`num_warps` 该怎么调？',
+    a: '`num_warps` 是一个 program 用几个 warp，一个 warp 32 个线程。编译器把 BLOCK 个元素平均分给这些线程：每线程 = BLOCK / (32 × num_warps)。\n1. BLOCK = 1024、4 个 warp（128 个线程）：每线程 **8** 个。\n2. BLOCK = 16384、4 个 warp：每线程 **128** 个 fp32，一个数组就占 128 个寄存器，softmax 还要存 x、exp 等中间值，会超过每线程 255 个寄存器的上限，溢出到 local memory，变慢。改成 16 个 warp（512 个线程）就是每线程 32 个。\n3. 反过来，块很小时 warp 开多了，每个线程只分到一两个元素，大量线程闲着，还多了 warp 之间的同步。\n经验：每线程几个到几十个元素比较合适；块越大，warp 越多。最终还是用 `triton.autotune` 实测选。',
     ref: SM,
   },
   {
     id: 'triton-no-grid-sync',
     deck: 'triton',
     topic: '跨 program',
-    q: '为什么「要等全局结果」的地方都得切一个新 kernel？',
-    a: 'Triton 里不同 program 之间**没有全局同步**。唯一能保证「上一步所有 program 都写完了」的就是 kernel 边界（或者 atomic / 计数器）。\nCUDA 呢：\n1. block 内：`__syncthreads()`，同一个 block 的线程互相等。\n2. 跨 block：普通 launch 也没有。cooperative groups 有 `cg::this_grid().sync()`，但要用 `cudaLaunchCooperativeKernel` 启动，而且所有 block 必须**同时驻留**在 GPU 上（grid 不能超过 SM 数 × 每个 SM 能放的 block 数），否则已经在跑的 block 等不到还没上去的 block，会死锁。所以实际也常拆 kernel 或用 atomic。\n3. Triton 的 program 内部：同步由编译器插，不用自己写（`tl.debug_barrier()` 只用于调试）。',
+    q: 'N = 500k 的 softmax 分成 123 块，每块先算出自己的 max，第 2 步要用全局 max M。为什么不能在同一个 kernel 里让每个 program「等所有块都算完」再继续，而要切一个新 kernel？CUDA 里有办法吗？',
+    a: '1. Triton 里不同 program 之间**没有全局同步**原语。能保证「上一步所有 program 都写完了」的只有 kernel 边界：同一个 stream 里，后一个 kernel 一定在前一个全部结束后才开始。\n2. 自己写忙等（比如用 atomic 计数器数到 123 再继续）会**死锁**：GPU 不保证 123 个 program 同时在跑。如果先上去的 program 占满了 SM、原地等，还没上去的 program 永远排不上，计数永远到不了 123。\n3. CUDA 一样：block 内有 `__syncthreads()`；跨 block 的普通 launch 也没有。cooperative groups 有 `cg::this_grid().sync()`，但要用 `cudaLaunchCooperativeKernel` 启动，而且 grid 不能超过「SM 数 × 每个 SM 能同时放的 block 数」，保证所有 block 同时驻留，这正是第 2 点死锁的解法。限制多，所以实际也常拆 kernel 或用 atomic 合并。\n4. program 内部的同步由 Triton 编译器自动插，不用自己写（`tl.debug_barrier()` 只用于调试）。',
     ref: SM,
   },
   {
@@ -1054,7 +1107,7 @@ const primitiveCards: Card[] = [
     deck: 'triton',
     topic: 'atomic',
     q: 'atomic 什么时候慢？softmax 里每块做一次 atomic 有问题吗？',
-    a: '同一地址的 atomic 在 L2 上**串行**。逐元素 atomic（50 万次打一个地址）很慢；先块内 `tl.sum` 归约、每块一次，只有 NB 次，可以忽略。这时真正多出来的是初始化带来的额外 launch。',
+    a: '慢在**很多线程对同一个地址做 atomic**：硬件只能一个接一个地处理，没法并行。\n1. 为什么串行：global atomic 不在 SM 里算，而是发到 L2 cache，由那里的原子单元做「读 → 改 → 写」。同一个地址的第 2 次加法必须看到第 1 次的结果，只能排队；不同地址落在不同的 L2 分片上，可以同时处理。\n2. 逐元素 atomic：N = 50 万个元素都加到同一个 D 上，就是 50 万次排队，很慢。\n3. 每块一次：先在块内 `tl.sum` 归约，每块只做 1 次 atomic，NB = 123 块就只有 123 次，可以忽略。\n这时真正多出来的开销是：D 要先初始化成 0，多一次 kernel launch。',
     ref: SM,
   },
   {
@@ -1069,16 +1122,35 @@ const primitiveCards: Card[] = [
     id: 'triton-matmul-program',
     deck: 'triton',
     topic: 'matmul',
-    q: 'Triton matmul 里一个 program 负责什么？K 维怎么处理？',
-    a: '负责 C 的一个 `(BM, BN)` tile。沿 K 循环，每步读 A 的 `(BM, BK)` 和 B 的 `(BK, BN)`，`acc += tl.dot(a, b)`；`acc` 是寄存器里的 fp32 累加器，最后写回一次。M、N 进 grid，K 进循环。',
+    q: 'Triton matmul `C (M×N) = A (M×K) · B (K×N)`，M = N = K = 4096，BM = BN = 128，BK = 32，bf16。一个 program 负责什么？grid 多大？K 维循环几次？每个 tile 的算术强度是多少？',
+    a: '一个 program 负责 C 的一个 `(BM, BN)` tile：M、N 是并行维，进 grid；K 是归约维，在 program 里循环（代码见下）。\n1. grid：`(4096 / 128) × (4096 / 128) = 32 × 32 = 1024` 个 program。\n2. K 循环：4096 / 32 = **128** 次。每次读 A 的 `(128, 32)` 和 B 的 `(32, 128)`，各 128 × 32 × 2 B = 8 KiB，做 `acc += tl.dot(a, b)`。\n3. `acc` 是 `(128, 128)` 的 fp32 累加器，留在寄存器里，循环结束才写回一次。\n4. 算术强度：每次循环做 BM·BN·BK 次乘加 = 2·BM·BN·BK FLOP，读 (BM + BN)·BK·2 字节，相除得 $\\frac{2 \\cdot BM \\cdot BN}{(BM + BN) \\cdot 2} = \\frac{BM \\cdot BN}{BM + BN} = 64$ FLOP/B。tile 越大越高，这就是 GEMM 能 compute-bound、GEMV（BM = batch 很小）不能的原因。',
+    code: lines`
+      pid_m, pid_n = ...                                   # 这个 program 负责的 C tile
+      acc = tl.zeros((BM, BN), dtype=tl.float32)
+      for k in range(0, K, BK):
+          a = tl.load(a_ptrs, mask=..., other=0.0)          # (BM, BK)
+          b = tl.load(b_ptrs, mask=..., other=0.0)          # (BK, BN)
+          acc += tl.dot(a, b)
+          a_ptrs += BK * stride_ak                          # 沿 K 往右移
+          b_ptrs += BK * stride_bk                          # 沿 K 往下移
+      tl.store(c_ptrs, acc.to(tl.bfloat16), mask=...)
+    `,
     ref: '/gpu/triton',
   },
   {
     id: 'triton-group-m',
     deck: 'triton',
     topic: 'matmul',
-    q: 'matmul 的 `GROUP_M` 改了什么？为什么能变快？',
-    a: '只改 `pid → (pid_m, pid_n)` 的映射：同一波并发的 program 挤在 GROUP_M 行里，而不是排成一整行。这一波要读的 A 行条带 + B 列条带更少，更容易命中 L2；计算量不变，HBM 流量变小。',
+    q: 'matmul 的 C 有 32 × 32 个 tile，假设同一时刻有 64 个 program 在跑。按行主序给 program 编号，和用 `GROUP_M = 8` 分组编号，这 64 个 program 各要读多少条 A 行条带、B 列条带？为什么分组更快？',
+    a: '算 C 的 tile `(m, n)` 要读 A 的第 m 条行条带和 B 的第 n 条列条带。同一时刻在跑的 program 读的条带越少，越容易都留在 L2 里，HBM 流量就越小。\n1. 行主序（`pid_m = pid // 32`，`pid_n = pid % 32`）：64 个 program 正好铺满 C 的 2 行 × 32 列，要读 **2 条 A + 32 条 B = 34 条**。\n2. `GROUP_M = 8`：编号先在 8 行内竖着排，再往右走，64 个 program 是 8 行 × 8 列的方块，要读 **8 条 A + 8 条 B = 16 条**。\n3. 每条条带是 128 × 4096 × 2 B = 1 MiB（BM = 128、K = 4096、bf16），34 MiB 对 16 MiB，后者更容易放进 H100 的 50 MB L2。\n只改了 `pid → (pid_m, pid_n)` 的映射，计算量完全不变，省的是 HBM 读。Triton 官方 matmul 教程里叫 `GROUP_SIZE_M`，见「L2 Cache Optimizations」一节：https://triton-lang.org/main/getting-started/tutorials/03-matrix-multiplication.html',
+    fig: lines`
+      C tiles, numbers = program id (first 64 running)
+
+      row-major            GROUP_M = 8
+      row 0:  0 .. 31      rows 0-7, cols 0-7: 0 .. 63
+      row 1: 32 .. 63      (8 x 8 square)
+      A strips 2, B 32     A strips 8, B 8
+    `,
     ref: '/gpu/triton',
   },
   {
@@ -1108,7 +1180,7 @@ const primitiveCards: Card[] = [
 ]
 
 /** 删掉的卡：data 分支和各设备的本地缓存里可能还留着它们的复习记录、批注，页面不显示，测试放行 */
-export const retiredIds: string[] = ['torch-read-index', 'torch-write-index']
+export const retiredIds: string[] = ['torch-read-index', 'torch-write-index', 'bagu-gpu-three-basics', 'bagu-how-many-gpus']
 
 /** 原语卡（torch / triton）+ 八股卡（flashcards-bagu.ts） */
 export const cards: Card[] = [...primitiveCards, ...baguCards]

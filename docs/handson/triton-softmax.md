@@ -1,6 +1,6 @@
 ---
 title: Triton 版 Softmax
-status: todo
+status: draft
 tags: [triton, softmax, handson]
 difficulty: 3
 order: 7
