@@ -7,7 +7,8 @@
       "suffix": "FULL_AND_PIECEWISE（当前默认）纯 decode",
       "note": "",
       "created": 1791573568844,
-      "at": 1791573568844
+      "at": 1791573580515,
+      "deleted": true
     }
   ],
   "/ai-infra-inferview/handson/torch-primitives": [
