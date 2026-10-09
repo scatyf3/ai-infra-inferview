@@ -156,16 +156,16 @@
     "last_review": "2026-10-09T16:44:38.281Z"
   },
   "bagu-float-formats": {
-    "stability": 1.2931,
-    "difficulty": 5.11217071,
+    "stability": 0.45140292,
+    "difficulty": 8.37863212,
     "elapsed_days": 0,
     "scheduled_days": 0,
-    "reps": 1,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 1,
-    "due": "2026-10-09T17:08:52.037Z",
-    "last_review": "2026-10-09T17:02:52.037Z"
+    "due": "2026-10-09T17:24:03.693Z",
+    "last_review": "2026-10-09T17:23:03.693Z"
   },
   "bagu-goodput": {
     "stability": 8.2956,
