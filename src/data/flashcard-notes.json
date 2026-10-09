@@ -207,6 +207,10 @@
     "text": "dim是从左索引",
     "at": 1791174397608
   },
+  "torch-write-full": {
+    "text": "为啥是这个shape",
+    "at": 1791549944606
+  },
   "torch-write-index": {
     "text": "这啥玩意，有这个场景吗？",
     "at": 1791173564200
