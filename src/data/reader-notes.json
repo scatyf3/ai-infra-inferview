@@ -38,6 +38,15 @@
       "note": "画一下roofline",
       "created": 1791555661038,
       "at": 1791555665233
+    },
+    {
+      "id": "mv11zldt711e",
+      "exact": "一条链",
+      "prefix": "ecode 的优化是「少读字节」，两者的手段几乎没有交集。推导 ",
+      "suffix": " 优化手段shape→bytes+FLOPs→AI=FLOPsB",
+      "note": "",
+      "created": 1791555668993,
+      "at": 1791555668993
     }
   ],
   "/ai-infra-inferview/parallel/megatron-tp": [
