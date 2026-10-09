@@ -325,15 +325,15 @@
   },
   "bagu-rl-infra": {
     "stability": 9.19035856,
-    "difficulty": 5.10228691,
-    "elapsed_days": 4,
-    "scheduled_days": 0,
-    "reps": 2,
+    "difficulty": 5.09241299,
+    "elapsed_days": 0,
+    "scheduled_days": 9,
+    "reps": 3,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-09T03:50:30.835Z",
-    "last_review": "2026-10-09T03:40:30.835Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-18T04:25:04.996Z",
+    "last_review": "2026-10-09T04:25:04.996Z"
   },
   "bagu-sched-budgets": {
     "stability": 18.18015363,
