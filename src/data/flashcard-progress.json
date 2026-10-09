@@ -685,15 +685,15 @@
   },
   "torch-read-contiguous": {
     "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "difficulty": 2.11121424,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 2,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-09T12:59:53.751Z",
-    "last_review": "2026-10-09T12:49:53.751Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-11T14:00:53.119Z",
+    "last_review": "2026-10-09T14:00:53.119Z"
   },
   "torch-read-copy": {
     "stability": 8.2956,
@@ -996,16 +996,16 @@
     "last_review": "2026-10-09T12:51:27.040Z"
   },
   "torch-write-contiguous": {
-    "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "stability": 3.94605407,
+    "difficulty": 1,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 4,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-09T13:00:00.980Z",
-    "last_review": "2026-10-09T12:50:00.980Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-13T14:00:55.890Z",
+    "last_review": "2026-10-09T14:00:55.890Z"
   },
   "torch-write-copy": {
     "stability": 8.2956,
