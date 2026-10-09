@@ -311,6 +311,18 @@
     "due": "2026-10-25T03:36:43.139Z",
     "last_review": "2026-10-09T03:36:43.139Z"
   },
+  "bagu-prefix-cache": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-17T14:01:26.623Z",
+    "last_review": "2026-10-09T14:01:26.623Z"
+  },
   "bagu-profiling": {
     "stability": 8.2956,
     "difficulty": 1,
