@@ -911,6 +911,18 @@
     "due": "2026-10-25T12:17:40.499Z",
     "last_review": "2026-10-09T12:17:40.499Z"
   },
+  "torch-write-stack": {
+    "stability": 0.212,
+    "difficulty": 6.4133,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-09T12:26:51.205Z",
+    "last_review": "2026-10-09T12:25:51.205Z"
+  },
   "torch-write-transpose": {
     "stability": 8.2956,
     "difficulty": 1,
