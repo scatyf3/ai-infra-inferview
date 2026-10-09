@@ -60,16 +60,16 @@
     "last_review": "2026-10-05T00:59:46.173Z"
   },
   "bagu-decode-step-time": {
-    "stability": 2.3065,
-    "difficulty": 4.743334,
-    "elapsed_days": 0,
-    "scheduled_days": 2,
-    "reps": 3,
-    "lapses": 0,
+    "stability": 0.64963108,
+    "difficulty": 8.257398,
+    "elapsed_days": 5,
+    "scheduled_days": 0,
+    "reps": 4,
+    "lapses": 1,
     "learning_steps": 0,
-    "state": 2,
-    "due": "2026-10-06T23:21:39.340Z",
-    "last_review": "2026-10-04T23:21:39.340Z"
+    "state": 3,
+    "due": "2026-10-09T03:58:56.143Z",
+    "last_review": "2026-10-09T03:48:56.143Z"
   },
   "bagu-eagle-medusa": {
     "stability": 8.2956,
