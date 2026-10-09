@@ -155,6 +155,18 @@
     "due": "2026-10-13T16:44:38.281Z",
     "last_review": "2026-10-09T16:44:38.281Z"
   },
+  "bagu-float-formats": {
+    "stability": 1.2931,
+    "difficulty": 5.11217071,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-09T17:08:52.037Z",
+    "last_review": "2026-10-09T17:02:52.037Z"
+  },
   "bagu-goodput": {
     "stability": 8.2956,
     "difficulty": 1,
