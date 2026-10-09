@@ -311,6 +311,18 @@
     "due": "2026-10-12T23:26:39.058Z",
     "last_review": "2026-10-04T23:26:39.058Z"
   },
+  "bagu-preempt-whom": {
+    "stability": 1.2931,
+    "difficulty": 5.11217071,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-09T14:08:11.751Z",
+    "last_review": "2026-10-09T14:02:11.751Z"
+  },
   "bagu-prefill-ai": {
     "stability": 16.08387556,
     "difficulty": 3.4641143,
