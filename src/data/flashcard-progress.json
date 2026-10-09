@@ -11,6 +11,18 @@
     "due": "2026-10-17T04:29:27.625Z",
     "last_review": "2026-10-09T04:29:27.625Z"
   },
+  "bagu-benchmark-design": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-09T14:28:53.795Z",
+    "last_review": "2026-10-09T14:18:53.795Z"
+  },
   "bagu-block-size": {
     "stability": 8.2956,
     "difficulty": 1,
