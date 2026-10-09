@@ -15,6 +15,10 @@
     "suspended": false,
     "at": 1791572576835
   },
+  "bagu-float-formats": {
+    "suspended": true,
+    "at": 1791587975115
+  },
   "bagu-gemv": {
     "suspended": false,
     "at": 1791572576835
