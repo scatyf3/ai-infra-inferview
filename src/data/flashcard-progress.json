@@ -539,6 +539,18 @@
     "due": "2026-10-20T04:22:01.546Z",
     "last_review": "2026-10-09T04:22:01.546Z"
   },
+  "bagu-vllm-v1": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-17T16:23:19.334Z",
+    "last_review": "2026-10-09T16:23:19.334Z"
+  },
   "bagu-w4a16-vs-w8a8": {
     "stability": 6.14141419,
     "difficulty": 6.72239265,
