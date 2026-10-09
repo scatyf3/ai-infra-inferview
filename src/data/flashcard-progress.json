@@ -131,6 +131,18 @@
     "due": "2026-10-25T03:49:19.722Z",
     "last_review": "2026-10-09T03:49:19.722Z"
   },
+  "bagu-flat-input": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-09T16:33:27.126Z",
+    "last_review": "2026-10-09T16:23:27.126Z"
+  },
   "bagu-goodput": {
     "stability": 8.2956,
     "difficulty": 1,
