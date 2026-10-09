@@ -588,16 +588,16 @@
     "last_review": "2026-10-05T01:47:39.457Z"
   },
   "torch-iadd": {
-    "stability": 3.94605407,
-    "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 4,
-    "reps": 2,
+    "stability": 14.21704924,
+    "difficulty": 4.01060897,
+    "elapsed_days": 4,
+    "scheduled_days": 14,
+    "reps": 3,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-09T02:04:54.026Z",
-    "last_review": "2026-10-05T02:04:54.026Z"
+    "due": "2026-10-23T12:18:10.885Z",
+    "last_review": "2026-10-09T12:18:10.885Z"
   },
   "torch-inplace-training": {
     "stability": 8.2956,
