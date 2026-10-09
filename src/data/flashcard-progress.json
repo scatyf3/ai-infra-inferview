@@ -24,16 +24,16 @@
     "last_review": "2026-10-04T23:43:38.686Z"
   },
   "bagu-chunked-vs-pd": {
-    "stability": 2.29815136,
-    "difficulty": 3.4641143,
-    "elapsed_days": 0,
-    "scheduled_days": 2,
-    "reps": 2,
+    "stability": 27.4799283,
+    "difficulty": 1.26535424,
+    "elapsed_days": 5,
+    "scheduled_days": 27,
+    "reps": 3,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-06T23:53:31.651Z",
-    "last_review": "2026-10-04T23:53:31.651Z"
+    "due": "2026-11-05T03:49:33.701Z",
+    "last_review": "2026-10-09T03:49:33.701Z"
   },
   "bagu-continuous-batching": {
     "stability": 8.2956,
