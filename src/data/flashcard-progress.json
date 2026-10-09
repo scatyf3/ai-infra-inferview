@@ -420,16 +420,16 @@
     "last_review": "2026-10-09T03:39:55.604Z"
   },
   "bagu-weight-rule": {
-    "stability": 2.29815136,
-    "difficulty": 3.4641143,
-    "elapsed_days": 0,
-    "scheduled_days": 2,
-    "reps": 2,
+    "stability": 24.3227276,
+    "difficulty": 1.26535424,
+    "elapsed_days": 4,
+    "scheduled_days": 24,
+    "reps": 3,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-07T00:50:36.157Z",
-    "last_review": "2026-10-05T00:50:36.157Z"
+    "due": "2026-11-02T04:20:26.908Z",
+    "last_review": "2026-10-09T04:20:26.908Z"
   },
   "kernel-cross-program-reduce": {
     "stability": 7.31530068,
