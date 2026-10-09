@@ -1380,16 +1380,16 @@
     "last_review": "2026-10-05T02:03:56.655Z"
   },
   "triton-why-one-program-no": {
-    "stability": 3.94605407,
-    "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 4,
-    "reps": 2,
+    "stability": 15.9366778,
+    "difficulty": 4.01060897,
+    "elapsed_days": 5,
+    "scheduled_days": 16,
+    "reps": 3,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-08T18:52:50.524Z",
-    "last_review": "2026-10-04T18:52:50.524Z"
+    "due": "2026-10-25T12:53:15.395Z",
+    "last_review": "2026-10-09T12:53:15.395Z"
   },
   "triton-you-vs-compiler": {
     "stability": 18.18015363,
