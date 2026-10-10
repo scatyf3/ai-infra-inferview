@@ -19,6 +19,10 @@
     "suspended": true,
     "at": 1791649791217
   },
+  "bagu-fa-v2-v3-3": {
+    "suspended": true,
+    "at": 1791650832327
+  },
   "bagu-fa-v2-v3-4": {
     "suspended": true,
     "at": 1791649772564
@@ -52,8 +56,8 @@
     "at": 1791649532032
   },
   "bagu-megatron-tp": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1791650861156
   },
   "bagu-mla": {
     "suspended": true,
@@ -76,28 +80,28 @@
     "at": 1791588007570
   },
   "bagu-moe-batch": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1791650887539
   },
   "bagu-multi-lora": {
     "suspended": false,
     "at": 1791572576835
   },
   "bagu-parallel-choice": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1791650882956
   },
   "bagu-pp-bubble": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1791650871524
   },
   "bagu-ppo-four-models": {
     "suspended": false,
     "at": 1791572576835
   },
   "bagu-ring-allreduce": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1791650869557
   },
   "bagu-sd-order": {
     "suspended": false,
@@ -108,8 +112,12 @@
     "at": 1791572576835
   },
   "bagu-sp-cp": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1791650872174
+  },
+  "bagu-sp-cp-2": {
+    "suspended": true,
+    "at": 1791650874941
   },
   "bagu-spec-exact": {
     "suspended": true,
@@ -124,12 +132,12 @@
     "at": 1791572576835
   },
   "bagu-tp-comm-size": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1791650868291
   },
   "bagu-tp-intra-node": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1791650870705
   },
   "bagu-train-memory": {
     "suspended": false,
