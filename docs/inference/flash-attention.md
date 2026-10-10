@@ -4,7 +4,7 @@ status: draft
 tags: [flash-attention, kernel]
 difficulty: 4
 order: 5
-related: [/handson/stable-softmax, /inference/attention-variants, /inference/prefill-decode-roofline, /inference/kv-cache-paged-attention, /gpu/tensor-core-gemm, /gpu/profiling]
+related: [/handson/online-softmax, /handson/stable-softmax, /inference/attention-variants, /inference/prefill-decode-roofline, /inference/kv-cache-paged-attention, /gpu/tensor-core-gemm, /gpu/profiling]
 stack: [k-attn]
 ---
 
@@ -65,7 +65,7 @@ m' = \max(m, \max s^{(j)}),\quad
 \text{acc}' = \alpha\, \text{acc} + e^{s^{(j)} - m'} V^{(j)}
 $$
 
-全部块处理完，$O = \text{acc} / \ell$。推导和三遍法对比见 [数值稳定 Softmax](/handson/stable-softmax)。
+全部块处理完，$O = \text{acc} / \ell$。逐步推导和数字例子见 [Online Softmax](/handson/online-softmax)。
 
 有了这个递推，一个 Q 块（$B_r$ 行）可以常驻 SRAM，让 K/V 一块一块流过，每块的 score 只是 $B_r \times B_c$ 的小 tile，算完就丢。前向伪代码（v2 的循环顺序，下节解释），单个 head：
 

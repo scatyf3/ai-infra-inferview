@@ -22,7 +22,7 @@ row softmax 是「减最大值、exp、除以和」三步，naive 的 PyTorch �
 - **数值稳定**：先减行最大值再 exp，防止溢出；推导见 [数值稳定 softmax](/handson/stable-softmax)。
 - **融合收益**：naive 版本 5 次读写（max、减、exp、sum、除），fused 版本 2 次；对 memory-bound 的算子就是约 2.5 倍。
 - **mask**：行长不是 2 的幂时 `BLOCK = next_power_of_2(N)`，越界位置填 `-inf`，exp 后自然为 0。
-- **大行**：单 block 装不下时要分块 + online softmax（维护 running max 和 sum），这就是 FlashAttention 的核心。
+- **大行**：单 block 装不下时要分块 + [online softmax](./online-softmax)（维护 running max 和 sum），这就是 FlashAttention 的核心。
 
 ### 大 N：先 max 再 sum vs online 合并
 

@@ -48,5 +48,5 @@ LeetGPU 版（写进传入的 `output`）见 [LeetGPU · Softmax Attention](/lee
 :::
 
 ::: details Q：这段代码的显存瓶颈在哪？
-`attn` 是 $M \times N$ 的中间矩阵，长序列时远大于 Q/K/V 本身，而且要写回 HBM 再读出来做 softmax 和第二次 matmul。FlashAttention 就是用分块 + [online softmax](./stable-softmax) 避免物化它。
+`attn` 是 $M \times N$ 的中间矩阵，长序列时远大于 Q/K/V 本身，而且要写回 HBM 再读出来做 softmax 和第二次 matmul。FlashAttention 就是用分块 + [online softmax](./online-softmax) 避免物化它。
 :::
