@@ -83,6 +83,10 @@
     "suspended": true,
     "at": 1791650887539
   },
+  "bagu-moe-batch-2": {
+    "suspended": true,
+    "at": 1791650888456
+  },
   "bagu-multi-lora": {
     "suspended": false,
     "at": 1791572576835
@@ -148,12 +152,12 @@
     "at": 1791572576835
   },
   "bagu-zero": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1791650889571
   },
   "bagu-zero3-vs-tp": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1791650890239
   },
   "torch-keepdim": {
     "suspended": false,
