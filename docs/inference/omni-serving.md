@@ -4,7 +4,7 @@ status: draft
 tags: [omni, multimodal, serving, tts]
 difficulty: 4
 order: 10
-related: [/inference/batching-scheduling, /inference/kv-cache-paged-attention, /inference/metrics-benchmark]
+related: [/inference/multimodal-encoder, /inference/speech-output, /inference/batching-scheduling, /inference/kv-cache-paged-attention, /inference/metrics-benchmark]
 stack: []
 ---
 
@@ -38,7 +38,7 @@ Omni 模型（Qwen-Omni、MiniCPM-o 这类）不是「一个 LLM」，而是**�
 | Talker | 以 Thinker 的隐状态为条件，生成语音 codec token | 自回归，模型小、步数多 | 又一个 LLM，但输入来自上游流 |
 | codec 解码器 | codec token → 波形 | 非自回归（ConvNet / DiT / flow matching） | 没有对应物，更像图像生成 |
 
-Talker 吃的是 Thinker 的**隐状态**而不只是文本 token，所以两级之间传的是张量，不是字符串。这决定了它们之间要有一条高效的 GPU 间数据通道。
+Qwen2.5-Omni 的 Talker 吃的是 Thinker 的**隐状态**和它采样出的文本 token，所以两级之间传的是张量，不是字符串，这决定了它们之间要有一条高效的 GPU 间数据通道。Qwen3-Omni 改成 Talker 只以多模态特征和流式文本为条件，两者可以用不同的 system prompt。各模块的大小（Qwen3-Omni）：音频编码器 650M、视觉编码器 540M、Thinker 30B-A3B、Talker 3B-A0.3B、MTP 80M、Code2Wav 200M。
 
 ### 2. 多模态输入会变成多少 token
 
@@ -48,7 +48,7 @@ serving 的显存和延迟账都从 token 数算起：
 - **视频**：再乘以采样帧数（通常还会在时间维 2 帧合 1）。几十秒的视频轻松上万 token。
 - **音频**：Whisper 系编码器下采样后约 **25 token/s**（1 token ≈ 40 ms，见 [Qwen2.5-Omni](https://arxiv.org/abs/2503.20215)），1 分钟音频 ≈ 1.5k token。
 
-结论：**多模态请求的 prefill 很长**，编码器本身也有不小的计算量。纯文本里「prompt 几百 token」的直觉在这里不成立。
+结论：**多模态请求的 prefill 很长**，编码器本身也有不小的计算量。纯文本里「prompt 几百 token」的直觉在这里不成立。逐项怎么算、ViT 的 FLOPs 和 LLM prefill 怎么比，见 [多模态输入](/inference/multimodal-encoder)。
 
 ### 3. 编码器为什么是新瓶颈
 
@@ -77,7 +77,9 @@ serving 的显存和延迟账都从 token 数算起：
 
 - Thinker 每出一个 chunk 就把隐状态交给 Talker，Talker 边收边 prefill，不等 Thinker 说完（[Qwen2.5-Omni](https://arxiv.org/abs/2503.20215)、[Qwen3-Omni](https://arxiv.org/abs/2509.17765) 的 chunked prefill）。
 - Talker 每出几个 codec 帧，codec 解码器就开始出波形。Qwen2.5-Omni 用滑动窗口 DiT 限制感受野；[Qwen3-Omni](https://arxiv.org/abs/2509.17765) 进一步把 codec 解码器换成**因果 ConvNet**，从第一个 codec 帧就能流式出声，报告的理论冷启动首包延迟是 234 ms（音频输入）。
-- 多码本 codec 下，Talker 每步只自回归预测第一层码本，剩余层用一个小的 MTP 模块并行补齐，减少自回归步数（[Qwen3-Omni](https://arxiv.org/abs/2509.17765)）。
+- 多码本 codec 下，Talker 每步只自回归预测第一层码本，剩余层交给一个小的 MTP 模块补齐，减少大模型的自回归步数（[Qwen3-Omni](https://arxiv.org/abs/2509.17765)）。
+
+codec 的码率、首包延迟和 RTF 的逐项拆解（Qwen3-Omni 并发 1 时首包 234 ms、RTF 0.47，并发 6 时 1172 ms、0.66），见 [语音输出](/inference/speech-output)。
 
 ### 5. 系统层：从「一个引擎」到「stage 图」
 
