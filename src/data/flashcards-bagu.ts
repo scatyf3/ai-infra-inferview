@@ -45,6 +45,8 @@ const MMENC = '/inference/multimodal-encoder'
 const SPEECH = '/inference/speech-output'
 const AGENT = '/posttrain/rl-agentic'
 const DUPLEX = '/inference/omni-duplex'
+const DIT = '/inference/dit-serving'
+const MON = '/posttrain/rl-monitoring'
 
 const b = (c: Omit<Card, 'deck'>): Card => ({ deck: 'bagu', ...c })
 
@@ -1222,6 +1224,35 @@ export const baguCards: Card[] = [
     ref: AGENT,
   }),
 
+  b({
+    id: 'bagu-entropy-cov',
+    topic: 'RL',
+    q: '一个位置只有两个候选 token，概率 $(0.9, 0.1)$，熵 $H = -\\sum p\\log p$ 是多少？如果高概率的那个被奖励、推到 0.95，熵变成多少？如果低概率的那个被奖励、推到 0.15 呢？',
+    a: '1. 初始：$-(0.9\\ln 0.9 + 0.1\\ln 0.1) =$ **0.325**。\n2. 推高高概率的到 0.95：**0.199**，熵降。\n3. 推高低概率的到 0.15：**0.423**，熵升。\n一般规律：一步策略梯度后 $\\Delta H \\approx -\\eta\\,\\text{Cov}(\\log\\pi, \\pi A)$，高概率动作拿正 advantage 让熵降。训练中被奖励的多半是模型本来就倾向的回答，所以熵整体下降，而且前期掉得很快（Cui et al. 统计前 1/12 的步数用掉 73% 的熵）。对策：clip-higher、Clip-Cov / KL-Cov。',
+    ref: MON,
+  }),
+  b({
+    id: 'bagu-ppo-kl-vs-kl-loss',
+    topic: 'RL',
+    q: 'verl 的面板上有 `actor/ppo_kl` 和 `actor/kl_loss` 两条 KL 曲线。它们分别是谁对谁的 KL？各说明什么？',
+    a: '1. `ppo_kl`：当前策略对 **rollout 时的策略**（$\\pi_{\\text{old}}$）的 KL。一批数据只更新一次时接近 0，更新多次逐渐变大。管的是单步步长，配合 `pg_clipfrac`（clip 生效的 token 比例）看每步走了多远。\n2. `kl_loss`：当前策略对 **reference**（SFT 模型）的 KL，开了 `use_kl_loss` 才有。管的是累计离初始模型多远。\nDAPO、Dr. GRPO 等推理 RL 配方直接不加 kl_loss。训推不一致是第三种 KL（`rollout_corr/kl`），是推理引擎对训练引擎的。',
+    ref: MON,
+  }),
+  b({
+    id: 'bagu-ess',
+    topic: 'RL',
+    q: 'importance 权重的有效样本比例 ESS：先把权重归一化到均值 1，再算 $1/\\mathbb{E}[w^2]$。4 个 token 的权重是 $[1, 1, 1, 4]$，ESS 是多少？权重全是 1 呢？',
+    a: '1. 均值 1.75，归一化后 $[0.57, 0.57, 0.57, 2.29]$。\n2. $\\mathbb{E}[w^2] = (3 \\times 0.327 + 5.22) / 4 = 1.55$，ESS $= 1/1.55 =$ **0.65**。\n3. 全是 1：$\\mathbb{E}[w^2] = 1$，ESS **= 1**。\nESS 越小，梯度越被少数几个大权重的样本主导，方差越大。verl 文档给的参考告警线是 ESS < 0.3（另外还有训推 KL 的绝对值 > 0.1、chi2 > 1），文档说明只是参考。',
+    ref: MON,
+  }),
+  b({
+    id: 'bagu-collapse-order',
+    topic: 'RL',
+    q: 'RL 训练里由训推不一致导致的崩溃，面板上的几条曲线通常按什么顺序出问题？为什么不能直接跳过训推 KL 大的 batch？',
+    a: '顺序（Liu, Li et al. 的观察）：\n1. 训推 KL（推理引擎对训练引擎）先冒尖。\n2. 熵的尖峰几乎同时出现；训练侧的困惑度跳起来。\n3. 梯度范数突然爆炸。\n4. 奖励崩溃。\n排查时从奖励往前倒着看。\n不能直接跳过：他们试过训推 KL > 0.1 的 batch 不更新，结果模型越来越多地产出高差距的 batch，训练停滞。要用截断 / 屏蔽的 importance 权重修，或从源头消除差距（换掉有问题的 kernel、fp16、MoE 用路由回放）。',
+    ref: MON,
+  }),
+
   // ---------------- 多模态 ----------------
   b({
     id: 'bagu-image-tokens',
@@ -1321,6 +1352,35 @@ export const baguCards: Card[] = [
     q: 'Qwen3-Omni 报告 RTF 0.47，Kyutai 的 DSM-ASR 报告 batch 64 时「RTF 3.5」。两者的 RTF 定义一样吗？各自代表比实时快几倍？DSM-ASR 这时相当于多少路实时流？',
     a: '定义相反：\n1. Qwen：RTF = 生成耗时 ÷ 音频时长，越小越好，0.47 表示比实时快约 **2.1 倍**，必须 < 1。\n2. Kyutai：写的是音频时长 ÷ 耗时，越大越好，3.5 表示快 **3.5 倍**，必须 > 1。\n3. DSM-ASR：3.5 × 64 = **224** 路实时流的处理量（作者报告一张 H100 能实时处理约 400 路）。\n读 RTF 先看定义，换成同一个方向再比较。',
     ref: DUPLEX,
+  }),
+
+  b({
+    id: 'bagu-dit-tokens',
+    topic: '多模态',
+    q: 'Wan2.1 生成视频：VAE 时间上压 4 倍（第一帧单独）、空间上压 8 倍，之后再把 $2 \\times 2$ 的 latent 合成一个 token。token 数 $L = (1 + \\frac{T-1}{4}) \\cdot \\frac{H}{16} \\cdot \\frac{W}{16}$。1280 × 720、81 帧（16 fps 约 5 秒）是多少 token？',
+    a: '1. 时间：$1 + 80/4 = 21$。\n2. 高：$720/16 = 45$；宽：$1280/16 = 80$。\n3. $21 \\times 45 \\times 80 =$ **75,600** 个 token。\n相当于对 7.5 万个 token 做一次没有因果 mask 的 prefill，而且每一步去噪都要重做一遍。832 × 480 是 $21 \\times 30 \\times 52 = 32{,}760$。Wan2.2 的 5B 模型换了空间压 32 倍（含 patchify）的 VAE，token 数约为 1/4。',
+    ref: DIT,
+  }),
+  b({
+    id: 'bagu-dit-flops',
+    topic: '多模态',
+    q: 'Wan2.1-14B 一次前向：每个 token 碰到的权重约 12B，hidden $d = 5120$，40 层，序列 $L = 75{,}600$。线性层按 $2PL$、self-attention 按 $4L^2d$ 每层算，一次前向多少 FLOP？50 步、每步 CFG 两次前向，一共多少？',
+    a: '1. 线性层：$2 \\times 12\\text{B} \\times 75{,}600 \\approx$ **1.8 PFLOP**。\n2. attention：$4 \\times 75{,}600^2 \\times 5120 \\times 40 \\approx$ **4.7 PFLOP**，占七成。\n3. 一次前向约 6.5 PFLOP；× 50 步 × 2 ≈ **0.65 EFLOP**。\nH100 bf16 峰值 989 TFLOP/s，按 50% 利用率约 22 分钟。视频的 $L^2$ 项压倒线性层，所以加速重点在 attention：稀疏（滑动 tile）、量化（SageAttention）、序列并行。',
+    ref: DIT,
+  }),
+  b({
+    id: 'bagu-dit-no-kv',
+    topic: '多模态',
+    q: 'LLM decode 靠 KV cache 省计算。DiT 去噪为什么没有 KV cache？那它能复用什么？',
+    a: '1. LLM 能缓存 KV，是因为前面 token 的 K、V 算完就不变。DiT 每一步去噪都在更新**整段** latent，所有 token 的输入都变了，K、V 每步都不同，没有可以精确复用的。所以每步都是一次完整的大前向，全程 compute-bound。\n2. 能复用的是「相邻两步的输出很接近」。TeaCache 用被时间步调制后的输入变化量估计输出变化，累计变化小于阈值就直接复用上一步的输出、跳过这一步（作者自测 Open-Sora-Plan 上 4.4 倍）。这是近似：跳多了误差会累积，出现细节丢失。\n另一条路是少走几步：步数蒸馏（LCM、FLUX.1-schnell 用 1–4 步）。',
+    ref: DIT,
+  }),
+  b({
+    id: 'bagu-ulysses-ring',
+    topic: '多模态',
+    q: '视频 DiT 的序列太长，要沿序列维切到多张卡上。Ulysses 和 Ring 两种序列并行各怎么做？Wan2.1-14B 有 40 个 head，Ulysses 最多切几张卡？',
+    a: '1. **Ulysses**：每张卡先持有一段序列；attention 前用 all-to-all 换成「每张卡拿一部分 head、看完整序列」，算完再 all-to-all 换回来。并行度不能超过 head 数，Wan2.1-14B **最多 40**。\n2. **Ring**：每张卡用自己的 Q，K、V 沿环在卡之间传，边收边按块算，用 online softmax 合并结果。没有 head 数限制，通信是点对点。\n3. **USP**：两者组成二维网格。Wan2.1 外层 Ring、内层 Ulysses，作者报告 256K token 时通信开销降到 1% 以下。\n另外每步的有条件 / 无条件两次前向可以放到两张卡上（CFG 并行）。',
+    ref: DIT,
   }),
 
   // ---------------- 系统设计 ----------------
