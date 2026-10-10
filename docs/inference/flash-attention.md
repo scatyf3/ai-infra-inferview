@@ -40,6 +40,8 @@ GPU 有两级存储要分清。**HBM** 是显存，H100 SXM 80 GB、3.35 TB/s。
 2. **读** $S_{\text{score}}$，做 softmax，**写** $P$（还是 $S \times S$）。
 3. **读** $P$ 和 $V$，算 $O = PV$，写 $O$。
 
+为什么必须拆成三步、中间要等上一步全部写完（barrier）：softmax 要先知道**整行**的最大值和分母，才能算出这一行的任何一个元素，而一整行 score 要等 $QK^\top$ 把这一行全算完才有。所以只能先把整个 $S_{\text{score}}$ 写回 HBM，再起下一个 kernel 读回来。FlashAttention 用 [online softmax](/handson/online-softmax) 拆掉的就是这个依赖：边算边更新最大值和分母，不用等整行。
+
 $S \times S$ 的矩阵被搬了 4 遍。算一笔：$S = 8192$，$H = 64$，$d_h = 128$，bf16，一层，batch 1，按 MHA 数（GQA 只会让 K/V 更小，不影响结论）：
 
 - 一份 score：$S^2 \cdot H \cdot b = 8192^2 \times 64 \times 2 \approx 8.6$ GB。搬 4 遍约 34 GB，按 3.35 TB/s 要 **10.3 ms**。
@@ -73,7 +75,8 @@ $$
 def flash_attn_fwd(Q, K, V, Br=128, Bc=128, causal=True):
     S, d = Q.shape                              # 行主序，每行一个 token
     O, LSE = zeros(S, d), zeros(S)
-    for q0 in range(0, S, Br):                  # 每个 Q 块交给一个 thread block，块之间并行
+    # 每个 Q 块交给一个 thread block，块之间并行
+    for q0 in range(0, S, Br):
         q = load(Q[q0:q0+Br])                   # HBM -> SRAM，只读一次
         m = full(Br, -inf); l = zeros(Br); acc = zeros(Br, d)   # 都在寄存器里
         k_end = q0 + Br if causal else S        # causal：右上方整块被 mask 的 tile 直接跳过
@@ -95,8 +98,6 @@ def flash_attn_fwd(Q, K, V, Br=128, Bc=128, causal=True):
         LSE[q0:q0+Br] = m + log(l)              # 存 logsumexp，反向用来重算 P
     return O, LSE
 ```
-
-这段的 numpy 版本对 $S \in \{1, 7, 64, 130, 257\}$、causal 和非 causal 都和朴素实现逐元素对上（见下方手撕）。
 
 ### 访存账：省了多少，为什么 FLOPs 不降
 
