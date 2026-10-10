@@ -4,7 +4,7 @@ status: draft
 tags: [rl-infra, verl, openrlhf]
 difficulty: 4
 order: 4
-related: [/posttrain/rlhf-ppo-dpo-grpo, /posttrain/training-memory, /parallel/zero-fsdp, /inference/batching-scheduling]
+related: [/posttrain/rlhf-ppo-dpo-grpo, /posttrain/grpo-variants, /posttrain/rl-async-rollout, /posttrain/rl-weight-sync, /posttrain/rl-train-infer-mismatch, /posttrain/training-memory, /parallel/zero-fsdp, /inference/batching-scheduling]
 stack: [ld-load]
 ---
 
@@ -31,7 +31,15 @@ prompts ──① rollout──> 每个 prompt 采 G 条回答          推理�
         ──⑥ sync─────> 新权重推给推理引擎                 下一轮 ① 用新策略
 ```
 
-PPO 多一个 critic 模型（要训练）和价值估计；GRPO 用组内均值当 baseline，省掉了 critic。算法细节见 [RLHF 全家桶](/posttrain/rlhf-ppo-dpo-grpo)。
+PPO 多一个 critic 模型（要训练）和价值估计；GRPO 用组内均值当 baseline，省掉了 critic。算法细节见 [RLHF 全家桶](/posttrain/rlhf-ppo-dpo-grpo)，DAPO、GSPO 这些变体改了什么见 [GRPO 变体](/posttrain/grpo-variants)。
+
+这一页是总览，下面几个问题各有一页展开：
+
+| 问题 | 展开 |
+|---|---|
+| rollout 的长尾、partial rollout、异步和 staleness | [异步 Rollout](/posttrain/rl-async-rollout) |
+| 每轮怎么把新权重送进推理引擎、要多久 | [权重同步](/posttrain/rl-weight-sync) |
+| 同一份权重两个引擎算出不同概率 | [训推不一致](/posttrain/rl-train-infer-mismatch) |
 
 ### 2. 两种负载为什么不能用一套引擎
 
@@ -53,6 +61,8 @@ PPO 多一个 critic 模型（要训练）和价值估计；GRPO 用组内均值
 - **Partial rollout**：给每轮生成设一个长度预算，没写完的回答先挂起，下一轮接着写，而不是从头再来（[Kimi k1.5](https://arxiv.org/abs/2501.12599)）。
 - **异步 rollout**：不再「一轮生成完才训练」，生成和训练流水起来（[AReaL](https://arxiv.org/abs/2505.24298)、[PipelineRL](https://arxiv.org/abs/2509.19128)）。
 - **过采样 + 丢弃**：多发一些 prompt，凑够数量就开训，最慢的那些直接丢掉。
+
+量化长尾、AReaL 的 staleness 上限和 decoupled PPO 见 [异步 Rollout](/posttrain/rl-async-rollout)。
 
 ### 4. 摆放：colocate 还是分离
 
@@ -77,6 +87,8 @@ PPO 多一个 critic 模型（要训练）和价值估计；GRPO 用组内均值
 - **切分不同**：训练侧是 FSDP 分片或 Megatron 的 TP×PP 切分，推理侧是另一种 TP 切分（甚至不同的权重合并方式，比如 QKV 融合、gate/up 融合）。同步时要先在训练侧 all-gather 成完整张量（或按目标切分重组），再按推理侧的切分发过去。
 - **手段**：同卡用显存拷贝 / CUDA IPC；跨卡用 NCCL broadcast，按 bucket 分批发、和 gather 流水；slime 支持 NCCL 和磁盘两种同步路径。PipelineRL 更进一步，在推理引擎**生成过程中**直接换权重（in-flight weight update），不等当前序列生成完。
 
+带宽下界怎么算、Megatron 到 vLLM 的布局转换、分桶和流水见 [权重同步](/posttrain/rl-weight-sync)。
+
 ### 6. On-policy 是怎么被悄悄打破的
 
 PPO / GRPO 的 importance ratio $\frac{\pi_\theta(a|s)}{\pi_{\text{old}}(a|s)}$ 假设分母是**生成样本时的策略**。实际系统里有两个原因让它不成立：
@@ -89,7 +101,7 @@ PPO / GRPO 的 importance ratio $\frac{\pi_\theta(a|s)}{\pi_{\text{old}}(a|s)}$ 
 2. 在训练引擎里**重新算一遍** $\pi_{\text{old}}$ 的 logprob（数据流里的第 ③ 步就是这个用途）；
 3. 剩下的分布差再用 **truncated importance sampling（TIS）** 修正：给「训练侧 / 推理侧」概率比乘一个截断的权重 $\min(\rho, C)$，牺牲一点偏差换方差有界（[Yao et al., 2025](https://fengyao.notion.site/off-policy-rl)，veRL 和 slime 都已集成）。
 
-这一点在 rollout 用 FP8 等低精度量化时更严重。
+这一点在 rollout 用 FP8 等低精度量化时更严重。差距从哪来、MIS / IcePop 等其他修正、以及 batch-invariant kernel、fp16、MoE 路由回放这些从源头消除的办法，见 [训推不一致](/posttrain/rl-train-infer-mismatch)。
 
 ### 7. 往前走：Agentic RL
 

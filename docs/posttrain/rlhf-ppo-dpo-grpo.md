@@ -253,6 +253,8 @@ $\rho_{i,t} = \pi_\theta(y_{i,t}|x,y_{i,<t}) / \pi_{\theta_{\text{old}}}(y_{i,t}
 
 ### 8. 后续变体（简述）
 
+完整的公式、数字例子，以及 GSPO、CISPO 见 [GRPO 变体](/posttrain/grpo-variants)。
+
 - **DAPO**（[Yu et al. 2025](https://arxiv.org/abs/2503.14476)）：基于 GRPO 的四个改动——clip 上下界解耦（$\epsilon_{\text{high}} > \epsilon_{\text{low}}$，缓解熵塌缩）、动态采样（过滤全对 / 全错的组）、token 级 loss 平均（长回答不被稀释）、超长回答的奖励整形；并去掉了 KL 项。作者自测 Qwen2.5-32B 上 AIME 2024 达到 50 分。
 - **Dr. GRPO**（[Liu et al. 2025](https://arxiv.org/abs/2503.20783)）：指出 GRPO 的 $1/|y_i|$ 长度归一化和除以 std 会引入优化偏差——答错时长回答每 token 受罚更轻，导致错误回答越写越长。去掉这两项归一化即可，作者自测在保持准确率的同时提升 token 效率。
 
