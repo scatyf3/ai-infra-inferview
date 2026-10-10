@@ -85,16 +85,19 @@
 .widget table { margin: 8px 0; font-size: 13px; }
 
 /* ---------- 作者侧高亮 / 批注：==重点== / ==重点=={批注} ---------- */
-mark {
-  background: var(--vp-c-yellow-soft);
+/* 背景、边框带 !important、选择器前加 html：有的划词插件会全局注入
+   mark { background-color: transparent !important; border-width: 0 !important }，
+   不压过它的话站内所有高亮都看不见。 */
+html mark {
+  background: var(--vp-c-yellow-soft) !important;
   color: inherit;
   padding: 0 2px;
-  border-radius: 3px;
+  border-radius: 3px !important;
 }
-mark.anno {
+html mark.anno {
   position: relative;
   cursor: help;
-  border-bottom: 1.5px dashed var(--vp-c-yellow-1);
+  border-bottom: 1.5px dashed var(--vp-c-yellow-1) !important;
 }
 mark.anno::after {
   content: '✎';
@@ -129,17 +132,18 @@ mark.anno:focus-within .anno-note { display: block; }
 mark.anno:focus { outline: 2px solid var(--vp-c-brand-1); outline-offset: 1px; }
 
 /* ---------- 读者侧划词高亮（ReaderNotes.vue） ---------- */
-mark.rn-hl {
-  background: var(--vp-c-green-soft);
+html mark.rn-hl {
+  background: var(--vp-c-green-soft) !important;
   color: inherit;
   padding: 0;
-  border-radius: 2px;
+  border-radius: 2px !important;
   cursor: pointer;
 }
-mark.rn-hl.has-note { border-bottom: 2px solid var(--vp-c-green-1); }
+html mark.rn-hl.has-note { border-bottom: 2px solid var(--vp-c-green-1) !important; }
+/* 背景是 !important，动画改不动它，闪烁改用 box-shadow */
 mark.rn-hl.rn-flash { animation: rn-flash 1.2s ease-out; }
 @keyframes rn-flash {
-  0%, 40% { background: var(--vp-c-green-3); }
+  0%, 40% { box-shadow: 0 0 0 3px var(--vp-c-green-3); }
 }
 
 .rn-ui { font-size: 13px; color: var(--vp-c-text-1); }
