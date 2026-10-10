@@ -157,6 +157,37 @@ $$
 
 **decode 的 AI 就是 batch size**。batch 1 时 AI = 1，比 ridge 低 295 倍，意味着 tensor core 只有 0.3% 在干活，整块 H100 在等 HBM。这不是实现问题，是这个计算本身的性质：每个权重元素读进来只用一次，是 GEMV 不是 GEMM。
 
+#### 把 KV 算上：batch 再大，AI 也有上限
+
+上面「AI ≈ B」只在 KV 远小于权重时成立。两项字节的性质不一样：
+
+1. 权重是所有序列**共用**的，batch 翻倍，权重字节不变，被摊薄。
+2. KV 是每个序列**自己的**，batch 翻倍，KV 字节也翻倍，摊不薄。
+
+不省略 KV 和 attention 的 FLOPs：
+
+$$
+\text{AI} = \frac{(2P + 4LdS_{ctx})\,B}{P b_w + B \cdot S_{ctx} \cdot \text{KV/token}}
+$$
+
+$B \to \infty$ 时分母只剩 KV，AI 趋于上限：
+
+$$
+\text{AI}_{\max} = \frac{2P}{S_{ctx} \cdot \text{KV/token}} + \frac{4Ld}{\text{KV/token}}
+$$
+
+第二项是 attention 自己的强度，70B 是 $4 \times 80 \times 8192 \div 327680 = 8$。读 KV 和读权重一样多的 batch 是 $B^* = P b_w / (S_{ctx} \cdot \text{KV/token})$，8k 上下文约 52，过了它每步读的主要是 KV。
+
+Llama-3-70B（符号表里的值，$P = 70 \times 10^9$），bf16，AI 单位 FLOP/B：
+
+| $S_{ctx}$ \ $B$ | 1 | 64 | 256 | $\infty$ |
+|---|---|---|---|---|
+| 2k | 1.0 | 51 | 119 | 217 |
+| 8k | 1.1 | 33 | 50 | 60 |
+| 32k | 1.5 | 18 | 20 | 21 |
+
+8k 上下文 batch 再大，AI 也只到约 60，离 H100 的 ridge 295 很远。要提高上限只能减 KV/token：GQA / MLA，或者把 KV 量化到 fp8（上限约翻倍）。
+
 ### 总结
 
 prefill和decode的形态决定了两者的优化不同

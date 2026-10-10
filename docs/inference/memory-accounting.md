@@ -34,6 +34,13 @@ $$
 
 再加 embedding $V \cdot d$（untied 则 ×2）。注意 SwiGLU 是**三个**矩阵（gate、up、down），不是两个，这是常见的算错点。
 
+验算 Llama-3-70B（$d = 8192$，$H_{kv} = 8$，$d_h = 128$，$d_{ff} = 28672$，80 层，$V = 128256$，untied）：
+
+1. 每层：$2d^2 = 134.2$ M，$2dH_{kv}d_h = 16.8$ M，$3d\,d_{ff} = 704.6$ M，norms 可忽略，合计约 **0.86 B**。MLP 占 82%。
+2. 80 层：68.4 B。
+3. embedding 和 lm_head：$2 \times 128256 \times 8192 = 2.1$ B。
+4. 共约 **70.6 B**，和官方的 70B 对得上。
+
 ### KV cache：唯一会爆的项
 
 每个 token 每层要存 K 和 V 各一份，每份 $H_{kv} \cdot d_h$ 个元素：

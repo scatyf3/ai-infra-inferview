@@ -59,16 +59,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-decode-ai',
     topic: 'roofline',
-    q: 'Llama-3-70B bf16 decode，把读 KV 也算上，算术强度怎么随 batch 和上下文长度变？8k 上下文时 batch 再大，AI 最多到多少？',
-    a: '符号：$P$ 参数量，$b_w$ 每参数字节（bf16 = 2），$B$ batch，$S$ 每个序列已有的上下文长度，$\\text{KV}$ 每 token 的 KV 字节（70B 是 320 KiB = 327,680 B，见 KV/token 那张卡），$L$ 层数，$d$ hidden 维度。\n每步每个序列算 1 个新 token：\n1. FLOPs：线性层 $2PB$；attention 还要和 S 个历史 token 算 $q \\cdot k$ 和 $p \\cdot v$，每层每个历史 token 各 $2d$，共 $4LdSB$。\n2. 字节：权重读一遍 $P b_w$，每个序列的 KV 各读一遍 $B S \\cdot \\text{KV}$。\n$$\\text{AI} = \\frac{(2P + 4LdS)\\,B}{P b_w + B S \\cdot \\text{KV}}$$\n3. B 小时分母是权重，bf16 下 AI ≈ $2PB / 2P = B$；B 大时分母变成 KV，AI 趋于上限\n$$\\text{AI}_{\\max} = \\frac{2P}{S \\cdot \\text{KV}} + \\frac{4Ld}{\\text{KV}}$$\n第二项是 attention 自己的强度，70B 是 4 × 80 × 8192 ÷ 327680 = 8。\n4. 读 KV 和读权重一样多的 batch：$B^* = P b_w / (S \\cdot \\text{KV})$，8k 上下文时约 52。batch 过了它，每步读的主要是 KV。\n代入 P = 70 × 10⁹（见表）：8k 上下文 batch 再大，AI 也只到 **约 60**，离 H100 的 ridge 295 很远；32k 只有 21。\n原因：权重是所有序列共用的，batch 越大摊得越薄；KV 是每个序列自己的，batch 翻倍 KV 也翻倍，摊不薄。要提高上限只能减 KV 字节：GQA / MLA，或者 KV 量化到 fp8（上限约翻倍）。',
-    fig: lines`
-      AI (FLOP/B), Llama-3-70B, bf16
-
-      S \ B    1     64    256   inf
-      2k      1.0    51    119   217
-      8k      1.1    33     50    60
-      32k     1.5    18     20    21
-    `,
+    q: 'decode 的算术强度随 batch 怎么变？把读 KV cache 也算上，为什么 batch 再大 AI 也上不去？',
+    a: '一句话：**权重摊得薄，KV 摊不薄**。\n每步要读两样东西：\n1. 权重：所有序列**共用**，读一遍服务整个 batch。\n2. KV cache：每个序列**自己的**，batch 里有几个序列就读几份。\n于是：\n1. batch 小，读的主要是权重。batch 翻倍，FLOPs 翻倍、字节几乎不变，AI 跟着涨，bf16 下 AI ≈ batch。\n2. batch 大，读的主要是 KV。batch 翻倍，FLOPs 和 KV 字节一起翻倍，AI 停在一个上限。上下文越长，每个序列的 KV 越大，上限越低：70B、8k 上下文约 60，远低于 H100 的 ridge 295。\n要抬高上限只能让每个 token 的 KV 变小：GQA / MLA，或者把 KV 量化到 fp8。公式和数表见 roofline 页。',
     ref: ROOF,
   }),
   b({
@@ -104,8 +96,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-layer-params',
     topic: '显存账',
-    q: '用 d、H_kv、d_h、d_ff 写出一层 decoder（GQA + SwiGLU）的参数量公式，并用 Llama-3-70B 验算。常见算错点是什么？',
-    a: '符号：d hidden 维度，H / H_kv 是 Q / KV head 数，d_h head 维度（H·d_h = d），d_ff MLP 中间维度，V 词表大小。按矩阵一个个数（见图）：\n1. attention：W_q、W_o 各 $d^2$；W_k、W_v 各 $d \\cdot H_{kv} d_h$。\n2. MLP（SwiGLU）：gate、up、down 三个矩阵，各 $d \\cdot d_{ff}$。\n3. 两个 RMSNorm：各 d。\n每层 $= 2d^2 + 2 d H_{kv} d_h + 3 d\\, d_{ff} + 2d$。模型再加 embedding 和 lm_head 各 $Vd$（共享就只算一次）。\n算错点：**SwiGLU 是三个矩阵**，不是两个；GQA 下 K、V 投影比 Q 小。\n验算 Llama-3-70B（d = 8192，H_kv = 8，d_h = 128，d_ff = 28672，80 层，V = 128256）：每层约 0.86 B，80 层 68.4 B，加 embedding 和 lm_head 2.1 B，共约 **70.6 B**。',
+    q: '一层 decoder（GQA attention + SwiGLU MLP + 两个 RMSNorm）有多少参数？按矩阵一个个数，写出公式。',
+    a: '符号：d 是 hidden 维度，H / H_kv 是 Q / KV head 数，d_h 是 head 维度（H·d_h = d），d_ff 是 MLP 中间维度。按矩阵数（见图）：\n1. attention：W_q、W_o 各 $d^2$；W_k、W_v 各 $d \\cdot H_{kv} d_h$，GQA 下比 W_q 小。\n2. MLP（SwiGLU）：gate、up、down **三个**矩阵，各 $d \\cdot d_{ff}$。常见算错点是只数两个。\n3. 两个 RMSNorm：各 d。\n$$2d^2 + 2 d H_{kv} d_h + 3 d\\, d_{ff} + 2d$$\n整个模型再加 embedding 和 lm_head 各 $Vd$（V 是词表大小；两者共享权重就只算一次）。',
     fig: lines`
       x [d]
       ├─ RMSNorm                 d
@@ -118,6 +110,13 @@ export const baguCards: Card[] = [
       ├─ W_up    d x d_ff
       └─ W_down  d_ff x d
     `,
+    ref: MEM,
+  }),
+  b({
+    id: 'bagu-layer-params-2',
+    topic: '显存账',
+    q: '算一下 Llama-3-70B 一层多少参数：$d = 8192$，$H_{kv} = 8$，$d_h = 128$，$d_{ff} = 28672$，每层公式 $2d^2 + 2dH_{kv}d_h + 3d\\,d_{ff} + 2d$。',
+    a: '逐项代入：\n1. $2d^2 = 2 \\times 8192^2 = 134.2$ M。\n2. $2dH_{kv}d_h = 2 \\times 8192 \\times 1024 = 16.8$ M。\n3. $3d\\,d_{ff} = 3 \\times 8192 \\times 28672 = 704.6$ M。\n4. $2d = 16$ K，可以忽略。\n合计约 **0.86 B**，MLP 占 82%。80 层是 68.4 B，再加 embedding 和 lm_head 的 2.1 B，约 70.6 B，和 70B 对得上（验算见显存页）。',
     ref: MEM,
   }),
   b({
@@ -217,8 +216,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-mla',
     topic: 'attention 变体',
-    q: 'MLA 每个 token 缓存什么？用 DeepSeek-V3 的配置算每 token 的 KV 字节，和 MHA、GQA 比。',
-    a: '符号（DeepSeek-V3 的 config.json）：hidden $d = 7168$，$n_h = 128$ 个 head，每个 head 的 K、V 是 $d_h = 128$ 维，latent 维度 $d_c = 512$，RoPE 部分 $d_r = 64$，$L = 61$ 层，bf16（每个数 2 B）。$h_t$ 是第 t 个 token 进 attention 前的 hidden。\nMHA 每层要缓存每个 head 的 $k_{t,i}$ 和 $v_{t,i}$。MLA（DeepSeek-V2 提出，arXiv 2405.04434 第 2.1 节）把 K、V 拆成「先压缩、用时再展开」（见图）：\n1. 下投影：$c_t = W^{DKV} h_t$，7168 → 512 维。**缓存 $c_t$**。\n2. 上投影：用的时候第 i 个 head 的 $k^C_{t,i} = W^{UK}_i c_t$、$v_{t,i} = W^{UV}_i c_t$，各 128 维，不缓存。\n3. 位置部分：$k^R_t = \\text{RoPE}(W^{KR} h_t)$，64 维，128 个 head 共用一份，**也缓存**（为什么要单独这一份，见 decoupled RoPE 那张卡）。\n每 token 每层存 $d_c + d_r = 576$ 个数：\n$$\\text{KV/token} = L\\,(d_c + d_r)\\cdot 2 = 61 \\times 576 \\times 2 = 70{,}272\\ \\text{B} \\approx 68.6\\ \\text{KiB}$$\n对比（同样 61 层、bf16）：\n1. 不压缩、每个 head 存完整的 K（128 + 64 维）和 V（128 维）：每层 $128 \\times 320 = 40{,}960$ 个数，共 **4.77 MiB**，是 MLA 的 71 倍。\n2. GQA、8 个 KV head：$2 \\times 61 \\times 8 \\times 128 \\times 2$ = **244 KiB**，是 MLA 的 3.6 倍。\nlatent 是所有 head 共用的一份，大小像 MQA；但每个 head 用自己的 $W^{UK}_i, W^{UV}_i$ 从它还原出不同的 K、V，所以不像 MQA 那样掉效果。decode 时怎么不展开见下一张卡。',
+    q: 'MLA（DeepSeek-V2/V3 的 attention）每个 token 每层往 KV cache 里存什么？各几维？',
+    a: '符号（DeepSeek-V3）：$h_t$ 是第 t 个 token 进 attention 前的 hidden，$d = 7168$ 维；每个 head 的 K、V 是 $d_h = 128$ 维。MLA 把 K、V 拆成「先压缩、用时再展开」（见图）：\n1. 下投影 $c_t = W^{DKV} h_t$，7168 → **512** 维（latent，维度记作 $d_c$）。**缓存**。\n2. 上投影：第 i 个 head 的 $k^C_{t,i} = W^{UK}_i c_t$、$v_{t,i} = W^{UV}_i c_t$，各 128 维，用的时候现算，**不缓存**。\n3. 位置部分 $k^R_t = \\text{RoPE}(W^{KR} h_t)$，**64** 维（记作 $d_r$），所有 head 共用一份，**缓存**。\n所以每 token 每层存 512 + 64 = **576** 个数。RoPE 为什么要单独一份，见 decoupled RoPE 那张卡。',
     fig: lines`
       one token, one layer; [ ] = cached
 
@@ -232,10 +231,17 @@ export const baguCards: Card[] = [
     ref: ATTN,
   }),
   b({
+    id: 'bagu-mla-3',
+    topic: 'attention 变体',
+    q: '算 DeepSeek-V3 每 token 的 KV 字节：61 层，每层缓存 576 个数（512 维 latent + 64 维 RoPE key），bf16。换成 8 个 KV head、head 维度 128 的 GQA 是多少？',
+    a: '1. MLA：$61 \\times 576 \\times 2 = 70{,}272$ B ≈ **68.6 KiB**。\n2. GQA：K、V 各一份，$2 \\times 61 \\times 8 \\times 128 \\times 2 = 249{,}856$ B = **244 KiB**，是 MLA 的 3.6 倍。\nlatent 是所有 head 共用的一份，大小像 MQA；但每个 head 用自己的上投影矩阵从它还原出不同的 K、V，所以不像 MQA 那样掉效果。',
+    ref: ATTN,
+  }),
+  b({
     id: 'bagu-mla-2',
     topic: 'attention 变体',
-    q: 'MLA decode 时不把 K、V 展开成每个 head 的 128 维，直接拿缓存的 latent 算 attention，怎么做到的？这样每读 1 字节 KV 做多少 FLOP？',
-    a: '符号同上一张：$c_t$ 是缓存的 512 维 latent，$k^R_t$ 是缓存的 64 维 RoPE key；第 i 个 head 的 $k^C_{t,i} = W^{UK}_i c_t$、$v_{t,i} = W^{UV}_i c_t$，$W^{UK}_i, W^{UV}_i$ 都是 128 × 512。当前 token 第 i 个 head 的 query 分成 $q^C_i$（128 维）和 $q^R_i$（64 维）。\n1. score 不带位置的那部分，按矩阵乘结合律换个括号（weight absorption）：\n$$q^{C\\top}_i k^C_{t,i} = q^{C\\top}_i W^{UK}_i c_t = \\big(W^{UK\\top}_i q^C_i\\big)^\\top c_t$$\n括号里的 $\\tilde q_i = W^{UK\\top}_i q^C_i$ 是 512 维，每个 head 每步只算一次，之后直接和每个历史 token 的 $c_t$ 点积。再加上 $q^{R\\top}_i k^R_t$，相当于在 576 维上点积。\n2. 输出同理：$\\sum_t p_t\\, v_{t,i} = W^{UV}_i \\big(\\sum_t p_t\\, c_t\\big)$。先在 512 维上加权求和，最后乘一次 $W^{UV}_i$（它还能并进输出投影 $W^O$）。DeepSeek-V2 第 2.1.2 节写的就是这两种吸收（arXiv 2405.04434）。\n3. 结果：128 个 head 读同一份 576 维的 KV，形状上就是只有一个 KV head 的 MQA（代码见下）。\n算一下每层每个历史 token：\n1. 吸收后：读 576 × 2 = 1152 B；FLOPs = 128 head × 2 × (576 + 512) = 278,528；**AI ≈ 242 FLOP/B**，接近 H100 的 ridge 295。\n2. 展开成每 head 128 维：读 40,960 × 2 B，FLOPs = 128 × 2 × (192 + 128)，**AI = 1**。\n代价：每个历史 token 的计算从 192 + 128 维变成 576 + 512 维，多约 3.4 倍。decode 是 memory-bound，拿闲着的算力换带宽划算；prefill 本来就 compute-bound，所以 prefill 仍然展开成每 head 128 维来算。',
+    q: 'MLA decode 时不把 K 展开成每个 head 的 128 维，直接拿缓存的 512 维 latent $c_t$ 算 score，靠的是哪一步变换？',
+    a: '符号：$c_t$ 是缓存的 latent；第 i 个 head 的 $k^C_{t,i} = W^{UK}_i c_t$，$W^{UK}_i$ 是 128 × 512 的常数矩阵；$q^C_i$ 是当前 token 第 i 个 head 的 query，128 维。\n按矩阵乘结合律换个括号（weight absorption）：\n$$q^{C\\top}_i k^C_{t,i} = q^{C\\top}_i W^{UK}_i c_t = \\big(W^{UK\\top}_i q^C_i\\big)^\\top c_t$$\n1. 括号里的 $\\tilde q_i = W^{UK\\top}_i q^C_i$ 是 512 维，每个 head 每步只算一次。\n2. 之后直接和每个历史 token 的 $c_t$ 点积，K 从头到尾不展开。\n3. 输出侧同理：$\\sum_t p_t\\, v_{t,i} = W^{UV}_i \\big(\\sum_t p_t\\, c_t\\big)$，先在 512 维上加权求和，最后乘一次 $W^{UV}_i$。\n结果：128 个 head 读同一份 latent，形状上就是只有一个 KV head 的 MQA（代码见下；RoPE 那 64 维单独加，见 decoupled RoPE 那张卡）。',
     code: lines`
       # decode 一步、一层。缓存 c: [S, 512], kR: [S, 64]
       # 当前 token: qC: [H, 128], qR: [H, 64]; H = 128
@@ -249,10 +255,17 @@ export const baguCards: Card[] = [
     ref: ATTN,
   }),
   b({
+    id: 'bagu-mla-4',
+    topic: 'attention 变体',
+    q: 'MLA decode，一层、一个历史 token：吸收后 128 个 head 读同一份 576 个数的 KV（bf16），每个 head 做一次 576 维点积算 score、一次 512 维乘加算输出。读多少字节、做多少 FLOP、算术强度多少？',
+    a: '一次 n 维点积或乘加是 n 次乘法加 n 次加法，2n FLOP。\n1. 字节：$576 \\times 2 = 1152$ B，128 个 head 共用这一份。\n2. FLOPs：每个 head $2 \\times (576 + 512) = 2176$，128 个 head 共 278,528。\n3. AI = 278528 ÷ 1152 ≈ **242 FLOP/B**，接近 H100 的 ridge 295。\n对比展开成每个 head 的 K（128 + 64 维）和 V（128 维）：每个 head 读自己的 320 个数（640 B），做 $2 \\times 320$ FLOP，AI = **1**。\n代价是每个历史 token 的计算从 320 维变成 1088 维，多约 3.4 倍。decode 是 memory-bound，拿闲着的算力换带宽划算。',
+    ref: ATTN,
+  }),
+  b({
     id: 'bagu-mla-rope',
     topic: 'attention 变体',
-    q: 'MLA 为什么要 decoupled RoPE？直接给上投影出来的 K 加 RoPE，会坏在哪一步？',
-    a: '先回顾 RoPE：位置 t 的向量乘一个只和 t 有关的旋转矩阵 $R_t$，并且 $R_m^\\top R_n = R_{n-m}$，所以 score 只依赖相对位置 n − m。\n1. MLA 在 decode 时能不展开 K，靠的是 $q^\\top W^{UK} c_n$ 中间的 $W^{UK}$ 是**常数矩阵**，可以提前并到 q 那边（见上一张卡）。\n2. 如果对上投影后的 K 加 RoPE：$k_n = R_n W^{UK} c_n$，当前位置 m 的 query 是 $R_m q$，score 变成\n$$(R_m q)^\\top R_n W^{UK} c_n = q^\\top R_{n-m}\\, W^{UK} c_n$$\n夹在中间的 $R_{n-m} W^{UK}$ 对**每个历史位置 n** 都不一样，没法提前算成一个矩阵。要算就只能对每个 n 把 $W^{UK} c_n$ 展开，又回到存完整 K 的代价。DeepSeek-V2 第 2.1.3 节就是这么说的：RoPE 和低秩 KV 压缩不兼容（arXiv 2405.04434）。\n3. 解法：K 拆成两段，score 是两段点积之和：\n内容段 $k^C_{n,i} = W^{UK}_i c_n$（128 维）：不加 RoPE，照常吸收。\n位置段 $k^R_n = \\text{RoPE}(W^{KR} h_n)$（64 维）：只这一段加 RoPE，所有 head 共用，直接缓存。\n$$\\text{score}_i = \\frac{q^{C\\top}_i k^C_{n,i} + q^{R\\top}_i k^R_n}{\\sqrt{128 + 64}}$$\n代价：每 token 每层多缓存 64 个数，512 → 576，多 12.5%。',
+    q: 'MLA 为什么要 decoupled RoPE？直接给上投影出来的 K 加 RoPE，weight absorption 会坏在哪？',
+    a: 'RoPE：位置 t 的向量乘一个旋转矩阵 $R_t$，并且 $R_m^\\top R_n = R_{n-m}$。\n1. 吸收能成立，靠的是 $q^\\top W^{UK} c_n$ 中间的 $W^{UK}$ 是**常数**，可以提前并进 q（见 weight absorption 那张卡）。\n2. 给 K 加 RoPE：$k_n = R_n W^{UK} c_n$，位置 m 的 query 是 $R_m q$，\n$$(R_m q)^\\top R_n W^{UK} c_n = q^\\top R_{n-m}\\, W^{UK} c_n$$\n中间的 $R_{n-m} W^{UK}$ 对**每个历史位置 n** 都不一样，并不进 q，只能对每个 n 把 K 展开（DeepSeek-V2，arXiv 2405.04434 §2.1.3）。\n3. 解法：K 拆两段，score 是两段点积之和。内容段 $W^{UK}_i c_n$ 不加 RoPE，照常吸收；位置段 $k^R_n = \\text{RoPE}(W^{KR} h_n)$ 只有 64 维、所有 head 共用，直接缓存。',
     ref: ATTN,
   }),
   b({
@@ -274,8 +287,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-fa-v2-v3',
     topic: 'FlashAttention',
-    q: 'FlashAttention v1 在 A100 上只跑到峰值的 25–40%。v2 改了哪三处？每一处为什么能提速？',
-    a: '符号：Q、K、V 是 [S, d]；Q 按 $B_r$ 行一块，K/V 按 $B_c$ 行一块，块数 $T_r = S/B_r$、$T_c = S/B_c$；$m$ 是每行的最大值，$\\ell$ 是 softmax 的分母（online softmax 见 FlashAttention 那张卡）。\n1. **少做非 matmul 的 FLOP**。A100 上 bf16 矩阵乘峰值 312 TFLOP/s，fp32 的普通运算只有 19.5，一次非 matmul FLOP 相当于 16 次 matmul FLOP。v1 每处理一块 K/V 都把 O 除以 $\\ell$ 重新归一化；v2 让 O 一直保持**没除 $\\ell$** 的状态，每块只乘一个修正系数 $e^{m_{\\text{old}} - m_{\\text{new}}}$，循环结束才除一次 $\\ell$（代码见下）。\n2. **沿序列长度也并行**。v1 一个 thread block 管一个 (batch, head)，grid 只有 $B \\cdot H$ 个 block；长序列时 batch 往往很小，B = 1、H = 16 只有 16 个 block，A100 有 108 个 SM。v2 外层循环改成 Q 块，每块 Q 由一个 block 独立算完，grid 变成 $B \\cdot H \\cdot T_r$；S = 16k、$B_r$ = 128 时是 2048 个 block。顺带 O 一直留在寄存器里，最后写一次 HBM。\n3. **block 内按 Q 分给 warp**。v1 的 4 个 warp 各拿一段 K/V，每个 warp 只得到部分结果，要写进 shared memory、同步、再加起来；v2 每个 warp 拿一段 Q 行、看全部 K/V，各自算出自己那几行的输出，warp 之间不用通信。\n效果（作者自测，arXiv 2307.08691）：比 v1 快约 2 倍，A100 上到峰值的 50–73%。',
+    q: 'A100 上 bf16 矩阵乘峰值 312 TFLOP/s，fp32 的普通运算只有 19.5 TFLOP/s。FlashAttention-2 为什么让输出 O 在循环里一直不除分母 $\\ell$，最后才除一次？',
+    a: '符号：Q 按 $B_r$ 行一块，K/V 按 $B_c$ 行一块；$m$ 是每行的最大值，$\\ell$ 是 softmax 的分母（推导见 online softmax 页）。\n1. 312 ÷ 19.5 = 16：一次非 matmul 的 FLOP 和 16 次 matmul FLOP 一样费时，所以要尽量少做除法、exp 这类标量运算。\n2. v1 每处理一块 K/V，都把 O 除以 $\\ell$ 归一化一次。\n3. v2 让 O 一直保持**没除 $\\ell$** 的状态，每块只乘修正系数 $e^{m_{\\text{old}} - m_{\\text{new}}}$，循环结束才除一次（代码见下）。结果一样，每块少一次 $B_r \\times d$ 的除法。',
     code: lines`
       # v2 前向：一个 thread block 算一块 Qi [Br, d]
       m = full(Br, -inf); l = zeros(Br); O = zeros(Br, d)
@@ -290,6 +303,20 @@ export const baguCards: Card[] = [
       O = O / l[:, None]                     # 循环结束只除一次
       write(O); write(m + log(l))            # 反向只需要 logsumexp
     `,
+    ref: FA,
+  }),
+  b({
+    id: 'bagu-fa-v2-v3-3',
+    topic: 'FlashAttention',
+    q: 'FlashAttention v1 一个 thread block 管一个 (batch, head)。batch B = 1、head 数 H = 16 时能开几个 thread block？A100 有 108 个 SM。v2 改成每个 Q 块一个 thread block，序列长 S = 16k、Q 块 $B_r$ = 128 行时是多少？',
+    a: '1. v1：grid = B · H = **16** 个 block，108 个 SM 只用上 16 个。长序列时显存只放得下小 batch，这种情况很常见。\n2. v2：Q 块之间互不依赖，每块由一个 block 独立算完，grid = B · H · S / $B_r$ = 16 × 16384 / 128 = **2048** 个 block，能填满所有 SM。\nv1 没法这么切：它外层遍历 K/V 块，不同 K/V 块要累加进同一行输出，有写冲突。',
+    ref: FA,
+  }),
+  b({
+    id: 'bagu-fa-v2-v3-4',
+    topic: 'FlashAttention',
+    q: 'FlashAttention 一个 thread block 里有 4 个 warp。v1 把 K/V 分给 4 个 warp，v2 改成把 Q 分给 4 个 warp。为什么 v2 更快？',
+    a: '1. v1（split-K）：每个 warp 拿一段 K/V，只算出每行输出的**一部分**，要写进 shared memory、同步、再加起来。\n2. v2：每个 warp 拿一段 Q 行、看全部 K/V，各自算出自己那几行的**完整**输出，warp 之间不用通信，省掉 shared memory 读写和同步。\n这一处加上少做非 matmul 运算、沿序列并行，合起来 v2 比 v1 快约 2 倍，A100 上到峰值的 50–73%（作者自测，arXiv 2307.08691）。',
     ref: FA,
   }),
   b({
@@ -908,15 +935,25 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-float-formats',
     topic: 'Post-train',
-    q: 'fp32、fp16、bf16、fp8（e4m3、e5m2）各几位指数、几位尾数？指数位和尾数位各决定什么？',
-    a: '位数见图。\n1. **指数位定范围**：fp16 只有 5 位，最大 65504，最小的正规数约 6 × 10⁻⁵；bf16 和 fp32 都是 8 位，范围约 10⁻³⁸ 到 3 × 10³⁸。\n2. **尾数位定精度**：相邻两个数的相对间隔约 $2^{-m}$（m 是尾数位数）。fp16 约 0.001，bf16 约 0.008，只有两三位有效数字。\n3. fp8：e4m3 精度高、范围小（最大 448），用于前向的权重和激活；e5m2 范围大（最大 57344），用于梯度。',
+    q: 'fp16 和 bf16 都是 16 位，各给指数几位、尾数几位？为什么大模型训练从 fp16 换成了 bf16？',
+    a: '位数见图（fp32 放着对照）。\n1. **指数位定范围**：fp16 只有 5 位，最大 65504，最小正规数约 $6 \\times 10^{-5}$，小梯度会下溢成 0，得靠 loss scaling 救。bf16 和 fp32 一样是 8 位，范围约 $10^{-38}$ 到 $3 \\times 10^{38}$，不会下溢。\n2. **尾数位定精度**：相邻两数的相对间隔约 $2^{-m}$（m 是尾数位数）。fp16 约 0.001，bf16 约 0.008，只有两三位有效数字。\n换 bf16 是拿精度换范围：范围不够会直接丢梯度，还得调 loss scaling；精度不够可以靠 fp32 主权重补。两边的算例见 1e-8 梯度和 fp32 主权重那两张卡。',
     fig: lines`
               sign   exp   mantissa
       fp32     1      8      23
       fp16     1      5      10
       bf16     1      8       7
-      e4m3     1      4       3
-      e5m2     1      5       2
+    `,
+    ref: TMEM,
+  }),
+  b({
+    id: 'bagu-float-formats-2',
+    topic: 'Post-train',
+    q: 'fp8 有两种：e4m3（4 位指数、3 位尾数）和 e5m2（5 位指数、2 位尾数）。为什么要两种？训练时分别给谁用？',
+    a: '8 位去掉符号位只剩 7 位，指数和尾数怎么分都顾此失彼，所以分成两种（Micikevicius et al. arXiv 2209.05433）：\n1. **e4m3 精度高、范围小**：相邻两数相对间隔 $2^{-3}$ = 12.5%，最大 448。给**前向的权重和激活**用：它们的数值集中，更需要精度。\n2. **e5m2 范围大、精度低**：相对间隔 $2^{-2}$ = 25%，最大 57344，范围和 fp16 一样。给**反向的梯度**用：梯度跨度大，更需要范围。\n两种的范围都比 bf16 窄得多，所以每个张量还要配一个 fp32 缩放系数，先把数值挪进可表示范围再 cast。',
+    fig: lines`
+              sign   exp   mantissa     max
+      e4m3     1      4       3         448
+      e5m2     1      5       2       57344
     `,
     ref: TMEM,
   }),

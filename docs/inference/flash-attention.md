@@ -14,7 +14,7 @@ stack: [k-attn]
 
 ## 一句话结论
 
-标准 attention 要把 $S \times S$ 的 score 矩阵写到 HBM 再读回来做 softmax，FlashAttention 用 tiling 把 Q、K、V 分块搬进 SRAM，用 online softmax 在块之间增量更新 max 和分母，整个过程不把 score 矩阵写回 HBM。FLOPs 没少（反向还要重算一遍 score），省的是 HBM 读写：下面的例子里，标准实现的算术强度约 63 FLOP/B，是 memory-bound；FlashAttention 把它推到约 4000 FLOP/B，变成 compute-bound。之后的 v2、v3 不再省字节，而是想办法把 tensor core 用满。
+标准 attention 要把 $S \times S$ 的 score 矩阵写到 HBM 再读回来做 softmax，FlashAttention 用 tiling 把 Q、K、V 分块搬进 SRAM，用 online softmax 在块之间增量更新 max 和分母，整个过程不把 score 矩阵写回 HBM。FLOPs 没少，省的是 HBM 读写：下面的例子里，标准实现的算术强度约 63 FLOP/B，是 memory-bound；FlashAttention 把它推到约 4000 FLOP/B，变成 compute-bound。之后的 v2、v3 不再省字节，而是想办法把 tensor core 用满。
 
 ## 推导
 
@@ -105,7 +105,7 @@ def flash_attn_fwd(Q, K, V, Br=128, Bc=128, causal=True):
 两个要说清的细节：
 
 1. **K/V 其实被读了很多遍。** 外层每个 Q 块都要把整个 K、V 扫一遍，共 $S / B_r$ 遍。论文的严格结论是 HBM 访问量 $\Theta(S^2 d_h^2 / M)$，$M$ 是 SRAM 能放的元素数；标准实现是 $\Theta(S d_h + S^2)$（[Dao et al., 2022, Theorem 2](https://arxiv.org/abs/2205.14135)）。$d_h = 128$、$M \approx 114$K 个 bf16 元素时 $d_h^2 / M \approx 0.14$，即 HBM 访问约是标准实现的 1/7，而不是 1/64。实际更好，是因为同一个 head 的不同 Q 块同时跑在不同 SM 上，它们读的是同一份 K/V（一个 head 是 $2 \times 8192 \times 128 \times 2 \approx 4$ MB），能在 50 MB 的 L2 里复用。所以「流量 O(S·d)」是 L2 命中良好时的近似，不是定理。这一条是按硬件参数推的估计，实测要用 ncu 看 DRAM bytes（见 [Profiling](/gpu/profiling)）。
-2. **FLOPs 一点没少，反向还多了。** 矩阵乘还是 $QK^\top$ 和 $PV$，rescale 多出 $O(S^2)$ 次标量运算。反向不存 $P$，而是用前向存下的 LSE 从 $Q, K$ 重算 $S_{\text{score}}$ 和 $P = e^{S_{\text{score}} - \text{LSE}}$，多一次 $QK^\top$。用算力换访存之所以划算，正是因为标准实现是 memory-bound。
+2. **FLOPs 一点没少，训练时还多了。** 前向：矩阵乘还是 $QK^\top$ 和 $PV$，rescale 多出 $O(S^2)$ 次标量运算。训练还要做反向（backward，求梯度），求 $dV = P^\top dO$ 等梯度要用到 $P$。标准实现在前向把 $P$ 存在 HBM 里留给反向；FlashAttention 不存 $P$（存了就又是 $S \times S$），只存每行一个 LSE，反向时从 $Q, K$ 重算 $S_{\text{score}}$ 和 $P = e^{S_{\text{score}} - \text{LSE}}$，多一次 $QK^\top$。推理只有前向，没有这笔。用算力换访存之所以划算，正是因为标准实现是 memory-bound。
 
 causal mask 下右上方整块被 mask 的 tile 直接跳过（伪代码里的 `k_end`），实际 FLOPs 约是满额的一半。
 

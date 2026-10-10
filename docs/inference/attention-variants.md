@@ -49,6 +49,22 @@ $$
 
 **只缓存 $c_{kv}$**（DeepSeek-V3 里 $d_c = 512$）。但这样有个问题：RoPE 是位置相关的，不能和 $W^{UK}$ 交换顺序。解法是 decoupled RoPE：另外拿一个 $d_r = 64$ 维的、所有 head 共享的 $k_{pe}$ 单独加 RoPE 并缓存。所以每 token 缓存 $d_c + d_r = 576$ 个元素。
 
+算一下 DeepSeek-V3（$L = 61$ 层，bf16）每 token 的 KV：
+
+$$
+\text{KV/token} = L\,(d_c + d_r) \cdot 2 = 61 \times 576 \times 2 = 70{,}272\ \text{B} \approx 68.6\ \text{KiB}
+$$
+
+同样 61 层，换成 8 个 KV head、$d_h = 128$ 的 GQA 是 $2 \times 61 \times 8 \times 128 \times 2 = 244$ KiB，是 MLA 的 3.6 倍。latent 是所有 head 共用的一份，大小像 MQA；但每个 head 用自己的 $W^{UK}_i, W^{UV}_i$ 从它还原出不同的 K、V，所以不像 MQA 那样掉效果。
+
+为什么 RoPE 不能直接加在上投影出来的 K 上：RoPE 给位置 $t$ 的向量乘旋转矩阵 $R_t$，并且 $R_m^\top R_n = R_{n-m}$。若 $k_n = R_n W^{UK} c_n$，位置 $m$ 的 query 是 $R_m q$，score 变成
+
+$$
+(R_m q)^\top R_n W^{UK} c_n = q^\top R_{n-m}\, W^{UK} c_n
+$$
+
+夹在中间的 $R_{n-m} W^{UK}$ 对每个历史位置 $n$ 都不一样，没法像下面那样提前并进 $q$，只能对每个 $n$ 展开 K，又回到存完整 K 的代价（DeepSeek-V2，[arXiv 2405.04434](https://arxiv.org/abs/2405.04434) §2.1.3）。所以 K 拆成两段：内容段 $W^{UK} c_n$ 不加 RoPE，照常吸收；位置段 $k_{pe}$ 只有 64 维、所有 head 共用、直接缓存。score 是两段点积之和，除以 $\sqrt{d_h + d_r} = \sqrt{192}$。
+
 decode 时的关键技巧是 **weight absorption**：把 $W^{UK}$ 吸收进 Q 侧，直接在 latent 空间算 score，不需要把 K 展开：
 
 $$
@@ -57,7 +73,12 @@ $$
 
 这样每 head 的 score 计算变成 $[1, d_c] \times [d_c, S_{kv}]$，读的还是那份共享的 $c_{kv}$。prefill 时反而直接展开走标准 attention 更快（compute-bound，展开的 FLOPs 无所谓）。
 
-**代价**：MLA 的 $d_c = 512$ 大于单个 head 的 $d_h = 128$，所以计算量比 GQA 大。它是拿算力换带宽，正好符合 decode memory-bound 的处境。
+输出侧同理：$\sum_t p_t\, v_{t,i} = W^{UV}_i \big(\sum_t p_t\, c_t\big)$，先在 512 维上加权求和，最后乘一次 $W^{UV}_i$（还能并进 $W^O$）。于是 128 个 head 读同一份 576 维的 KV，形状上就是只有一个 KV head 的 MQA。
+
+**代价**：MLA 的 $d_c = 512$ 大于单个 head 的 $d_h = 128$，所以计算量比 GQA 大。它是拿算力换带宽，正好符合 decode memory-bound 的处境。按每层每个历史 token 算（$H = 128$ 个 head，bf16）：
+
+1. 吸收后：读 $576 \times 2 = 1152$ B；FLOPs $= 128 \times 2 \times (576 + 512) = 278{,}528$；AI ≈ **242** FLOP/B，接近 H100 的 ridge 295。
+2. 展开成每 head 的 K（128 + 64 维）和 V（128 维）：读 $128 \times 320 \times 2$ B，FLOPs $= 128 \times 2 \times 320$，AI = **1**。
 
 ## 交互
 
