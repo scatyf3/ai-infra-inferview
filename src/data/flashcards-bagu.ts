@@ -37,6 +37,12 @@ const RLI = '/posttrain/rl-infra'
 const SFT = '/posttrain/sft'
 const SD = '/basics/system-design-llm-serving'
 const PY = '/basics/python'
+const GRPOV = '/posttrain/grpo-variants'
+const ASYNC = '/posttrain/rl-async-rollout'
+const SYNC = '/posttrain/rl-weight-sync'
+const MISM = '/posttrain/rl-train-infer-mismatch'
+const MMENC = '/inference/multimodal-encoder'
+const SPEECH = '/inference/speech-output'
 
 const b = (c: Omit<Card, 'deck'>): Card => ({ deck: 'bagu', ...c })
 
@@ -1091,6 +1097,177 @@ export const baguCards: Card[] = [
       <eos>   <eos>   assistant
     `,
     ref: SFT,
+  }),
+
+  b({
+    id: 'bagu-dapo-clip-higher',
+    topic: 'RL',
+    q: 'PPO / GRPO 的 clip 让 $\\hat A > 0$ 时新概率最多是旧概率的 $1 + \\epsilon$ 倍。$\\epsilon = 0.2$ 时，旧概率 0.9 和 0.01 的两个 token 一步最多各涨到多少？DAPO 为什么把上界单独放到 0.28？',
+    a: '1. 0.9 × 1.2 = 1.08，超过 1，等于不受限。\n2. 0.01 × 1.2 = **0.012**，被卡得很死。\n上界只卡低概率 token，而探索恰恰靠它们：一条做对的回答里采到了一个本来不太可能的 token，本该大幅加强。卡住它们，熵就越来越低（熵塌缩）。\nDAPO 把上下界分开：$\\epsilon_{\\text{high}} = 0.28$，0.01 一步能到 0.0128；下界 $\\epsilon_{\\text{low}}$ 保持 0.2，因为放宽下界会把低概率 token 压到接近 0，探索反而更少。',
+    ref: GRPOV,
+  }),
+  b({
+    id: 'bagu-dynamic-sampling',
+    topic: 'RL',
+    q: 'GRPO 每个 prompt 采 $G = 16$ 条，答对奖励 1、答错 0。模型对某题的正确率 $p = 0.9$，一组 16 条全对的概率是多少？这组对梯度的贡献是多少？',
+    a: '1. 全对的概率 $p^{16} = 0.9^{16} \\approx$ **0.19**。\n2. 全对时 16 个奖励相同，advantage $= r_i - \\text{mean} = 0$，这组对梯度的贡献是 **0**，白采了。\n训练越往后，模型做对的题越多，一个 batch 里这样的组越多，有效样本越少。DAPO 的动态采样：多采一些 prompt，把正确率恰好是 0 或 1 的组过滤掉，一直采到 batch 填满。',
+    ref: GRPOV,
+  }),
+  b({
+    id: 'bagu-grpo-length-bias',
+    topic: 'RL',
+    q: 'GRPO 的 loss 先对每条回答按长度平均（除以 $|y_i|$），再对 $G$ 条平均。两条答错的回答，advantage 都是 −1，长度 100 和 1000 token。每个 token 分到的系数各是多少（略去 $1/G$）？长期会让模型怎样？',
+    a: '1. 100 token 那条：每个 token **1/100**。\n2. 1000 token 那条：每个 token **1/1000**，只挨十分之一的罚。\n错误回答写得越长，每个 token 受罚越轻，模型的错误回答就越写越长（Dr. GRPO 说的长度偏差）。\n两种改法，都让同一 batch 里每个 token 的系数相同：\n1. DAPO：除以 batch 的总 token 数，这里两条都是 1/1100。\n2. Dr. GRPO：除以一个常数 $L_{\\max}$（生成长度上限）。',
+    ref: GRPOV,
+  }),
+  b({
+    id: 'bagu-grpo-std-bias',
+    topic: 'RL',
+    q: 'GRPO 的 advantage $= (r_i - \\text{mean}) / \\text{std}$，组内 $G = 8$，答对 1 分、答错 0 分，std 用总体标准差。只有 1 条答对时，答对那条的 advantage 是多少？4 条答对时呢？',
+    a: '1. 1 条答对：mean = 0.125，std $= \\sqrt{0.125 \\times 0.875} = 0.331$，答对那条 $(1 - 0.125) / 0.331 =$ **+2.65**。\n2. 4 条答对：mean = 0.5，std = 0.5，答对那条 **+1.0**。\nstd 小的组（几乎全对或几乎全错，也就是太难或太简单的题）被除以一个小数，advantage 被放大，在梯度里的权重比中等难度的题大。Dr. GRPO 的改法是只减均值、不除 std：两种情况分别是 +0.875 和 +0.5。',
+    ref: GRPOV,
+  }),
+  b({
+    id: 'bagu-gspo-ratio',
+    topic: 'RL',
+    q: 'GSPO 的序列级 ratio：$s = \\exp\\big(\\frac{1}{|y|}\\sum_t \\log\\rho_t\\big)$，$\\rho_t$ 是第 t 个 token 的新旧概率比。一条 4 个 token 的回答，$\\rho_t = [1.1, 0.9, 1.5, 0.8]$，$s$ 是多少？不开 $1/|y|$ 次方、直接连乘是多少？',
+    a: '1. $\\log\\rho_t = [0.095, -0.105, 0.405, -0.223]$，平均 0.043，$s = e^{0.043} =$ **1.044**。\n2. 直接连乘：1.1 × 0.9 × 1.5 × 0.8 = **1.188**。\n开方就是取几何平均：连乘几百上千个 token 会极大或极小，长短回答的数量级不同，没法共用一个 clip 范围；几何平均把它拉回 1 附近。所以 GSPO 的 clip 范围很窄（论文用 $3 \\times 10^{-4}$ / $4 \\times 10^{-4}$）。整条回答共用一个 ratio，单个 token 的波动（包括 MoE 路由变化引起的）被平均掉。',
+    ref: GRPOV,
+  }),
+  b({
+    id: 'bagu-cispo',
+    topic: 'RL',
+    q: '一个 token 的新旧概率比 $\\rho = 2$，$\\hat A > 0$，clip 上界 $1 + \\epsilon = 1.28$。PPO 的 $\\min(\\rho\\hat A, \\operatorname{clip}(\\rho)\\hat A)$ 下，这个 token 对 $\\theta$ 的梯度是多少？CISPO 下呢？',
+    a: '1. PPO：$\\rho > 1.28$，min 取到 $1.28\\hat A$，这是个常数，对 $\\theta$ 的梯度是 **0**。clip 不是「截断权重」，而是「这个 token 这一步不再推」。\n2. CISPO：权重截到 1.28 并 stop-gradient，梯度从 $\\log\\pi_\\theta$ 走：$1.28 \\cdot \\hat A \\cdot \\nabla\\log\\pi_\\theta$，**不为 0**。\nMiniMax 的动机：However、Wait 这类低概率的转折 token，更新一次后 ratio 就很大，在 PPO 下被 clip 掉、再也没有梯度；一批 rollout 要做 16 次更新时尤其严重。',
+    ref: GRPOV,
+  }),
+  b({
+    id: 'bagu-rollout-tail',
+    topic: 'RL',
+    q: '同步 RL 一批 8 条回答，长度（千 token）是 $[2, 3, 3, 4, 4, 5, 8, 20]$，设每个 decode 步耗时相同。序列槽位的利用率是多少？最后只剩一条在跑的那段占总时长多少？',
+    a: '利用率 = 实际生成的 token ÷（条数 × 最长长度）：\n1. 共 49k token，8 × 20k = 160k，利用率 **31%**。\n2. 第 7 条在 8k 处结束，之后 12k 步只剩一条：12 / 20 = **60%** 的时间。\n实际更糟：只剩几条时 decode 读一遍权重只算一两个 token，每步耗时并不随 batch 等比例缩短；同步 RL 的训练卡这段时间全在等。解法：partial rollout（没写完的挂起下轮接着写）、异步 rollout、长短分开跑。',
+    ref: ASYNC,
+  }),
+  b({
+    id: 'bagu-areal-staleness',
+    topic: 'RL',
+    q: 'AReaL 只在 $\\lfloor (N_r - 1)/B \\rfloor \\le i + \\eta$ 时接受新的生成请求：$N_r$ 是累计发出的请求数，$B$ 是训练 batch，$i$ 是 trainer 当前的版本，$\\eta$ 是最大陈旧度。$B = 512$、$\\eta = 4$、$i = 10$ 时，最多累计能发出多少条？',
+    a: '$\\lfloor (N_r - 1)/512 \\rfloor \\le 14$，即 $N_r - 1 \\le 15 \\times 512 - 1$，最多 **7680** 条。\n含义：rollout 最多领先 trainer 4 个 batch，样本最多落后 4 个版本。$\\eta = 0$ 就是同步 RL。\n样本变旧后，AReaL 用 decoupled PPO：importance 比 $\\pi_{\\text{prox}} / \\pi_{\\text{behav}}$ 修正「样本来自旧策略」，clip 只约束相对 $\\pi_{\\text{prox}}$（这一步更新前的参数）走多远。论文消融里 $\\eta = 4$ 不改目标掉到 23.3 分，改了是 42.2。',
+    ref: ASYNC,
+  }),
+  b({
+    id: 'bagu-bf16-sum-order',
+    topic: 'RL',
+    q: 'bf16 有 8 位有效位，[256, 512) 之间相邻两个数差 2。把 $[256, 1, 1, 1, 1]$ 按这个顺序逐个累加，结果是多少？先加四个 1、最后加 256 呢？这和 RL 的训推不一致有什么关系？',
+    a: '1. 先 256：每次 256 + 1 都舍入回 256，结果 **256**。\n2. 先加四个 1 得 4，再加 256：**260**。\n浮点加法不满足结合律，结果取决于归约顺序。matmul 会按形状选 split-K，attention 会按 KV 长度切块，这些都随 batch 大小变。推理引擎和训练引擎的 batch 组织、并行方式、kernel 都不同，所以同一份权重算出的 token 概率不一样，「on-policy」其实是 off-policy。Thinking Machines 的解法是让 RMSNorm、matmul、attention 的归约顺序与 batch 无关（batch-invariant）。',
+    ref: MISM,
+  }),
+  b({
+    id: 'bagu-tis',
+    topic: 'RL',
+    q: '训推修正里 $\\rho_t = \\pi_{\\text{learner}}(y_t) / \\pi_{\\text{sampler}}(y_t)$（训练引擎和推理引擎在同一份旧权重下给这个 token 的概率比）。一个 $\\rho_t = 16$ 的 token，不截断时梯度噪声被放大多少倍？TIS 截到 $C = 2$ 呢？',
+    a: 'importance 权重 $w$ 把梯度方差放大约 $w^2$ 倍：\n1. 不截断：$16^2 =$ **256** 倍。\n2. TIS（$w = \\min(\\rho_t, C)$）截到 2：$2^2 =$ **4** 倍。\n截断引入偏差，换来方差有界，$C = 2$ 是 verl、slime 的常用默认值。\n注意 $\\rho_t$ 和 PPO 的 ratio 是两回事：PPO 的 ratio 是训练引擎在新旧权重下的比，管「这一步走多远」；$\\rho_t$ 管「样本其实来自推理引擎的分布」。',
+    ref: MISM,
+  }),
+  b({
+    id: 'bagu-r3',
+    topic: 'RL',
+    q: 'MoE 做 RL 时，R3（Rollout Routing Replay）在训练时回放什么、不回放什么？为什么 gate 权重不直接用推理侧的？',
+    a: '1. **回放**：推理引擎在 rollout 时每层选中的 top-K 专家（一个 mask）。训练时强制用这几个专家。\n2. **不回放**：gate 权重。用训练侧的 router logit 在这 K 个专家上做 softmax：$g_i = \\frac{I_i\\, e^{s_i}}{\\sum_j I_j\\, e^{s_j}}$，$I$ 是推理侧的 mask，$s$ 是训练侧的 logit。\n这样梯度照常传回 router，router 还能学。\n为什么要回放：top-K 是不连续的，两边 logit 差一点就可能换专家。R3 论文统计 Qwen3-30B-A3B 上 94% 的 token 至少有一层选的专家不同；回放后训推 KL 从 $1.5 \\times 10^{-3}$ 降到 $7.5 \\times 10^{-4}$，rollout 慢不到 3%（作者自测）。',
+    ref: MISM,
+  }),
+  b({
+    id: 'bagu-weight-sync-time',
+    topic: 'RL',
+    q: 'RL 每步训练完要把权重同步给推理引擎。70B bf16，走一张 400 Gb/s 的网卡，带宽下界是多少秒？一个节点 8 张网卡并行呢？',
+    a: '下界 = 字节数 ÷ 带宽：\n1. 70 × 10⁹ × 2 B = 140 GB。\n2. 400 Gb/s = 50 GB/s，140 / 50 = **2.8 s**。\n3. 8 张网卡约 400 GB/s：**0.35 s**。\n实测通常是下界的几倍：训练侧要 all-gather 出完整张量、改名字和布局（QKV、gate/up 融合）、可能量化成 fp8，每个张量单独发有调用开销，推理侧还要加载。常用的优化是分桶（几百 MB 一块）和流水（gather、传输、加载重叠）。',
+    ref: SYNC,
+  }),
+  b({
+    id: 'bagu-megatron-qkv',
+    topic: 'RL',
+    q: '8 个 Q head、2 个 KV head（GQA，每组 4 个 Q head）。Megatron 的 `linear_qkv` 按 head 是什么顺序？HF / vLLM 要的是什么顺序？',
+    a: 'Megatron 按 GQA 组交错，每组是「4 个 q、1 个 k、1 个 v」：\n`q0 q1 q2 q3 k0 v0 | q4 q5 q6 q7 k1 v1`\nHF 是 q、k、v 三个矩阵分开，vLLM 的 `qkv_proj` 是三者按顺序拼：\n`q0 … q7 | k0 k1 | v0 v1`\n权重同步时要转换：先 view 成（组数，每组 q 数 + 2，head_dim，hidden），沿第 1 维切成 [4, 1, 1] 三份，再分别拼回去。不转换的话推理侧加载不报错，但 attention 全错。',
+    ref: SYNC,
+  }),
+
+  // ---------------- 多模态 ----------------
+  b({
+    id: 'bagu-image-tokens',
+    topic: '多模态',
+    q: 'Qwen2.5-VL：ViT 的 patch 是 14 × 14，之后相邻 2 × 2 个 patch 合成一个 token；图的长宽各自缩放到最近的 28 的倍数。一张 1920 × 1080 的图变成多少个 token？',
+    a: '每个 token 对应 28 × 28 像素：\n1. 1920 / 28 = 68.6，取最近的倍数 69 → 1932。\n2. 1080 / 28 = 38.6 → 39 → 1092。\n3. 69 × 39 = **2691** 个，前后再加两个特殊 token。\n总像素有上下限（默认 4 到 16384 个 token），超出会先按比例缩放。对比 LLaVA-1.5 固定缩到 336 × 336，不管原图多大都是 $(336/14)^2 = 576$ 个。',
+    ref: MMENC,
+  }),
+  b({
+    id: 'bagu-video-tokens',
+    topic: '多模态',
+    q: 'Qwen2-VL 处理视频：每秒采 2 帧，相邻两帧合成一组，每组的 token 数和同分辨率的一张图一样。360p（640 × 360）每组 299 个 token，一分钟视频多少 token？',
+    a: '1. 一分钟 60 × 2 = 120 帧，两帧一组，60 组。\n2. 60 × 299 = **17,940** 个 token。\n2 fps、两帧一组时，每秒视频约等于一帧的 token 数。所以视频请求的 prefill 很长，各模型都设了上限（Qwen2-VL 每段视频最多 16384 个 token），帧多了只能降分辨率或降帧率。',
+    ref: MMENC,
+  }),
+  b({
+    id: 'bagu-audio-tokens',
+    topic: '多模态',
+    q: '16 kHz 音频每 10 ms 算一帧 mel 频谱；Whisper 编码器开头的卷积 stride 2；Qwen2-Audio / Qwen2.5-Omni 再接一个 stride 2 的池化。每秒音频变成多少 token？一分钟呢？',
+    a: '1. mel：每 10 ms 一帧，**100 帧/秒**。\n2. 卷积 stride 2：**50 帧/秒**（Whisper 30 s 正好 1500 帧）。\n3. 池化 stride 2：**25 token/s**，每个 token 40 ms。\n一分钟 60 × 25 = **1500** 个 token。Qwen3-Omni 的 AuT 编码器下采样 8 倍，12.5 token/s，一分钟 750 个，prefill 和 KV 都减半。',
+    ref: MMENC,
+  }),
+  b({
+    id: 'bagu-vit-flops',
+    topic: '多模态',
+    q: 'Qwen2.5-VL 的 ViT 主体约 632M 参数，一张 1920 × 1080 的图合并前有 10764 个 patch。只算线性层，ViT 编码这张图要多少 FLOP？7.6B 的 LLM 对合并后的 2691 个 token 做 prefill 要多少？',
+    a: '线性层每个 patch 每个参数一次乘加，2 FLOP：\n1. ViT：$2 \\times 632\\text{M} \\times 10764 \\approx$ **13.6 TFLOP**（加上 4 层全局 attention 约 2.4 TFLOP，合计约 16）。\n2. LLM prefill：$2 \\times 7.6\\text{B} \\times 2691 \\approx$ **41 TFLOP**。\n编码器约占四成。原因：ViT 看的是合并前的 patch，数量是 LLM token 的 4 倍；而且 ViT 大小固定（3B、7B、72B 共用），换成 72B 的 LLM，编码器只占约 4%。',
+    ref: MMENC,
+  }),
+  b({
+    id: 'bagu-mrope',
+    topic: '多模态',
+    q: 'Qwen2-VL 的 M-RoPE 给每个 token 三个位置 ID（时间、高、宽）。序列是 3 个文本 token，接一张合并后 2 × 2 的图（4 个 token），再接 1 个文本 token。写出所有 token 的三个 ID。',
+    a: '规则：文本三个 ID 相同；图像的时间 ID 不变，高、宽 ID 按网格的行、列；图像之后的文本从「前面所有 ID 的最大值 + 1」接着编。\n1. 文本：(0,0,0)、(1,1,1)、(2,2,2)。\n2. 图像从 3 开始：(3,3,3)、(3,3,4)、(3,4,3)、(3,4,4)。\n3. 最大 ID 是 4，下一个文本：(5,5,5)。\n图像占 4 个 token，位置 ID 只往前走了 2。所以多模态序列的位置 ID 比 token 数小，但 KV 长度仍按 token 数算。',
+    ref: MMENC,
+  }),
+  b({
+    id: 'bagu-encoder-no-chunk',
+    topic: '多模态',
+    q: '长文本 prompt 可以 chunked prefill，分几步算。一张图的编码为什么不能切开分步算？vLLM 的调度器怎么处理？',
+    a: 'LLM 是因果 attention，前面的 token 不依赖后面的，所以能切；ViT 是**双向 attention**，一张图的所有 patch 互相看，必须一起算。\nvLLM 的做法：\n1. 每步有一个编码器预算（等于 `max_num_batched_tokens`，并保证至少放得下最大的一张图）。\n2. 这一步要处理到某张图的占位 token 时，预算够就整张编码；不够，这一步只调度到这张图之前的文本为止。\n3. 编码结果按图像内容的 hash 缓存，后面几步 prefill 和其他请求都能复用。',
+    ref: MMENC,
+  }),
+  b({
+    id: 'bagu-codec-bitrate',
+    topic: '多模态',
+    q: '语音 codec 的码率 = 帧率 × 码本数 × $\\log_2$(码本大小)。Mimi（Moshi 用的 codec）是 12.5 Hz、8 个码本、每个码本 2048 个码字，码率是多少？',
+    a: '$12.5 \\times 8 \\times \\log_2 2048 = 12.5 \\times 8 \\times 11 =$ **1100 bps**，即 1.1 kbps。\n对比 EnCodec（24 kHz）：75 Hz、每个码本 1024 个码字（10 bit），一个码本就是 750 bps，6 kbps 要 8 个码本。帧率低的 codec 每秒要生成的步数少，对 LLM 更友好。',
+    ref: SPEECH,
+  }),
+  b({
+    id: 'bagu-rvq',
+    topic: '多模态',
+    q: '残差向量量化（RVQ）：每一级在码本里找离「当前残差」最近的码字，再减掉它。$x = 0.83$，三级码本依次是 $\\{-1, 0, 1\\}$、$\\{-0.3, 0, 0.3\\}$、$\\{-0.1, 0, 0.1\\}$。每级选哪个？最后还原值和残差是多少？',
+    a: '1. 第 1 级逼近 0.83：选 **1.0**，残差 −0.17。\n2. 第 2 级逼近 −0.17：−0.3 离它 0.13、0 离它 0.17，选 **−0.3**，累计 0.7，残差 0.13。\n3. 第 3 级逼近 0.13：选 **0.1**，累计 **0.8**，残差 **0.03**。\n每多一级误差小一截：前几级定大轮廓（内容、音色），后几级补细节。还原时把各级选中的码字加起来。',
+    ref: SPEECH,
+  }),
+  b({
+    id: 'bagu-codec-steps',
+    topic: '多模态',
+    q: 'Qwen3-Omni 的 codec 是 12.5 Hz、16 个码本。如果把每帧的 16 个 token 拍平，让 Talker 一个个自回归生成，每秒音频要走多少步？Qwen3-Omni 实际怎么做？',
+    a: '拍平：12.5 × 16 = **200 步/秒**，每步都过一遍 Talker，太慢。\nQwen3-Omni 分两层：\n1. Talker（3B 总参数、0.3B 激活的 MoE）每帧只走一步，预测第 0 个码本：**12.5 步/秒**。\n2. MTP 模块（80M 的 dense transformer）接着把剩下 15 个码本补齐，每帧走 15 小步。\n大模型的步数降到 1/16，小模型步数多但每步便宜。Moshi 的 depth transformer 是同一个思路。',
+    ref: SPEECH,
+  }),
+  b({
+    id: 'bagu-omni-rtf',
+    topic: '多模态',
+    q: 'RTF = 生成耗时 ÷ 音频时长。Qwen3-Omni 生成一帧（80 ms 音频）要走：Thinker 一步、Talker 一步、MTP 补齐一帧、解码器解一帧。并发 1 时 Thinker 75 token/s、Talker 140 token/s、MTP 14 ms/帧、解码 3 ms/帧。RTF 是多少？',
+    a: '1. Thinker 一步：1000 / 75 = 13.3 ms。\n2. Talker 一步：1000 / 140 = 7.1 ms。\n3. 加上 MTP 14 ms、解码 3 ms：共 37.5 ms。\n4. RTF = 37.5 / 80 = **0.47**。\nRTF < 1 才不卡：每 80 ms 的音频要在 80 ms 内生成出来。0.47 意味着生成比播放快一倍，余量应该换成更高的并发（论文里并发 6 时 RTF 0.66）。',
+    ref: SPEECH,
+  }),
+  b({
+    id: 'bagu-omni-first-packet',
+    topic: '多模态',
+    q: '语音对话的首包延迟（用户说完到听到第一段声音）由哪几段串行组成？用 Qwen3-Omni 并发 1、音频输入的数字算：预处理和编码 72 ms，Thinker 首 token 88 ms，Talker 首 token 57 ms，MTP 一帧 14 ms，解码一帧 3 ms。',
+    a: '五段依次相加：预处理和编码器 → Thinker 出第一个 token → Talker 出第一帧 → MTP 补齐这一帧 → 解码器出第一段波形。\n72 + 88 + 57 + 14 + 3 = **234 ms**。\n并发升到 6 时首包变成 1172 ms，涨得最多的是 Thinker 首 token（88 → 673 ms），也就是 prefill 在排队。所以并发上限常常由首包延迟决定，而不是 RTF。压首包的办法：Talker 拿到一段文本就开始（流式接力），解码器改成纯因果、逐帧出声。',
+    ref: SPEECH,
   }),
 
   // ---------------- 系统设计 ----------------
