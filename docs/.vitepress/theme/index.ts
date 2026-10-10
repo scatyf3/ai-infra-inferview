@@ -3,6 +3,7 @@ import DefaultTheme from 'vitepress/theme'
 import type { Theme } from 'vitepress'
 import MemoryCalculator from './components/MemoryCalculator.vue'
 import ShapeFlow from './components/ShapeFlow.vue'
+import AttentionSkeleton from './components/AttentionSkeleton.vue'
 import ParallelismViz from './components/ParallelismViz.vue'
 import PagedKV from './components/PagedKV.vue'
 import ReleaseTimeline from './components/ReleaseTimeline.vue'
@@ -36,6 +37,7 @@ export default {
     registerServiceWorker()
     app.component('MemoryCalculator', MemoryCalculator)
     app.component('ShapeFlow', ShapeFlow)
+    app.component('AttentionSkeleton', AttentionSkeleton)
     app.component('ParallelismViz', ParallelismViz)
     app.component('PagedKV', PagedKV)
     app.component('ReleaseTimeline', ReleaseTimeline)

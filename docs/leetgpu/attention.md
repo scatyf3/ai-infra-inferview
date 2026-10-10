@@ -14,6 +14,8 @@ stack: [k-attn]
 
 ## 骨架：六步
 
+<AttentionSkeleton />
+
 ```python
 import torch
 import math
