@@ -45,6 +45,7 @@ export const overrides: Record<string, string> = {
   'inference/omni-serving': 'overview',
   'inference/multimodal-encoder': 'overview',
   'inference/speech-output': 'overview',
+  'inference/omni-duplex': 'overview',
   'gpu/cuda-graph-fusion': 'L2', // 主体是 kernel 融合
   'framework/add-model-vllm-sglang': 'L3',
   'framework/request-lifecycle': 'overview',
@@ -80,6 +81,7 @@ export const sectionOrder: Record<string, string[]> = {
     'inference/omni-serving',
     'inference/multimodal-encoder',
     'inference/speech-output',
+    'inference/omni-duplex',
     'framework/vllm-release-history',
   ],
 }

@@ -4,7 +4,7 @@ status: draft
 tags: [omni, multimodal, serving, tts]
 difficulty: 4
 order: 10
-related: [/inference/multimodal-encoder, /inference/speech-output, /inference/batching-scheduling, /inference/kv-cache-paged-attention, /inference/metrics-benchmark]
+related: [/inference/multimodal-encoder, /inference/speech-output, /inference/omni-duplex, /inference/batching-scheduling, /inference/kv-cache-paged-attention, /inference/metrics-benchmark]
 stack: []
 ---
 
@@ -94,6 +94,25 @@ codec 的码率、首包延迟和 RTF 的逐项拆解（Qwen3-Omni 并发 1 时�
 | 流式 | 级与级 overlap，下游不等上游整段完成 |
 
 **vLLM-Omni**（[论文](https://arxiv.org/abs/2602.02204)）就是按这个思路做的：把 any-to-any 模型拆成 stage 图，节点是 AR 或 DiT stage，边是用户定义的数据变换，每个 stage 独立 batching、独立分配 GPU，用统一的 connector 传中间数据。
+
+**vLLM-Omni 的具体做法**（[技术报告](https://arxiv.org/abs/2610.09307)，2026-10）：
+
+1. **stage**：一个模型组件 + 一个执行引擎 + 一份资源预算。自回归的 stage 用 vLLM 引擎（各自有调度器、KV 管理），扩散 / 解码的 stage 用单独的扩散引擎。每个 stage 有一个副本池，副本内部再做 TP / DP / PP / EP。
+2. **orchestrator**：只管请求级的事，比如准入、把请求推到下一个 stage、给客户端吐进度、判断完成。它不调度 token、不管 KV、不搬大张量，这些都留给各 stage 的引擎。
+3. **级间推进两种模式**：`batch` 是上一级整段做完再交给下一级；`async_chunk` 是提前在下游占好位置，上游每出一个 chunk 就通过 connector 发过去，下游边收边算。
+4. **connector**：同机默认共享内存，跨机用 Mooncake（TCP / RDMA），每条边可以单独选。早先的论文测过 Qwen2.5-Omni 级间传输：共享内存 Thinker → Talker 5.5 ms，Mooncake 8.3 ms。
+5. **路由**：流式请求和需要复用本地 KV 的请求绑定在固定副本上（sticky），其他的按轮询或最短队列分。
+
+async_chunk 开和关的对比（作者自测，2 × 2 张 H100）：
+
+| 并发 | TTFT，开 / 关 | 端到端，开 / 关 |
+|---|---|---|
+| 1 | 96 / 116 ms | 18.5 / 25.1 s |
+| 32 | 508 / 3420 ms | 72.6 / 136.6 s |
+
+并发高时差距最大：不开的话每一级都要等上一级整段做完，排队一层层叠加。2 张 H200 上，并发从 1 到 32，首包从 212 ms 涨到 500 ms，RTF 从 0.08 涨到 0.21（新的 model runner）。
+
+全双工会话、打断和容量见 [全双工语音服务](/inference/omni-duplex)。
 
 ### 6. 还没被很好解决的问题
 
