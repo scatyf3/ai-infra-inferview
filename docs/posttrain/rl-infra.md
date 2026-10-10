@@ -4,7 +4,7 @@ status: draft
 tags: [rl-infra, verl, openrlhf]
 difficulty: 4
 order: 4
-related: [/posttrain/rlhf-ppo-dpo-grpo, /posttrain/grpo-variants, /posttrain/rl-async-rollout, /posttrain/rl-weight-sync, /posttrain/rl-train-infer-mismatch, /posttrain/rl-agentic, /posttrain/training-memory, /parallel/zero-fsdp, /inference/batching-scheduling]
+related: [/posttrain/rlhf-ppo-dpo-grpo, /posttrain/grpo-variants, /posttrain/rl-async-rollout, /posttrain/rl-weight-sync, /posttrain/rl-train-infer-mismatch, /posttrain/rl-agentic, /posttrain/rl-monitoring, /posttrain/training-memory, /parallel/zero-fsdp, /inference/batching-scheduling]
 stack: [ld-load]
 ---
 
@@ -40,6 +40,8 @@ PPO 多一个 critic 模型（要训练）和价值估计；GRPO 用组内均值
 | rollout 的长尾、partial rollout、异步和 staleness | [异步 Rollout](/posttrain/rl-async-rollout) |
 | 每轮怎么把新权重送进推理引擎、要多久 | [权重同步](/posttrain/rl-weight-sync) |
 | 同一份权重两个引擎算出不同概率 | [训推不一致](/posttrain/rl-train-infer-mismatch) |
+| 多轮工具调用的 rollout | [Agentic RL](/posttrain/rl-agentic) |
+| 训练时看哪些曲线、崩了怎么查 | [训练监控与排障](/posttrain/rl-monitoring) |
 
 ### 2. 两种负载为什么不能用一套引擎
 

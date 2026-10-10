@@ -21,5 +21,6 @@ SFT、LoRA、RLHF 全家桶与 RL infra。重点是显存账和数据流：训�
 - [异步 Rollout：长尾、Partial Rollout 与 Staleness](./rl-async-rollout) — 不等最长那条回答，以及样本变旧之后目标函数怎么改
 - [Agentic RL：多轮工具调用的 Rollout 系统](./rl-agentic) — token 进 token 出、工具输出的 loss mask、GPU 别等环境、多轮 KV 复用
 - [训推不一致](./rl-train-infer-mismatch) — 同一份权重两个引擎算出不同概率：来源、TIS / MIS / IcePop、batch-invariant、R3
+- [RL 训练监控与排障](./rl-monitoring) — 熵、长度、ppo_kl、训推 KL、梯度范数各说明什么，崩溃前先动哪条
 - [混合精度、Grad Checkpointing 与优化器状态显存账](./training-memory) — 训练显存的完整账本
 - [蒸馏、剪枝、稀疏（含 KV Pruning）](./distill-prune-sparse) — 准备好 motivation 和 ablation
