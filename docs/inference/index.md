@@ -56,3 +56,4 @@ title: 推理系统核心
 - [多模态输入：一张图、一段视频、一段音频变成多少 token](./multimodal-encoder)：动态分辨率、M-RoPE、ViT 算力账、编码器的调度和缓存
 - [语音输出：codec token、Talker 与首包延迟](./speech-output)：RVQ 与码率、多码本怎么少走几步、用 Qwen3-Omni 的数字拆首包和 RTF
 - [全双工语音服务：会话、打断与容量](./omni-duplex)：每一拍都要出声、插话时按播放进度截断历史、会话准入与回收
+- [图像与视频生成：DiT 推理与 Serving](./dit-serving)：视频变成多少 token、一次生成多少 FLOPs、步数蒸馏、步间缓存、序列并行

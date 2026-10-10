@@ -4,7 +4,7 @@ status: draft
 tags: [omni, multimodal, serving, tts]
 difficulty: 4
 order: 10
-related: [/inference/multimodal-encoder, /inference/speech-output, /inference/omni-duplex, /inference/batching-scheduling, /inference/kv-cache-paged-attention, /inference/metrics-benchmark]
+related: [/inference/multimodal-encoder, /inference/speech-output, /inference/omni-duplex, /inference/dit-serving, /inference/batching-scheduling, /inference/kv-cache-paged-attention, /inference/metrics-benchmark]
 stack: []
 ---
 
@@ -112,7 +112,7 @@ async_chunk 开和关的对比（作者自测，2 × 2 张 H100）：
 
 并发高时差距最大：不开的话每一级都要等上一级整段做完，排队一层层叠加。2 张 H200 上，并发从 1 到 32，首包从 212 ms 涨到 500 ms，RTF 从 0.08 涨到 0.21（新的 model runner）。
 
-全双工会话、打断和容量见 [全双工语音服务](/inference/omni-duplex)。
+全双工会话、打断和容量见 [全双工语音服务](/inference/omni-duplex)；输出侧的图像、视频生成（扩散 stage）见 [DiT 推理与 Serving](/inference/dit-serving)。
 
 ### 6. 还没被很好解决的问题
 
