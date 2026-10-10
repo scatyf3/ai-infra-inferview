@@ -203,6 +203,18 @@
     "due": "2026-10-13T04:22:35.458Z",
     "last_review": "2026-10-09T04:22:35.458Z"
   },
+  "bagu-gpu-coalescing": {
+    "stability": 1.2931,
+    "difficulty": 5.11217071,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-10T16:56:21.954Z",
+    "last_review": "2026-10-10T16:50:21.954Z"
+  },
   "bagu-gqa": {
     "stability": 8.2956,
     "difficulty": 1,
