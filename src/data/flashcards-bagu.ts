@@ -43,6 +43,8 @@ const SYNC = '/posttrain/rl-weight-sync'
 const MISM = '/posttrain/rl-train-infer-mismatch'
 const MMENC = '/inference/multimodal-encoder'
 const SPEECH = '/inference/speech-output'
+const AGENT = '/posttrain/rl-agentic'
+const DUPLEX = '/inference/omni-duplex'
 
 const b = (c: Omit<Card, 'deck'>): Card => ({ deck: 'bagu', ...c })
 
@@ -1191,6 +1193,35 @@ export const baguCards: Card[] = [
     ref: SYNC,
   }),
 
+  b({
+    id: 'bagu-tito',
+    topic: 'RL',
+    q: '多轮 agent 的 RL：调 chat 接口拿到文本，最后把整段对话用 chat template 重新分词再拿去训练。这样做哪三处会让训练看到的 token 和采样时不一样？为什么 importance sampling 修不了？',
+    a: '1. **分词不唯一**：模型采样出 `H` + `AVING`，重新分词变成 `HAV` + `ING`，文本相同、token 不同。\n2. **工具调用被解析再渲染**：空格变了，有的解析器还会自动修正模型写错的 JSON。\n3. **chat template 改历史**：Qwen3 的模板会删掉之前轮次的思考内容，rollout 时的上下文和训练时拼出来的不同。\nimportance sampling（如 TIS）要逐个 token 比较两边的概率，前提是两边是同一串 token；重新分词后序列都对不齐，没法比。\n做法：推理服务返回 token id（vLLM 的 `return_token_ids`，SGLang 直接收发 `input_ids`），下一轮直接拼 token，不重新套模板。',
+    ref: AGENT,
+  }),
+  b({
+    id: 'bagu-agentic-mask',
+    topic: 'RL',
+    q: '一条 3 轮的工具调用轨迹：模型分别生成 300、200、400 个 token，中间两次工具返回 1500 和 800 个 token。回答部分有多少 token 算 loss，占多少？为什么工具返回的不算？',
+    a: '算 loss 的只有模型生成的：300 + 200 + 400 = **900** 个；回答部分共 900 + 2300 = 3200 个，占 **28%**。\n工具返回的 token 只当上下文（`loss_mask = 0`）：\n1. 它不是策略采出来的，没有策略概率，算 ratio、advantage 都没有意义。\n2. 训练模型去预测工具输出，等于教它编造工具结果。',
+    ref: AGENT,
+  }),
+  b({
+    id: 'bagu-agentic-prefix',
+    topic: 'RL',
+    q: '多轮 rollout，每轮在上下文末尾新增 2000 个 token（工具结果 + 指令），共 10 轮。每轮都从头 prefill，总共 prefill 多少 token？前缀 KV 都命中呢？',
+    a: '1. 从头 prefill：第 k 轮的输入有 2000k 个 token，$2000 \times (1 + 2 + \dots + 10) =$ **110,000**。\n2. 前缀命中：每轮只算新增的 2000 个，共 **20,000**，少 5.5 倍。\n前提是同一条轨迹的后续轮次落在同一个推理实例上：sticky session（按 request id 绑实例）或前缀感知的路由（SGLang router 的 `cache_aware`）。每次权重同步后这些 KV 要作废。',
+    ref: AGENT,
+  }),
+  b({
+    id: 'bagu-agentic-concurrency',
+    topic: 'RL',
+    q: '推理服务想保持 $B = 256$ 条序列同时在 decode。agent 轨迹有 2/3 的时间在等环境（跑代码、搜索），只有 1/3 的时间在生成。要多少条轨迹同时在跑？',
+    a: '同时在生成的轨迹数 ≈ 轨迹总数 × 生成时间占比，所以\n$$N_{\text{traj}} \approx \frac{B}{f} = \frac{256}{1/3} =$$ **768** 条。\n环境越慢，$f$ 越小，要的并发轨迹越多，沙箱规模也要跟上（Kimi K2 用 Kubernetes 跑了一万多个并发沙箱）。配合环境级异步（不按批等环境）和冗余 rollout（凑够就停）。',
+    ref: AGENT,
+  }),
+
   // ---------------- 多模态 ----------------
   b({
     id: 'bagu-image-tokens',
@@ -1268,6 +1299,28 @@ export const baguCards: Card[] = [
     q: '语音对话的首包延迟（用户说完到听到第一段声音）由哪几段串行组成？用 Qwen3-Omni 并发 1、音频输入的数字算：预处理和编码 72 ms，Thinker 首 token 88 ms，Talker 首 token 57 ms，MTP 一帧 14 ms，解码一帧 3 ms。',
     a: '五段依次相加：预处理和编码器 → Thinker 出第一个 token → Talker 出第一帧 → MTP 补齐这一帧 → 解码器出第一段波形。\n72 + 88 + 57 + 14 + 3 = **234 ms**。\n并发升到 6 时首包变成 1172 ms，涨得最多的是 Thinker 首 token（88 → 673 ms），也就是 prefill 在排队。所以并发上限常常由首包延迟决定，而不是 RTF。压首包的办法：Talker 拿到一段文本就开始（流式接力），解码器改成纯因果、逐帧出声。',
     ref: SPEECH,
+  }),
+
+  b({
+    id: 'bagu-barge-in-truncate',
+    topic: '多模态',
+    q: '语音助手的 RTF = 0.47（生成 1 秒音频要 0.47 秒），用户在播放到 1.5 秒时插话。这时大约已经生成了多少秒音频（忽略首包）？这条回答的文字共 60 个 token、音频共 6 秒，历史里应该保留多少个 token？',
+    a: '1. 已生成：1.5 / 0.47 ≈ **3.2 秒**，比播放的多一倍多。\n2. 按播放比例截文字：60 × 1.5 / 6 = **15** 个 token。\n对话历史要截到**用户实际听到的位置**，不是生成到的位置，否则下一轮模型以为用户听过后面那半段。OpenAI Realtime API 用 `conversation.item.truncate` 的 `audio_end_ms` 做这件事，会同时删掉没播出的文字。完整流程：VAD 检测到开口 → 停止播放 → `response.cancel` → 截断历史。',
+    ref: DUPLEX,
+  }),
+  b({
+    id: 'bagu-duplex-tick',
+    topic: '多模态',
+    q: 'Moshi 是全双工模型，每 80 ms 一步，每步都要吃进用户的音频、吐出自己的一帧（可能是静音）。$B$ 个会话一起跑一个 batch 步耗时 $t(B)$，实时的条件是什么？Moshi 上下文 4096 步，够聊多久？',
+    a: '1. 实时条件：$t(B) \le 80$ ms，满足它的最大 $B$ 就是并发上限，再留出余量。超了播放会断、用户音频会积压，不像文本 serving 那样只是慢一点。\n2. 上下文：4096 ÷ 12.5 步/秒 ≈ **328 秒**，约 5.5 分钟。\n全双工和按轮次的区别：模型一直在跑，没人说话时也占算力，什么时候说、什么时候停由模型自己决定。',
+    ref: DUPLEX,
+  }),
+  b({
+    id: 'bagu-rtf-direction',
+    topic: '多模态',
+    q: 'Qwen3-Omni 报告 RTF 0.47，Kyutai 的 DSM-ASR 报告 batch 64 时「RTF 3.5」。两者的 RTF 定义一样吗？各自代表比实时快几倍？DSM-ASR 这时相当于多少路实时流？',
+    a: '定义相反：\n1. Qwen：RTF = 生成耗时 ÷ 音频时长，越小越好，0.47 表示比实时快约 **2.1 倍**，必须 < 1。\n2. Kyutai：写的是音频时长 ÷ 耗时，越大越好，3.5 表示快 **3.5 倍**，必须 > 1。\n3. DSM-ASR：3.5 × 64 = **224** 路实时流的处理量（作者报告一张 H100 能实时处理约 400 路）。\n读 RTF 先看定义，换成同一个方向再比较。',
+    ref: DUPLEX,
   }),
 
   // ---------------- 系统设计 ----------------
