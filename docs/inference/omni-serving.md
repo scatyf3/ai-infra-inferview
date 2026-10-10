@@ -4,7 +4,7 @@ status: draft
 tags: [omni, multimodal, serving, tts]
 difficulty: 4
 order: 10
-related: [/inference/batching-scheduling, /inference/kv-cache-paged-attention, /inference/metrics-benchmark]
+related: [/inference/multimodal-encoder, /inference/speech-output, /inference/omni-duplex, /inference/dit-serving, /inference/batching-scheduling, /inference/kv-cache-paged-attention, /inference/metrics-benchmark]
 stack: []
 ---
 
@@ -38,7 +38,7 @@ Omni 模型（Qwen-Omni、MiniCPM-o 这类）不是「一个 LLM」，而是**�
 | Talker | 以 Thinker 的隐状态为条件，生成语音 codec token | 自回归，模型小、步数多 | 又一个 LLM，但输入来自上游流 |
 | codec 解码器 | codec token → 波形 | 非自回归（ConvNet / DiT / flow matching） | 没有对应物，更像图像生成 |
 
-Talker 吃的是 Thinker 的**隐状态**而不只是文本 token，所以两级之间传的是张量，不是字符串。这决定了它们之间要有一条高效的 GPU 间数据通道。
+Qwen2.5-Omni 的 Talker 吃的是 Thinker 的**隐状态**和它采样出的文本 token，所以两级之间传的是张量，不是字符串，这决定了它们之间要有一条高效的 GPU 间数据通道。Qwen3-Omni 改成 Talker 只以多模态特征和流式文本为条件，两者可以用不同的 system prompt。各模块的大小（Qwen3-Omni）：音频编码器 650M、视觉编码器 540M、Thinker 30B-A3B、Talker 3B-A0.3B、MTP 80M、Code2Wav 200M。
 
 ### 2. 多模态输入会变成多少 token
 
@@ -48,7 +48,7 @@ serving 的显存和延迟账都从 token 数算起：
 - **视频**：再乘以采样帧数（通常还会在时间维 2 帧合 1）。几十秒的视频轻松上万 token。
 - **音频**：Whisper 系编码器下采样后约 **25 token/s**（1 token ≈ 40 ms，见 [Qwen2.5-Omni](https://arxiv.org/abs/2503.20215)），1 分钟音频 ≈ 1.5k token。
 
-结论：**多模态请求的 prefill 很长**，编码器本身也有不小的计算量。纯文本里「prompt 几百 token」的直觉在这里不成立。
+结论：**多模态请求的 prefill 很长**，编码器本身也有不小的计算量。纯文本里「prompt 几百 token」的直觉在这里不成立。逐项怎么算、ViT 的 FLOPs 和 LLM prefill 怎么比，见 [多模态输入](/inference/multimodal-encoder)。
 
 ### 3. 编码器为什么是新瓶颈
 
@@ -77,7 +77,9 @@ serving 的显存和延迟账都从 token 数算起：
 
 - Thinker 每出一个 chunk 就把隐状态交给 Talker，Talker 边收边 prefill，不等 Thinker 说完（[Qwen2.5-Omni](https://arxiv.org/abs/2503.20215)、[Qwen3-Omni](https://arxiv.org/abs/2509.17765) 的 chunked prefill）。
 - Talker 每出几个 codec 帧，codec 解码器就开始出波形。Qwen2.5-Omni 用滑动窗口 DiT 限制感受野；[Qwen3-Omni](https://arxiv.org/abs/2509.17765) 进一步把 codec 解码器换成**因果 ConvNet**，从第一个 codec 帧就能流式出声，报告的理论冷启动首包延迟是 234 ms（音频输入）。
-- 多码本 codec 下，Talker 每步只自回归预测第一层码本，剩余层用一个小的 MTP 模块并行补齐，减少自回归步数（[Qwen3-Omni](https://arxiv.org/abs/2509.17765)）。
+- 多码本 codec 下，Talker 每步只自回归预测第一层码本，剩余层交给一个小的 MTP 模块补齐，减少大模型的自回归步数（[Qwen3-Omni](https://arxiv.org/abs/2509.17765)）。
+
+codec 的码率、首包延迟和 RTF 的逐项拆解（Qwen3-Omni 并发 1 时首包 234 ms、RTF 0.47，并发 6 时 1172 ms、0.66），见 [语音输出](/inference/speech-output)。
 
 ### 5. 系统层：从「一个引擎」到「stage 图」
 
@@ -92,6 +94,25 @@ serving 的显存和延迟账都从 token 数算起：
 | 流式 | 级与级 overlap，下游不等上游整段完成 |
 
 **vLLM-Omni**（[论文](https://arxiv.org/abs/2602.02204)）就是按这个思路做的：把 any-to-any 模型拆成 stage 图，节点是 AR 或 DiT stage，边是用户定义的数据变换，每个 stage 独立 batching、独立分配 GPU，用统一的 connector 传中间数据。
+
+**vLLM-Omni 的具体做法**（[技术报告](https://arxiv.org/abs/2610.09307)，2026-10）：
+
+1. **stage**：一个模型组件 + 一个执行引擎 + 一份资源预算。自回归的 stage 用 vLLM 引擎（各自有调度器、KV 管理），扩散 / 解码的 stage 用单独的扩散引擎。每个 stage 有一个副本池，副本内部再做 TP / DP / PP / EP。
+2. **orchestrator**：只管请求级的事，比如准入、把请求推到下一个 stage、给客户端吐进度、判断完成。它不调度 token、不管 KV、不搬大张量，这些都留给各 stage 的引擎。
+3. **级间推进两种模式**：`batch` 是上一级整段做完再交给下一级；`async_chunk` 是提前在下游占好位置，上游每出一个 chunk 就通过 connector 发过去，下游边收边算。
+4. **connector**：同机默认共享内存，跨机用 Mooncake（TCP / RDMA），每条边可以单独选。早先的论文测过 Qwen2.5-Omni 级间传输：共享内存 Thinker → Talker 5.5 ms，Mooncake 8.3 ms。
+5. **路由**：流式请求和需要复用本地 KV 的请求绑定在固定副本上（sticky），其他的按轮询或最短队列分。
+
+async_chunk 开和关的对比（作者自测，2 × 2 张 H100）：
+
+| 并发 | TTFT，开 / 关 | 端到端，开 / 关 |
+|---|---|---|
+| 1 | 96 / 116 ms | 18.5 / 25.1 s |
+| 32 | 508 / 3420 ms | 72.6 / 136.6 s |
+
+并发高时差距最大：不开的话每一级都要等上一级整段做完，排队一层层叠加。2 张 H200 上，并发从 1 到 32，首包从 212 ms 涨到 500 ms，RTF 从 0.08 涨到 0.21（新的 model runner）。
+
+全双工会话、打断和容量见 [全双工语音服务](/inference/omni-duplex)；输出侧的图像、视频生成（扩散 stage）见 [DiT 推理与 Serving](/inference/dit-serving)。
 
 ### 6. 还没被很好解决的问题
 

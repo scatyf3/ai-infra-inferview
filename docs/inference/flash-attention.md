@@ -4,7 +4,7 @@ status: draft
 tags: [flash-attention, kernel]
 difficulty: 4
 order: 5
-related: [/handson/stable-softmax, /inference/attention-variants, /inference/prefill-decode-roofline, /inference/kv-cache-paged-attention, /gpu/tensor-core-gemm, /gpu/profiling]
+related: [/handson/online-softmax, /handson/stable-softmax, /inference/attention-variants, /inference/prefill-decode-roofline, /inference/kv-cache-paged-attention, /gpu/tensor-core-gemm, /gpu/profiling]
 stack: [k-attn]
 ---
 
@@ -14,7 +14,7 @@ stack: [k-attn]
 
 ## 一句话结论
 
-标准 attention 要把 $S \times S$ 的 score 矩阵写到 HBM 再读回来做 softmax，FlashAttention 用 tiling 把 Q、K、V 分块搬进 SRAM，用 online softmax 在块之间增量更新 max 和分母，整个过程不把 score 矩阵写回 HBM。FLOPs 没少（反向还要重算一遍 score），省的是 HBM 读写：下面的例子里，标准实现的算术强度约 63 FLOP/B，是 memory-bound；FlashAttention 把它推到约 4000 FLOP/B，变成 compute-bound。之后的 v2、v3 不再省字节，而是想办法把 tensor core 用满。
+标准 attention 要把 $S \times S$ 的 score 矩阵写到 HBM 再读回来做 softmax，FlashAttention 用 tiling 把 Q、K、V 分块搬进 SRAM，用 online softmax 在块之间增量更新 max 和分母，整个过程不把 score 矩阵写回 HBM。FLOPs 没少，省的是 HBM 读写：下面的例子里，标准实现的算术强度约 63 FLOP/B，是 memory-bound；FlashAttention 把它推到约 4000 FLOP/B，变成 compute-bound。之后的 v2、v3 不再省字节，而是想办法把 tensor core 用满。
 
 ## 推导
 
@@ -39,6 +39,8 @@ GPU 有两级存储要分清。**HBM** 是显存，H100 SXM 80 GB、3.35 TB/s。
 1. 读 $Q, K$，算 $S_{\text{score}} = QK^\top$，**写** $S \times S$ 到 HBM。
 2. **读** $S_{\text{score}}$，做 softmax，**写** $P$（还是 $S \times S$）。
 3. **读** $P$ 和 $V$，算 $O = PV$，写 $O$。
+
+为什么必须拆成三步、中间要等上一步全部写完（barrier）：softmax 要先知道**整行**的最大值和分母，才能算出这一行的任何一个元素，而一整行 score 要等 $QK^\top$ 把这一行全算完才有。所以只能先把整个 $S_{\text{score}}$ 写回 HBM，再起下一个 kernel 读回来。FlashAttention 用 [online softmax](/handson/online-softmax) 拆掉的就是这个依赖：边算边更新最大值和分母，不用等整行。
 
 $S \times S$ 的矩阵被搬了 4 遍。算一笔：$S = 8192$，$H = 64$，$d_h = 128$，bf16，一层，batch 1，按 MHA 数（GQA 只会让 K/V 更小，不影响结论）：
 
@@ -65,7 +67,7 @@ m' = \max(m, \max s^{(j)}),\quad
 \text{acc}' = \alpha\, \text{acc} + e^{s^{(j)} - m'} V^{(j)}
 $$
 
-全部块处理完，$O = \text{acc} / \ell$。推导和三遍法对比见 [数值稳定 Softmax](/handson/stable-softmax)。
+全部块处理完，$O = \text{acc} / \ell$。逐步推导和数字例子见 [Online Softmax](/handson/online-softmax)。
 
 有了这个递推，一个 Q 块（$B_r$ 行）可以常驻 SRAM，让 K/V 一块一块流过，每块的 score 只是 $B_r \times B_c$ 的小 tile，算完就丢。前向伪代码（v2 的循环顺序，下节解释），单个 head：
 
@@ -73,7 +75,8 @@ $$
 def flash_attn_fwd(Q, K, V, Br=128, Bc=128, causal=True):
     S, d = Q.shape                              # 行主序，每行一个 token
     O, LSE = zeros(S, d), zeros(S)
-    for q0 in range(0, S, Br):                  # 每个 Q 块交给一个 thread block，块之间并行
+    # 每个 Q 块交给一个 thread block，块之间并行
+    for q0 in range(0, S, Br):
         q = load(Q[q0:q0+Br])                   # HBM -> SRAM，只读一次
         m = full(Br, -inf); l = zeros(Br); acc = zeros(Br, d)   # 都在寄存器里
         k_end = q0 + Br if causal else S        # causal：右上方整块被 mask 的 tile 直接跳过
@@ -96,8 +99,6 @@ def flash_attn_fwd(Q, K, V, Br=128, Bc=128, causal=True):
     return O, LSE
 ```
 
-这段的 numpy 版本对 $S \in \{1, 7, 64, 130, 257\}$、causal 和非 causal 都和朴素实现逐元素对上（见下方手撕）。
-
 ### 访存账：省了多少，为什么 FLOPs 不降
 
 还是上面那个例子。FlashAttention 理想情况下 Q、K、V 各读一遍、O 写一遍：$4 \cdot S \cdot d \cdot b = 4 \times 8192 \times 8192 \times 2 \approx 0.54$ GB，**0.16 ms**。FLOPs 还是 2.2 TFLOP，所以 $\text{AI} \approx 4096$ FLOP/B，远在 ridge 右边，时间由算力决定（理想 2.2 ms）。从 10.3 ms 的搬运主导变成了 2.2 ms 的计算主导。
@@ -105,7 +106,7 @@ def flash_attn_fwd(Q, K, V, Br=128, Bc=128, causal=True):
 两个要说清的细节：
 
 1. **K/V 其实被读了很多遍。** 外层每个 Q 块都要把整个 K、V 扫一遍，共 $S / B_r$ 遍。论文的严格结论是 HBM 访问量 $\Theta(S^2 d_h^2 / M)$，$M$ 是 SRAM 能放的元素数；标准实现是 $\Theta(S d_h + S^2)$（[Dao et al., 2022, Theorem 2](https://arxiv.org/abs/2205.14135)）。$d_h = 128$、$M \approx 114$K 个 bf16 元素时 $d_h^2 / M \approx 0.14$，即 HBM 访问约是标准实现的 1/7，而不是 1/64。实际更好，是因为同一个 head 的不同 Q 块同时跑在不同 SM 上，它们读的是同一份 K/V（一个 head 是 $2 \times 8192 \times 128 \times 2 \approx 4$ MB），能在 50 MB 的 L2 里复用。所以「流量 O(S·d)」是 L2 命中良好时的近似，不是定理。这一条是按硬件参数推的估计，实测要用 ncu 看 DRAM bytes（见 [Profiling](/gpu/profiling)）。
-2. **FLOPs 一点没少，反向还多了。** 矩阵乘还是 $QK^\top$ 和 $PV$，rescale 多出 $O(S^2)$ 次标量运算。反向不存 $P$，而是用前向存下的 LSE 从 $Q, K$ 重算 $S_{\text{score}}$ 和 $P = e^{S_{\text{score}} - \text{LSE}}$，多一次 $QK^\top$。用算力换访存之所以划算，正是因为标准实现是 memory-bound。
+2. **FLOPs 一点没少，训练时还多了。** 前向：矩阵乘还是 $QK^\top$ 和 $PV$，rescale 多出 $O(S^2)$ 次标量运算。训练还要做反向（backward，求梯度），求 $dV = P^\top dO$ 等梯度要用到 $P$。标准实现在前向把 $P$ 存在 HBM 里留给反向；FlashAttention 不存 $P$（存了就又是 $S \times S$），只存每行一个 LSE，反向时从 $Q, K$ 重算 $S_{\text{score}}$ 和 $P = e^{S_{\text{score}} - \text{LSE}}$，多一次 $QK^\top$。推理只有前向，没有这笔。用算力换访存之所以划算，正是因为标准实现是 memory-bound。
 
 causal mask 下右上方整块被 mask 的 tile 直接跳过（伪代码里的 `k_end`），实际 FLOPs 约是满额的一半。
 

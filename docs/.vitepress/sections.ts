@@ -43,6 +43,10 @@ export const overrides: Record<string, string> = {
   'inference/quantization-gptq': 'L1', // 跟着量化
   'inference/speculative-sampling-math': 'L3', // 跟着 speculative decoding
   'inference/omni-serving': 'overview',
+  'inference/multimodal-encoder': 'overview',
+  'inference/speech-output': 'overview',
+  'inference/omni-duplex': 'overview',
+  'inference/dit-serving': 'overview',
   'gpu/cuda-graph-fusion': 'L2', // 主体是 kernel 融合
   'framework/add-model-vllm-sglang': 'L3',
   'framework/request-lifecycle': 'overview',
@@ -76,6 +80,10 @@ export const sectionOrder: Record<string, string[]> = {
     'framework/vllm-v1-architecture',
     'basics/system-design-llm-serving',
     'inference/omni-serving',
+    'inference/multimodal-encoder',
+    'inference/speech-output',
+    'inference/omni-duplex',
+    'inference/dit-serving',
     'framework/vllm-release-history',
   ],
 }

@@ -37,6 +37,16 @@ const RLI = '/posttrain/rl-infra'
 const SFT = '/posttrain/sft'
 const SD = '/basics/system-design-llm-serving'
 const PY = '/basics/python'
+const GRPOV = '/posttrain/grpo-variants'
+const ASYNC = '/posttrain/rl-async-rollout'
+const SYNC = '/posttrain/rl-weight-sync'
+const MISM = '/posttrain/rl-train-infer-mismatch'
+const MMENC = '/inference/multimodal-encoder'
+const SPEECH = '/inference/speech-output'
+const AGENT = '/posttrain/rl-agentic'
+const DUPLEX = '/inference/omni-duplex'
+const DIT = '/inference/dit-serving'
+const MON = '/posttrain/rl-monitoring'
 
 const b = (c: Omit<Card, 'deck'>): Card => ({ deck: 'bagu', ...c })
 
@@ -59,16 +69,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-decode-ai',
     topic: 'roofline',
-    q: 'Llama-3-70B bf16 decode，把读 KV 也算上，算术强度怎么随 batch 和上下文长度变？8k 上下文时 batch 再大，AI 最多到多少？',
-    a: '符号：$P$ 参数量，$b_w$ 每参数字节（bf16 = 2），$B$ batch，$S$ 每个序列已有的上下文长度，$\\text{KV}$ 每 token 的 KV 字节（70B 是 320 KiB = 327,680 B，见 KV/token 那张卡），$L$ 层数，$d$ hidden 维度。\n每步每个序列算 1 个新 token：\n1. FLOPs：线性层 $2PB$；attention 还要和 S 个历史 token 算 $q \\cdot k$ 和 $p \\cdot v$，每层每个历史 token 各 $2d$，共 $4LdSB$。\n2. 字节：权重读一遍 $P b_w$，每个序列的 KV 各读一遍 $B S \\cdot \\text{KV}$。\n$$\\text{AI} = \\frac{(2P + 4LdS)\\,B}{P b_w + B S \\cdot \\text{KV}}$$\n3. B 小时分母是权重，bf16 下 AI ≈ $2PB / 2P = B$；B 大时分母变成 KV，AI 趋于上限\n$$\\text{AI}_{\\max} = \\frac{2P}{S \\cdot \\text{KV}} + \\frac{4Ld}{\\text{KV}}$$\n第二项是 attention 自己的强度，70B 是 4 × 80 × 8192 ÷ 327680 = 8。\n4. 读 KV 和读权重一样多的 batch：$B^* = P b_w / (S \\cdot \\text{KV})$，8k 上下文时约 52。batch 过了它，每步读的主要是 KV。\n代入 P = 70 × 10⁹（见表）：8k 上下文 batch 再大，AI 也只到 **约 60**，离 H100 的 ridge 295 很远；32k 只有 21。\n原因：权重是所有序列共用的，batch 越大摊得越薄；KV 是每个序列自己的，batch 翻倍 KV 也翻倍，摊不薄。要提高上限只能减 KV 字节：GQA / MLA，或者 KV 量化到 fp8（上限约翻倍）。',
-    fig: lines`
-      AI (FLOP/B), Llama-3-70B, bf16
-
-      S \ B    1     64    256   inf
-      2k      1.0    51    119   217
-      8k      1.1    33     50    60
-      32k     1.5    18     20    21
-    `,
+    q: 'decode 的算术强度随 batch 怎么变？把读 KV cache 也算上，为什么 batch 再大 AI 也上不去？',
+    a: '一句话：**权重摊得薄，KV 摊不薄**。\n每步要读两样东西：\n1. 权重：所有序列**共用**，读一遍服务整个 batch。\n2. KV cache：每个序列**自己的**，batch 里有几个序列就读几份。\n于是：\n1. batch 小，读的主要是权重。batch 翻倍，FLOPs 翻倍、字节几乎不变，AI 跟着涨，bf16 下 AI ≈ batch。\n2. batch 大，读的主要是 KV。batch 翻倍，FLOPs 和 KV 字节一起翻倍，AI 停在一个上限。上下文越长，每个序列的 KV 越大，上限越低：70B、8k 上下文约 60，远低于 H100 的 ridge 295。\n要抬高上限只能让每个 token 的 KV 变小：GQA / MLA，或者把 KV 量化到 fp8。公式和数表见 roofline 页。',
     ref: ROOF,
   }),
   b({
@@ -104,8 +106,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-layer-params',
     topic: '显存账',
-    q: '用 d、H_kv、d_h、d_ff 写出一层 decoder（GQA + SwiGLU）的参数量公式，并用 Llama-3-70B 验算。常见算错点是什么？',
-    a: '符号：d hidden 维度，H / H_kv 是 Q / KV head 数，d_h head 维度（H·d_h = d），d_ff MLP 中间维度，V 词表大小。按矩阵一个个数（见图）：\n1. attention：W_q、W_o 各 $d^2$；W_k、W_v 各 $d \\cdot H_{kv} d_h$。\n2. MLP（SwiGLU）：gate、up、down 三个矩阵，各 $d \\cdot d_{ff}$。\n3. 两个 RMSNorm：各 d。\n每层 $= 2d^2 + 2 d H_{kv} d_h + 3 d\\, d_{ff} + 2d$。模型再加 embedding 和 lm_head 各 $Vd$（共享就只算一次）。\n算错点：**SwiGLU 是三个矩阵**，不是两个；GQA 下 K、V 投影比 Q 小。\n验算 Llama-3-70B（d = 8192，H_kv = 8，d_h = 128，d_ff = 28672，80 层，V = 128256）：每层约 0.86 B，80 层 68.4 B，加 embedding 和 lm_head 2.1 B，共约 **70.6 B**。',
+    q: '一层 decoder（GQA attention + SwiGLU MLP + 两个 RMSNorm）有多少参数？按矩阵一个个数，写出公式。',
+    a: '符号：d 是 hidden 维度，H / H_kv 是 Q / KV head 数，d_h 是 head 维度（H·d_h = d），d_ff 是 MLP 中间维度。按矩阵数（见图）：\n1. attention：W_q、W_o 各 $d^2$；W_k、W_v 各 $d \\cdot H_{kv} d_h$，GQA 下比 W_q 小。\n2. MLP（SwiGLU）：gate、up、down **三个**矩阵，各 $d \\cdot d_{ff}$。常见算错点是只数两个。\n3. 两个 RMSNorm：各 d。\n$$2d^2 + 2 d H_{kv} d_h + 3 d\\, d_{ff} + 2d$$\n整个模型再加 embedding 和 lm_head 各 $Vd$（V 是词表大小；两者共享权重就只算一次）。',
     fig: lines`
       x [d]
       ├─ RMSNorm                 d
@@ -118,6 +120,13 @@ export const baguCards: Card[] = [
       ├─ W_up    d x d_ff
       └─ W_down  d_ff x d
     `,
+    ref: MEM,
+  }),
+  b({
+    id: 'bagu-layer-params-2',
+    topic: '显存账',
+    q: '算一下 Llama-3-70B 一层多少参数：$d = 8192$，$H_{kv} = 8$，$d_h = 128$，$d_{ff} = 28672$，每层公式 $2d^2 + 2dH_{kv}d_h + 3d\\,d_{ff} + 2d$。',
+    a: '逐项代入：\n1. $2d^2 = 2 \\times 8192^2 = 134.2$ M。\n2. $2dH_{kv}d_h = 2 \\times 8192 \\times 1024 = 16.8$ M。\n3. $3d\\,d_{ff} = 3 \\times 8192 \\times 28672 = 704.6$ M。\n4. $2d = 16$ K，可以忽略。\n合计约 **0.86 B**，MLP 占 82%。80 层是 68.4 B，再加 embedding 和 lm_head 的 2.1 B，约 70.6 B，和 70B 对得上（验算见显存页）。',
     ref: MEM,
   }),
   b({
@@ -217,8 +226,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-mla',
     topic: 'attention 变体',
-    q: 'MLA 每个 token 缓存什么？用 DeepSeek-V3 的配置算每 token 的 KV 字节，和 MHA、GQA 比。',
-    a: '符号（DeepSeek-V3 的 config.json）：hidden $d = 7168$，$n_h = 128$ 个 head，每个 head 的 K、V 是 $d_h = 128$ 维，latent 维度 $d_c = 512$，RoPE 部分 $d_r = 64$，$L = 61$ 层，bf16（每个数 2 B）。$h_t$ 是第 t 个 token 进 attention 前的 hidden。\nMHA 每层要缓存每个 head 的 $k_{t,i}$ 和 $v_{t,i}$。MLA（DeepSeek-V2 提出，arXiv 2405.04434 第 2.1 节）把 K、V 拆成「先压缩、用时再展开」（见图）：\n1. 下投影：$c_t = W^{DKV} h_t$，7168 → 512 维。**缓存 $c_t$**。\n2. 上投影：用的时候第 i 个 head 的 $k^C_{t,i} = W^{UK}_i c_t$、$v_{t,i} = W^{UV}_i c_t$，各 128 维，不缓存。\n3. 位置部分：$k^R_t = \\text{RoPE}(W^{KR} h_t)$，64 维，128 个 head 共用一份，**也缓存**（为什么要单独这一份，见 decoupled RoPE 那张卡）。\n每 token 每层存 $d_c + d_r = 576$ 个数：\n$$\\text{KV/token} = L\\,(d_c + d_r)\\cdot 2 = 61 \\times 576 \\times 2 = 70{,}272\\ \\text{B} \\approx 68.6\\ \\text{KiB}$$\n对比（同样 61 层、bf16）：\n1. 不压缩、每个 head 存完整的 K（128 + 64 维）和 V（128 维）：每层 $128 \\times 320 = 40{,}960$ 个数，共 **4.77 MiB**，是 MLA 的 71 倍。\n2. GQA、8 个 KV head：$2 \\times 61 \\times 8 \\times 128 \\times 2$ = **244 KiB**，是 MLA 的 3.6 倍。\nlatent 是所有 head 共用的一份，大小像 MQA；但每个 head 用自己的 $W^{UK}_i, W^{UV}_i$ 从它还原出不同的 K、V，所以不像 MQA 那样掉效果。decode 时怎么不展开见下一张卡。',
+    q: 'MLA（DeepSeek-V2/V3 的 attention）每个 token 每层往 KV cache 里存什么？各几维？',
+    a: '符号（DeepSeek-V3）：$h_t$ 是第 t 个 token 进 attention 前的 hidden，$d = 7168$ 维；每个 head 的 K、V 是 $d_h = 128$ 维。MLA 把 K、V 拆成「先压缩、用时再展开」（见图）：\n1. 下投影 $c_t = W^{DKV} h_t$，7168 → **512** 维（latent，维度记作 $d_c$）。**缓存**。\n2. 上投影：第 i 个 head 的 $k^C_{t,i} = W^{UK}_i c_t$、$v_{t,i} = W^{UV}_i c_t$，各 128 维，用的时候现算，**不缓存**。\n3. 位置部分 $k^R_t = \\text{RoPE}(W^{KR} h_t)$，**64** 维（记作 $d_r$），所有 head 共用一份，**缓存**。\n所以每 token 每层存 512 + 64 = **576** 个数。RoPE 为什么要单独一份，见 decoupled RoPE 那张卡。',
     fig: lines`
       one token, one layer; [ ] = cached
 
@@ -232,10 +241,17 @@ export const baguCards: Card[] = [
     ref: ATTN,
   }),
   b({
+    id: 'bagu-mla-3',
+    topic: 'attention 变体',
+    q: '算 DeepSeek-V3 每 token 的 KV 字节：61 层，每层缓存 576 个数（512 维 latent + 64 维 RoPE key），bf16。换成 8 个 KV head、head 维度 128 的 GQA 是多少？',
+    a: '1. MLA：$61 \\times 576 \\times 2 = 70{,}272$ B ≈ **68.6 KiB**。\n2. GQA：K、V 各一份，$2 \\times 61 \\times 8 \\times 128 \\times 2 = 249{,}856$ B = **244 KiB**，是 MLA 的 3.6 倍。\nlatent 是所有 head 共用的一份，大小像 MQA；但每个 head 用自己的上投影矩阵从它还原出不同的 K、V，所以不像 MQA 那样掉效果。',
+    ref: ATTN,
+  }),
+  b({
     id: 'bagu-mla-2',
     topic: 'attention 变体',
-    q: 'MLA decode 时不把 K、V 展开成每个 head 的 128 维，直接拿缓存的 latent 算 attention，怎么做到的？这样每读 1 字节 KV 做多少 FLOP？',
-    a: '符号同上一张：$c_t$ 是缓存的 512 维 latent，$k^R_t$ 是缓存的 64 维 RoPE key；第 i 个 head 的 $k^C_{t,i} = W^{UK}_i c_t$、$v_{t,i} = W^{UV}_i c_t$，$W^{UK}_i, W^{UV}_i$ 都是 128 × 512。当前 token 第 i 个 head 的 query 分成 $q^C_i$（128 维）和 $q^R_i$（64 维）。\n1. score 不带位置的那部分，按矩阵乘结合律换个括号（weight absorption）：\n$$q^{C\\top}_i k^C_{t,i} = q^{C\\top}_i W^{UK}_i c_t = \\big(W^{UK\\top}_i q^C_i\\big)^\\top c_t$$\n括号里的 $\\tilde q_i = W^{UK\\top}_i q^C_i$ 是 512 维，每个 head 每步只算一次，之后直接和每个历史 token 的 $c_t$ 点积。再加上 $q^{R\\top}_i k^R_t$，相当于在 576 维上点积。\n2. 输出同理：$\\sum_t p_t\\, v_{t,i} = W^{UV}_i \\big(\\sum_t p_t\\, c_t\\big)$。先在 512 维上加权求和，最后乘一次 $W^{UV}_i$（它还能并进输出投影 $W^O$）。DeepSeek-V2 第 2.1.2 节写的就是这两种吸收（arXiv 2405.04434）。\n3. 结果：128 个 head 读同一份 576 维的 KV，形状上就是只有一个 KV head 的 MQA（代码见下）。\n算一下每层每个历史 token：\n1. 吸收后：读 576 × 2 = 1152 B；FLOPs = 128 head × 2 × (576 + 512) = 278,528；**AI ≈ 242 FLOP/B**，接近 H100 的 ridge 295。\n2. 展开成每 head 128 维：读 40,960 × 2 B，FLOPs = 128 × 2 × (192 + 128)，**AI = 1**。\n代价：每个历史 token 的计算从 192 + 128 维变成 576 + 512 维，多约 3.4 倍。decode 是 memory-bound，拿闲着的算力换带宽划算；prefill 本来就 compute-bound，所以 prefill 仍然展开成每 head 128 维来算。',
+    q: 'MLA decode 时不把 K 展开成每个 head 的 128 维，直接拿缓存的 512 维 latent $c_t$ 算 score，靠的是哪一步变换？',
+    a: '符号：$c_t$ 是缓存的 latent；第 i 个 head 的 $k^C_{t,i} = W^{UK}_i c_t$，$W^{UK}_i$ 是 128 × 512 的常数矩阵；$q^C_i$ 是当前 token 第 i 个 head 的 query，128 维。\n按矩阵乘结合律换个括号（weight absorption）：\n$$q^{C\\top}_i k^C_{t,i} = q^{C\\top}_i W^{UK}_i c_t = \\big(W^{UK\\top}_i q^C_i\\big)^\\top c_t$$\n1. 括号里的 $\\tilde q_i = W^{UK\\top}_i q^C_i$ 是 512 维，每个 head 每步只算一次。\n2. 之后直接和每个历史 token 的 $c_t$ 点积，K 从头到尾不展开。\n3. 输出侧同理：$\\sum_t p_t\\, v_{t,i} = W^{UV}_i \\big(\\sum_t p_t\\, c_t\\big)$，先在 512 维上加权求和，最后乘一次 $W^{UV}_i$。\n结果：128 个 head 读同一份 latent，形状上就是只有一个 KV head 的 MQA（代码见下；RoPE 那 64 维单独加，见 decoupled RoPE 那张卡）。',
     code: lines`
       # decode 一步、一层。缓存 c: [S, 512], kR: [S, 64]
       # 当前 token: qC: [H, 128], qR: [H, 64]; H = 128
@@ -249,10 +265,17 @@ export const baguCards: Card[] = [
     ref: ATTN,
   }),
   b({
+    id: 'bagu-mla-4',
+    topic: 'attention 变体',
+    q: 'MLA decode，一层、一个历史 token：吸收后 128 个 head 读同一份 576 个数的 KV（bf16），每个 head 做一次 576 维点积算 score、一次 512 维乘加算输出。读多少字节、做多少 FLOP、算术强度多少？',
+    a: '一次 n 维点积或乘加是 n 次乘法加 n 次加法，2n FLOP。\n1. 字节：$576 \\times 2 = 1152$ B，128 个 head 共用这一份。\n2. FLOPs：每个 head $2 \\times (576 + 512) = 2176$，128 个 head 共 278,528。\n3. AI = 278528 ÷ 1152 ≈ **242 FLOP/B**，接近 H100 的 ridge 295。\n对比展开成每个 head 的 K（128 + 64 维）和 V（128 维）：每个 head 读自己的 320 个数（640 B），做 $2 \\times 320$ FLOP，AI = **1**。\n代价是每个历史 token 的计算从 320 维变成 1088 维，多约 3.4 倍。decode 是 memory-bound，拿闲着的算力换带宽划算。',
+    ref: ATTN,
+  }),
+  b({
     id: 'bagu-mla-rope',
     topic: 'attention 变体',
-    q: 'MLA 为什么要 decoupled RoPE？直接给上投影出来的 K 加 RoPE，会坏在哪一步？',
-    a: '先回顾 RoPE：位置 t 的向量乘一个只和 t 有关的旋转矩阵 $R_t$，并且 $R_m^\\top R_n = R_{n-m}$，所以 score 只依赖相对位置 n − m。\n1. MLA 在 decode 时能不展开 K，靠的是 $q^\\top W^{UK} c_n$ 中间的 $W^{UK}$ 是**常数矩阵**，可以提前并到 q 那边（见上一张卡）。\n2. 如果对上投影后的 K 加 RoPE：$k_n = R_n W^{UK} c_n$，当前位置 m 的 query 是 $R_m q$，score 变成\n$$(R_m q)^\\top R_n W^{UK} c_n = q^\\top R_{n-m}\\, W^{UK} c_n$$\n夹在中间的 $R_{n-m} W^{UK}$ 对**每个历史位置 n** 都不一样，没法提前算成一个矩阵。要算就只能对每个 n 把 $W^{UK} c_n$ 展开，又回到存完整 K 的代价。DeepSeek-V2 第 2.1.3 节就是这么说的：RoPE 和低秩 KV 压缩不兼容（arXiv 2405.04434）。\n3. 解法：K 拆成两段，score 是两段点积之和：\n内容段 $k^C_{n,i} = W^{UK}_i c_n$（128 维）：不加 RoPE，照常吸收。\n位置段 $k^R_n = \\text{RoPE}(W^{KR} h_n)$（64 维）：只这一段加 RoPE，所有 head 共用，直接缓存。\n$$\\text{score}_i = \\frac{q^{C\\top}_i k^C_{n,i} + q^{R\\top}_i k^R_n}{\\sqrt{128 + 64}}$$\n代价：每 token 每层多缓存 64 个数，512 → 576，多 12.5%。',
+    q: 'MLA 为什么要 decoupled RoPE？直接给上投影出来的 K 加 RoPE，weight absorption 会坏在哪？',
+    a: 'RoPE：位置 t 的向量乘一个旋转矩阵 $R_t$，并且 $R_m^\\top R_n = R_{n-m}$。\n1. 吸收能成立，靠的是 $q^\\top W^{UK} c_n$ 中间的 $W^{UK}$ 是**常数**，可以提前并进 q（见 weight absorption 那张卡）。\n2. 给 K 加 RoPE：$k_n = R_n W^{UK} c_n$，位置 m 的 query 是 $R_m q$，\n$$(R_m q)^\\top R_n W^{UK} c_n = q^\\top R_{n-m}\\, W^{UK} c_n$$\n中间的 $R_{n-m} W^{UK}$ 对**每个历史位置 n** 都不一样，并不进 q，只能对每个 n 把 K 展开（DeepSeek-V2，arXiv 2405.04434 §2.1.3）。\n3. 解法：K 拆两段，score 是两段点积之和。内容段 $W^{UK}_i c_n$ 不加 RoPE，照常吸收；位置段 $k^R_n = \\text{RoPE}(W^{KR} h_n)$ 只有 64 维、所有 head 共用，直接缓存。',
     ref: ATTN,
   }),
   b({
@@ -274,8 +297,8 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-fa-v2-v3',
     topic: 'FlashAttention',
-    q: 'FlashAttention v1 在 A100 上只跑到峰值的 25–40%。v2 改了哪三处？每一处为什么能提速？',
-    a: '符号：Q、K、V 是 [S, d]；Q 按 $B_r$ 行一块，K/V 按 $B_c$ 行一块，块数 $T_r = S/B_r$、$T_c = S/B_c$；$m$ 是每行的最大值，$\\ell$ 是 softmax 的分母（online softmax 见 FlashAttention 那张卡）。\n1. **少做非 matmul 的 FLOP**。A100 上 bf16 矩阵乘峰值 312 TFLOP/s，fp32 的普通运算只有 19.5，一次非 matmul FLOP 相当于 16 次 matmul FLOP。v1 每处理一块 K/V 都把 O 除以 $\\ell$ 重新归一化；v2 让 O 一直保持**没除 $\\ell$** 的状态，每块只乘一个修正系数 $e^{m_{\\text{old}} - m_{\\text{new}}}$，循环结束才除一次 $\\ell$（代码见下）。\n2. **沿序列长度也并行**。v1 一个 thread block 管一个 (batch, head)，grid 只有 $B \\cdot H$ 个 block；长序列时 batch 往往很小，B = 1、H = 16 只有 16 个 block，A100 有 108 个 SM。v2 外层循环改成 Q 块，每块 Q 由一个 block 独立算完，grid 变成 $B \\cdot H \\cdot T_r$；S = 16k、$B_r$ = 128 时是 2048 个 block。顺带 O 一直留在寄存器里，最后写一次 HBM。\n3. **block 内按 Q 分给 warp**。v1 的 4 个 warp 各拿一段 K/V，每个 warp 只得到部分结果，要写进 shared memory、同步、再加起来；v2 每个 warp 拿一段 Q 行、看全部 K/V，各自算出自己那几行的输出，warp 之间不用通信。\n效果（作者自测，arXiv 2307.08691）：比 v1 快约 2 倍，A100 上到峰值的 50–73%。',
+    q: 'A100 上 bf16 矩阵乘峰值 312 TFLOP/s，fp32 的普通运算只有 19.5 TFLOP/s。FlashAttention-2 为什么让输出 O 在循环里一直不除分母 $\\ell$，最后才除一次？',
+    a: '符号：Q 按 $B_r$ 行一块，K/V 按 $B_c$ 行一块；$m$ 是每行的最大值，$\\ell$ 是 softmax 的分母（推导见 online softmax 页）。\n1. 312 ÷ 19.5 = 16：一次非 matmul 的 FLOP 和 16 次 matmul FLOP 一样费时，所以要尽量少做除法、exp 这类标量运算。\n2. v1 每处理一块 K/V，都把 O 除以 $\\ell$ 归一化一次。\n3. v2 让 O 一直保持**没除 $\\ell$** 的状态，每块只乘修正系数 $e^{m_{\\text{old}} - m_{\\text{new}}}$，循环结束才除一次（代码见下）。结果一样，每块少一次 $B_r \\times d$ 的除法。',
     code: lines`
       # v2 前向：一个 thread block 算一块 Qi [Br, d]
       m = full(Br, -inf); l = zeros(Br); O = zeros(Br, d)
@@ -290,6 +313,20 @@ export const baguCards: Card[] = [
       O = O / l[:, None]                     # 循环结束只除一次
       write(O); write(m + log(l))            # 反向只需要 logsumexp
     `,
+    ref: FA,
+  }),
+  b({
+    id: 'bagu-fa-v2-v3-3',
+    topic: 'FlashAttention',
+    q: 'FlashAttention v1 一个 thread block 管一个 (batch, head)。batch B = 1、head 数 H = 16 时能开几个 thread block？A100 有 108 个 SM。v2 改成每个 Q 块一个 thread block，序列长 S = 16k、Q 块 $B_r$ = 128 行时是多少？',
+    a: '1. v1：grid = B · H = **16** 个 block，108 个 SM 只用上 16 个。长序列时显存只放得下小 batch，这种情况很常见。\n2. v2：Q 块之间互不依赖，每块由一个 block 独立算完，grid = B · H · S / $B_r$ = 16 × 16384 / 128 = **2048** 个 block，能填满所有 SM。\nv1 没法这么切：它外层遍历 K/V 块，不同 K/V 块要累加进同一行输出，有写冲突。',
+    ref: FA,
+  }),
+  b({
+    id: 'bagu-fa-v2-v3-4',
+    topic: 'FlashAttention',
+    q: 'FlashAttention 一个 thread block 里有 4 个 warp。v1 把 K/V 分给 4 个 warp，v2 改成把 Q 分给 4 个 warp。为什么 v2 更快？',
+    a: '1. v1（split-K）：每个 warp 拿一段 K/V，只算出每行输出的**一部分**，要写进 shared memory、同步、再加起来。\n2. v2：每个 warp 拿一段 Q 行、看全部 K/V，各自算出自己那几行的**完整**输出，warp 之间不用通信，省掉 shared memory 读写和同步。\n这一处加上少做非 matmul 运算、沿序列并行，合起来 v2 比 v1 快约 2 倍，A100 上到峰值的 50–73%（作者自测，arXiv 2307.08691）。',
     ref: FA,
   }),
   b({
@@ -908,15 +945,25 @@ export const baguCards: Card[] = [
   b({
     id: 'bagu-float-formats',
     topic: 'Post-train',
-    q: 'fp32、fp16、bf16、fp8（e4m3、e5m2）各几位指数、几位尾数？指数位和尾数位各决定什么？',
-    a: '位数见图。\n1. **指数位定范围**：fp16 只有 5 位，最大 65504，最小的正规数约 6 × 10⁻⁵；bf16 和 fp32 都是 8 位，范围约 10⁻³⁸ 到 3 × 10³⁸。\n2. **尾数位定精度**：相邻两个数的相对间隔约 $2^{-m}$（m 是尾数位数）。fp16 约 0.001，bf16 约 0.008，只有两三位有效数字。\n3. fp8：e4m3 精度高、范围小（最大 448），用于前向的权重和激活；e5m2 范围大（最大 57344），用于梯度。',
+    q: 'fp16 和 bf16 都是 16 位，各给指数几位、尾数几位？为什么大模型训练从 fp16 换成了 bf16？',
+    a: '位数见图（fp32 放着对照）。\n1. **指数位定范围**：fp16 只有 5 位，最大 65504，最小正规数约 $6 \\times 10^{-5}$，小梯度会下溢成 0，得靠 loss scaling 救。bf16 和 fp32 一样是 8 位，范围约 $10^{-38}$ 到 $3 \\times 10^{38}$，不会下溢。\n2. **尾数位定精度**：相邻两数的相对间隔约 $2^{-m}$（m 是尾数位数）。fp16 约 0.001，bf16 约 0.008，只有两三位有效数字。\n换 bf16 是拿精度换范围：范围不够会直接丢梯度，还得调 loss scaling；精度不够可以靠 fp32 主权重补。两边的算例见 1e-8 梯度和 fp32 主权重那两张卡。',
     fig: lines`
               sign   exp   mantissa
       fp32     1      8      23
       fp16     1      5      10
       bf16     1      8       7
-      e4m3     1      4       3
-      e5m2     1      5       2
+    `,
+    ref: TMEM,
+  }),
+  b({
+    id: 'bagu-float-formats-2',
+    topic: 'Post-train',
+    q: 'fp8 有两种：e4m3（4 位指数、3 位尾数）和 e5m2（5 位指数、2 位尾数）。为什么要两种？训练时分别给谁用？',
+    a: '8 位去掉符号位只剩 7 位，指数和尾数怎么分都顾此失彼，所以分成两种（Micikevicius et al. arXiv 2209.05433）：\n1. **e4m3 精度高、范围小**：相邻两数相对间隔 $2^{-3}$ = 12.5%，最大 448。给**前向的权重和激活**用：它们的数值集中，更需要精度。\n2. **e5m2 范围大、精度低**：相对间隔 $2^{-2}$ = 25%，最大 57344，范围和 fp16 一样。给**反向的梯度**用：梯度跨度大，更需要范围。\n两种的范围都比 bf16 窄得多，所以每个张量还要配一个 fp32 缩放系数，先把数值挪进可表示范围再 cast。',
+    fig: lines`
+              sign   exp   mantissa     max
+      e4m3     1      4       3         448
+      e5m2     1      5       2       57344
     `,
     ref: TMEM,
   }),
@@ -1054,6 +1101,286 @@ export const baguCards: Card[] = [
       <eos>   <eos>   assistant
     `,
     ref: SFT,
+  }),
+
+  b({
+    id: 'bagu-dapo-clip-higher',
+    topic: 'RL',
+    q: 'PPO / GRPO 的 clip 让 $\\hat A > 0$ 时新概率最多是旧概率的 $1 + \\epsilon$ 倍。$\\epsilon = 0.2$ 时，旧概率 0.9 和 0.01 的两个 token 一步最多各涨到多少？DAPO 为什么把上界单独放到 0.28？',
+    a: '1. 0.9 × 1.2 = 1.08，超过 1，等于不受限。\n2. 0.01 × 1.2 = **0.012**，被卡得很死。\n上界只卡低概率 token，而探索恰恰靠它们：一条做对的回答里采到了一个本来不太可能的 token，本该大幅加强。卡住它们，熵就越来越低（熵塌缩）。\nDAPO 把上下界分开：$\\epsilon_{\\text{high}} = 0.28$，0.01 一步能到 0.0128；下界 $\\epsilon_{\\text{low}}$ 保持 0.2，因为放宽下界会把低概率 token 压到接近 0，探索反而更少。',
+    ref: GRPOV,
+  }),
+  b({
+    id: 'bagu-dynamic-sampling',
+    topic: 'RL',
+    q: 'GRPO 每个 prompt 采 $G = 16$ 条，答对奖励 1、答错 0。模型对某题的正确率 $p = 0.9$，一组 16 条全对的概率是多少？这组对梯度的贡献是多少？',
+    a: '1. 全对的概率 $p^{16} = 0.9^{16} \\approx$ **0.19**。\n2. 全对时 16 个奖励相同，advantage $= r_i - \\text{mean} = 0$，这组对梯度的贡献是 **0**，白采了。\n训练越往后，模型做对的题越多，一个 batch 里这样的组越多，有效样本越少。DAPO 的动态采样：多采一些 prompt，把正确率恰好是 0 或 1 的组过滤掉，一直采到 batch 填满。',
+    ref: GRPOV,
+  }),
+  b({
+    id: 'bagu-grpo-length-bias',
+    topic: 'RL',
+    q: 'GRPO 的 loss 先对每条回答按长度平均（除以 $|y_i|$），再对 $G$ 条平均。两条答错的回答，advantage 都是 −1，长度 100 和 1000 token。每个 token 分到的系数各是多少（略去 $1/G$）？长期会让模型怎样？',
+    a: '1. 100 token 那条：每个 token **1/100**。\n2. 1000 token 那条：每个 token **1/1000**，只挨十分之一的罚。\n错误回答写得越长，每个 token 受罚越轻，模型的错误回答就越写越长（Dr. GRPO 说的长度偏差）。\n两种改法，都让同一 batch 里每个 token 的系数相同：\n1. DAPO：除以 batch 的总 token 数，这里两条都是 1/1100。\n2. Dr. GRPO：除以一个常数 $L_{\\max}$（生成长度上限）。',
+    ref: GRPOV,
+  }),
+  b({
+    id: 'bagu-grpo-std-bias',
+    topic: 'RL',
+    q: 'GRPO 的 advantage $= (r_i - \\text{mean}) / \\text{std}$，组内 $G = 8$，答对 1 分、答错 0 分，std 用总体标准差。只有 1 条答对时，答对那条的 advantage 是多少？4 条答对时呢？',
+    a: '1. 1 条答对：mean = 0.125，std $= \\sqrt{0.125 \\times 0.875} = 0.331$，答对那条 $(1 - 0.125) / 0.331 =$ **+2.65**。\n2. 4 条答对：mean = 0.5，std = 0.5，答对那条 **+1.0**。\nstd 小的组（几乎全对或几乎全错，也就是太难或太简单的题）被除以一个小数，advantage 被放大，在梯度里的权重比中等难度的题大。Dr. GRPO 的改法是只减均值、不除 std：两种情况分别是 +0.875 和 +0.5。',
+    ref: GRPOV,
+  }),
+  b({
+    id: 'bagu-gspo-ratio',
+    topic: 'RL',
+    q: 'GSPO 的序列级 ratio：$s = \\exp\\big(\\frac{1}{|y|}\\sum_t \\log\\rho_t\\big)$，$\\rho_t$ 是第 t 个 token 的新旧概率比。一条 4 个 token 的回答，$\\rho_t = [1.1, 0.9, 1.5, 0.8]$，$s$ 是多少？不开 $1/|y|$ 次方、直接连乘是多少？',
+    a: '1. $\\log\\rho_t = [0.095, -0.105, 0.405, -0.223]$，平均 0.043，$s = e^{0.043} =$ **1.044**。\n2. 直接连乘：1.1 × 0.9 × 1.5 × 0.8 = **1.188**。\n开方就是取几何平均：连乘几百上千个 token 会极大或极小，长短回答的数量级不同，没法共用一个 clip 范围；几何平均把它拉回 1 附近。所以 GSPO 的 clip 范围很窄（论文用 $3 \\times 10^{-4}$ / $4 \\times 10^{-4}$）。整条回答共用一个 ratio，单个 token 的波动（包括 MoE 路由变化引起的）被平均掉。',
+    ref: GRPOV,
+  }),
+  b({
+    id: 'bagu-cispo',
+    topic: 'RL',
+    q: '一个 token 的新旧概率比 $\\rho = 2$，$\\hat A > 0$，clip 上界 $1 + \\epsilon = 1.28$。PPO 的 $\\min(\\rho\\hat A, \\operatorname{clip}(\\rho)\\hat A)$ 下，这个 token 对 $\\theta$ 的梯度是多少？CISPO 下呢？',
+    a: '1. PPO：$\\rho > 1.28$，min 取到 $1.28\\hat A$，这是个常数，对 $\\theta$ 的梯度是 **0**。clip 不是「截断权重」，而是「这个 token 这一步不再推」。\n2. CISPO：权重截到 1.28 并 stop-gradient，梯度从 $\\log\\pi_\\theta$ 走：$1.28 \\cdot \\hat A \\cdot \\nabla\\log\\pi_\\theta$，**不为 0**。\nMiniMax 的动机：However、Wait 这类低概率的转折 token，更新一次后 ratio 就很大，在 PPO 下被 clip 掉、再也没有梯度；一批 rollout 要做 16 次更新时尤其严重。',
+    ref: GRPOV,
+  }),
+  b({
+    id: 'bagu-rollout-tail',
+    topic: 'RL',
+    q: '同步 RL 一批 8 条回答，长度（千 token）是 $[2, 3, 3, 4, 4, 5, 8, 20]$，设每个 decode 步耗时相同。序列槽位的利用率是多少？最后只剩一条在跑的那段占总时长多少？',
+    a: '利用率 = 实际生成的 token ÷（条数 × 最长长度）：\n1. 共 49k token，8 × 20k = 160k，利用率 **31%**。\n2. 第 7 条在 8k 处结束，之后 12k 步只剩一条：12 / 20 = **60%** 的时间。\n实际更糟：只剩几条时 decode 读一遍权重只算一两个 token，每步耗时并不随 batch 等比例缩短；同步 RL 的训练卡这段时间全在等。解法：partial rollout（没写完的挂起下轮接着写）、异步 rollout、长短分开跑。',
+    ref: ASYNC,
+  }),
+  b({
+    id: 'bagu-areal-staleness',
+    topic: 'RL',
+    q: 'AReaL 只在 $\\lfloor (N_r - 1)/B \\rfloor \\le i + \\eta$ 时接受新的生成请求：$N_r$ 是累计发出的请求数，$B$ 是训练 batch，$i$ 是 trainer 当前的版本，$\\eta$ 是最大陈旧度。$B = 512$、$\\eta = 4$、$i = 10$ 时，最多累计能发出多少条？',
+    a: '$\\lfloor (N_r - 1)/512 \\rfloor \\le 14$，即 $N_r - 1 \\le 15 \\times 512 - 1$，最多 **7680** 条。\n含义：rollout 最多领先 trainer 4 个 batch，样本最多落后 4 个版本。$\\eta = 0$ 就是同步 RL。\n样本变旧后，AReaL 用 decoupled PPO：importance 比 $\\pi_{\\text{prox}} / \\pi_{\\text{behav}}$ 修正「样本来自旧策略」，clip 只约束相对 $\\pi_{\\text{prox}}$（这一步更新前的参数）走多远。论文消融里 $\\eta = 4$ 不改目标掉到 23.3 分，改了是 42.2。',
+    ref: ASYNC,
+  }),
+  b({
+    id: 'bagu-bf16-sum-order',
+    topic: 'RL',
+    q: 'bf16 有 8 位有效位，[256, 512) 之间相邻两个数差 2。把 $[256, 1, 1, 1, 1]$ 按这个顺序逐个累加，结果是多少？先加四个 1、最后加 256 呢？这和 RL 的训推不一致有什么关系？',
+    a: '1. 先 256：每次 256 + 1 都舍入回 256，结果 **256**。\n2. 先加四个 1 得 4，再加 256：**260**。\n浮点加法不满足结合律，结果取决于归约顺序。matmul 会按形状选 split-K，attention 会按 KV 长度切块，这些都随 batch 大小变。推理引擎和训练引擎的 batch 组织、并行方式、kernel 都不同，所以同一份权重算出的 token 概率不一样，「on-policy」其实是 off-policy。Thinking Machines 的解法是让 RMSNorm、matmul、attention 的归约顺序与 batch 无关（batch-invariant）。',
+    ref: MISM,
+  }),
+  b({
+    id: 'bagu-tis',
+    topic: 'RL',
+    q: '训推修正里 $\\rho_t = \\pi_{\\text{learner}}(y_t) / \\pi_{\\text{sampler}}(y_t)$（训练引擎和推理引擎在同一份旧权重下给这个 token 的概率比）。一个 $\\rho_t = 16$ 的 token，不截断时梯度噪声被放大多少倍？TIS 截到 $C = 2$ 呢？',
+    a: 'importance 权重 $w$ 把梯度方差放大约 $w^2$ 倍：\n1. 不截断：$16^2 =$ **256** 倍。\n2. TIS（$w = \\min(\\rho_t, C)$）截到 2：$2^2 =$ **4** 倍。\n截断引入偏差，换来方差有界，$C = 2$ 是 verl、slime 的常用默认值。\n注意 $\\rho_t$ 和 PPO 的 ratio 是两回事：PPO 的 ratio 是训练引擎在新旧权重下的比，管「这一步走多远」；$\\rho_t$ 管「样本其实来自推理引擎的分布」。',
+    ref: MISM,
+  }),
+  b({
+    id: 'bagu-r3',
+    topic: 'RL',
+    q: 'MoE 做 RL 时，R3（Rollout Routing Replay）在训练时回放什么、不回放什么？为什么 gate 权重不直接用推理侧的？',
+    a: '1. **回放**：推理引擎在 rollout 时每层选中的 top-K 专家（一个 mask）。训练时强制用这几个专家。\n2. **不回放**：gate 权重。用训练侧的 router logit 在这 K 个专家上做 softmax：$g_i = \\frac{I_i\\, e^{s_i}}{\\sum_j I_j\\, e^{s_j}}$，$I$ 是推理侧的 mask，$s$ 是训练侧的 logit。\n这样梯度照常传回 router，router 还能学。\n为什么要回放：top-K 是不连续的，两边 logit 差一点就可能换专家。R3 论文统计 Qwen3-30B-A3B 上 94% 的 token 至少有一层选的专家不同；回放后训推 KL 从 $1.5 \\times 10^{-3}$ 降到 $7.5 \\times 10^{-4}$，rollout 慢不到 3%（作者自测）。',
+    ref: MISM,
+  }),
+  b({
+    id: 'bagu-weight-sync-time',
+    topic: 'RL',
+    q: 'RL 每步训练完要把权重同步给推理引擎。70B bf16，走一张 400 Gb/s 的网卡，带宽下界是多少秒？一个节点 8 张网卡并行呢？',
+    a: '下界 = 字节数 ÷ 带宽：\n1. 70 × 10⁹ × 2 B = 140 GB。\n2. 400 Gb/s = 50 GB/s，140 / 50 = **2.8 s**。\n3. 8 张网卡约 400 GB/s：**0.35 s**。\n实测通常是下界的几倍：训练侧要 all-gather 出完整张量、改名字和布局（QKV、gate/up 融合）、可能量化成 fp8，每个张量单独发有调用开销，推理侧还要加载。常用的优化是分桶（几百 MB 一块）和流水（gather、传输、加载重叠）。',
+    ref: SYNC,
+  }),
+  b({
+    id: 'bagu-megatron-qkv',
+    topic: 'RL',
+    q: '8 个 Q head、2 个 KV head（GQA，每组 4 个 Q head）。Megatron 的 `linear_qkv` 按 head 是什么顺序？HF / vLLM 要的是什么顺序？',
+    a: 'Megatron 按 GQA 组交错，每组是「4 个 q、1 个 k、1 个 v」：\n`q0 q1 q2 q3 k0 v0 | q4 q5 q6 q7 k1 v1`\nHF 是 q、k、v 三个矩阵分开，vLLM 的 `qkv_proj` 是三者按顺序拼：\n`q0 … q7 | k0 k1 | v0 v1`\n权重同步时要转换：先 view 成（组数，每组 q 数 + 2，head_dim，hidden），沿第 1 维切成 [4, 1, 1] 三份，再分别拼回去。不转换的话推理侧加载不报错，但 attention 全错。',
+    ref: SYNC,
+  }),
+
+  b({
+    id: 'bagu-tito',
+    topic: 'RL',
+    q: '多轮 agent 的 RL：调 chat 接口拿到文本，最后把整段对话用 chat template 重新分词再拿去训练。这样做哪三处会让训练看到的 token 和采样时不一样？为什么 importance sampling 修不了？',
+    a: '1. **分词不唯一**：模型采样出 `H` + `AVING`，重新分词变成 `HAV` + `ING`，文本相同、token 不同。\n2. **工具调用被解析再渲染**：空格变了，有的解析器还会自动修正模型写错的 JSON。\n3. **chat template 改历史**：Qwen3 的模板会删掉之前轮次的思考内容，rollout 时的上下文和训练时拼出来的不同。\nimportance sampling（如 TIS）要逐个 token 比较两边的概率，前提是两边是同一串 token；重新分词后序列都对不齐，没法比。\n做法：推理服务返回 token id（vLLM 的 `return_token_ids`，SGLang 直接收发 `input_ids`），下一轮直接拼 token，不重新套模板。',
+    ref: AGENT,
+  }),
+  b({
+    id: 'bagu-agentic-mask',
+    topic: 'RL',
+    q: '一条 3 轮的工具调用轨迹：模型分别生成 300、200、400 个 token，中间两次工具返回 1500 和 800 个 token。回答部分有多少 token 算 loss，占多少？为什么工具返回的不算？',
+    a: '算 loss 的只有模型生成的：300 + 200 + 400 = **900** 个；回答部分共 900 + 2300 = 3200 个，占 **28%**。\n工具返回的 token 只当上下文（`loss_mask = 0`）：\n1. 它不是策略采出来的，没有策略概率，算 ratio、advantage 都没有意义。\n2. 训练模型去预测工具输出，等于教它编造工具结果。',
+    ref: AGENT,
+  }),
+  b({
+    id: 'bagu-agentic-prefix',
+    topic: 'RL',
+    q: '多轮 rollout，每轮在上下文末尾新增 2000 个 token（工具结果 + 指令），共 10 轮。每轮都从头 prefill，总共 prefill 多少 token？前缀 KV 都命中呢？',
+    a: '1. 从头 prefill：第 k 轮的输入有 2000k 个 token，$2000 \\times (1 + 2 + \\dots + 10) =$ **110,000**。\n2. 前缀命中：每轮只算新增的 2000 个，共 **20,000**，少 5.5 倍。\n前提是同一条轨迹的后续轮次落在同一个推理实例上：sticky session（按 request id 绑实例）或前缀感知的路由（SGLang router 的 `cache_aware`）。每次权重同步后这些 KV 要作废。',
+    ref: AGENT,
+  }),
+  b({
+    id: 'bagu-agentic-concurrency',
+    topic: 'RL',
+    q: '推理服务想保持 $B = 256$ 条序列同时在 decode。agent 轨迹有 2/3 的时间在等环境（跑代码、搜索），只有 1/3 的时间在生成。要多少条轨迹同时在跑？',
+    a: '同时在生成的轨迹数 ≈ 轨迹总数 × 生成时间占比，所以\n$$N_{\\text{traj}} \\approx \\frac{B}{f} = \\frac{256}{1/3} =$$ **768** 条。\n环境越慢，$f$ 越小，要的并发轨迹越多，沙箱规模也要跟上（Kimi K2 用 Kubernetes 跑了一万多个并发沙箱）。配合环境级异步（不按批等环境）和冗余 rollout（凑够就停）。',
+    ref: AGENT,
+  }),
+
+  b({
+    id: 'bagu-entropy-cov',
+    topic: 'RL',
+    q: '一个位置只有两个候选 token，概率 $(0.9, 0.1)$，熵 $H = -\\sum p\\log p$ 是多少？如果高概率的那个被奖励、推到 0.95，熵变成多少？如果低概率的那个被奖励、推到 0.15 呢？',
+    a: '1. 初始：$-(0.9\\ln 0.9 + 0.1\\ln 0.1) =$ **0.325**。\n2. 推高高概率的到 0.95：**0.199**，熵降。\n3. 推高低概率的到 0.15：**0.423**，熵升。\n一般规律：一步策略梯度后 $\\Delta H \\approx -\\eta\\,\\text{Cov}(\\log\\pi, \\pi A)$，高概率动作拿正 advantage 让熵降。训练中被奖励的多半是模型本来就倾向的回答，所以熵整体下降，而且前期掉得很快（Cui et al. 统计前 1/12 的步数用掉 73% 的熵）。对策：clip-higher、Clip-Cov / KL-Cov。',
+    ref: MON,
+  }),
+  b({
+    id: 'bagu-ppo-kl-vs-kl-loss',
+    topic: 'RL',
+    q: 'verl 的面板上有 `actor/ppo_kl` 和 `actor/kl_loss` 两条 KL 曲线。它们分别是谁对谁的 KL？各说明什么？',
+    a: '1. `ppo_kl`：当前策略对 **rollout 时的策略**（$\\pi_{\\text{old}}$）的 KL。一批数据只更新一次时接近 0，更新多次逐渐变大。管的是单步步长，配合 `pg_clipfrac`（clip 生效的 token 比例）看每步走了多远。\n2. `kl_loss`：当前策略对 **reference**（SFT 模型）的 KL，开了 `use_kl_loss` 才有。管的是累计离初始模型多远。\nDAPO、Dr. GRPO 等推理 RL 配方直接不加 kl_loss。训推不一致是第三种 KL（`rollout_corr/kl`），是推理引擎对训练引擎的。',
+    ref: MON,
+  }),
+  b({
+    id: 'bagu-ess',
+    topic: 'RL',
+    q: 'importance 权重的有效样本比例 ESS：先把权重归一化到均值 1，再算 $1/\\mathbb{E}[w^2]$。4 个 token 的权重是 $[1, 1, 1, 4]$，ESS 是多少？权重全是 1 呢？',
+    a: '1. 均值 1.75，归一化后 $[0.57, 0.57, 0.57, 2.29]$。\n2. $\\mathbb{E}[w^2] = (3 \\times 0.327 + 5.22) / 4 = 1.55$，ESS $= 1/1.55 =$ **0.65**。\n3. 全是 1：$\\mathbb{E}[w^2] = 1$，ESS **= 1**。\nESS 越小，梯度越被少数几个大权重的样本主导，方差越大。verl 文档给的参考告警线是 ESS < 0.3（另外还有训推 KL 的绝对值 > 0.1、chi2 > 1），文档说明只是参考。',
+    ref: MON,
+  }),
+  b({
+    id: 'bagu-collapse-order',
+    topic: 'RL',
+    q: 'RL 训练里由训推不一致导致的崩溃，面板上的几条曲线通常按什么顺序出问题？为什么不能直接跳过训推 KL 大的 batch？',
+    a: '顺序（Liu, Li et al. 的观察）：\n1. 训推 KL（推理引擎对训练引擎）先冒尖。\n2. 熵的尖峰几乎同时出现；训练侧的困惑度跳起来。\n3. 梯度范数突然爆炸。\n4. 奖励崩溃。\n排查时从奖励往前倒着看。\n不能直接跳过：他们试过训推 KL > 0.1 的 batch 不更新，结果模型越来越多地产出高差距的 batch，训练停滞。要用截断 / 屏蔽的 importance 权重修，或从源头消除差距（换掉有问题的 kernel、fp16、MoE 用路由回放）。',
+    ref: MON,
+  }),
+
+  // ---------------- 多模态 ----------------
+  b({
+    id: 'bagu-image-tokens',
+    topic: '多模态',
+    q: 'Qwen2.5-VL：ViT 的 patch 是 14 × 14，之后相邻 2 × 2 个 patch 合成一个 token；图的长宽各自缩放到最近的 28 的倍数。一张 1920 × 1080 的图变成多少个 token？',
+    a: '每个 token 对应 28 × 28 像素：\n1. 1920 / 28 = 68.6，取最近的倍数 69 → 1932。\n2. 1080 / 28 = 38.6 → 39 → 1092。\n3. 69 × 39 = **2691** 个，前后再加两个特殊 token。\n总像素有上下限（默认 4 到 16384 个 token），超出会先按比例缩放。对比 LLaVA-1.5 固定缩到 336 × 336，不管原图多大都是 $(336/14)^2 = 576$ 个。',
+    ref: MMENC,
+  }),
+  b({
+    id: 'bagu-video-tokens',
+    topic: '多模态',
+    q: 'Qwen2-VL 处理视频：每秒采 2 帧，相邻两帧合成一组，每组的 token 数和同分辨率的一张图一样。360p（640 × 360）每组 299 个 token，一分钟视频多少 token？',
+    a: '1. 一分钟 60 × 2 = 120 帧，两帧一组，60 组。\n2. 60 × 299 = **17,940** 个 token。\n2 fps、两帧一组时，每秒视频约等于一帧的 token 数。所以视频请求的 prefill 很长，各模型都设了上限（Qwen2-VL 每段视频最多 16384 个 token），帧多了只能降分辨率或降帧率。',
+    ref: MMENC,
+  }),
+  b({
+    id: 'bagu-audio-tokens',
+    topic: '多模态',
+    q: '16 kHz 音频每 10 ms 算一帧 mel 频谱；Whisper 编码器开头的卷积 stride 2；Qwen2-Audio / Qwen2.5-Omni 再接一个 stride 2 的池化。每秒音频变成多少 token？一分钟呢？',
+    a: '1. mel：每 10 ms 一帧，**100 帧/秒**。\n2. 卷积 stride 2：**50 帧/秒**（Whisper 30 s 正好 1500 帧）。\n3. 池化 stride 2：**25 token/s**，每个 token 40 ms。\n一分钟 60 × 25 = **1500** 个 token。Qwen3-Omni 的 AuT 编码器下采样 8 倍，12.5 token/s，一分钟 750 个，prefill 和 KV 都减半。',
+    ref: MMENC,
+  }),
+  b({
+    id: 'bagu-vit-flops',
+    topic: '多模态',
+    q: 'Qwen2.5-VL 的 ViT 主体约 632M 参数，一张 1920 × 1080 的图合并前有 10764 个 patch。只算线性层，ViT 编码这张图要多少 FLOP？7.6B 的 LLM 对合并后的 2691 个 token 做 prefill 要多少？',
+    a: '线性层每个 patch 每个参数一次乘加，2 FLOP：\n1. ViT：$2 \\times 632\\text{M} \\times 10764 \\approx$ **13.6 TFLOP**（加上 4 层全局 attention 约 2.4 TFLOP，合计约 16）。\n2. LLM prefill：$2 \\times 7.6\\text{B} \\times 2691 \\approx$ **41 TFLOP**。\n编码器约占四成。原因：ViT 看的是合并前的 patch，数量是 LLM token 的 4 倍；而且 ViT 大小固定（3B、7B、72B 共用），换成 72B 的 LLM，编码器只占约 4%。',
+    ref: MMENC,
+  }),
+  b({
+    id: 'bagu-mrope',
+    topic: '多模态',
+    q: 'Qwen2-VL 的 M-RoPE 给每个 token 三个位置 ID（时间、高、宽）。序列是 3 个文本 token，接一张合并后 2 × 2 的图（4 个 token），再接 1 个文本 token。写出所有 token 的三个 ID。',
+    a: '规则：文本三个 ID 相同；图像的时间 ID 不变，高、宽 ID 按网格的行、列；图像之后的文本从「前面所有 ID 的最大值 + 1」接着编。\n1. 文本：(0,0,0)、(1,1,1)、(2,2,2)。\n2. 图像从 3 开始：(3,3,3)、(3,3,4)、(3,4,3)、(3,4,4)。\n3. 最大 ID 是 4，下一个文本：(5,5,5)。\n图像占 4 个 token，位置 ID 只往前走了 2。所以多模态序列的位置 ID 比 token 数小，但 KV 长度仍按 token 数算。',
+    ref: MMENC,
+  }),
+  b({
+    id: 'bagu-encoder-no-chunk',
+    topic: '多模态',
+    q: '长文本 prompt 可以 chunked prefill，分几步算。一张图的编码为什么不能切开分步算？vLLM 的调度器怎么处理？',
+    a: 'LLM 是因果 attention，前面的 token 不依赖后面的，所以能切；ViT 是**双向 attention**，一张图的所有 patch 互相看，必须一起算。\nvLLM 的做法：\n1. 每步有一个编码器预算（等于 `max_num_batched_tokens`，并保证至少放得下最大的一张图）。\n2. 这一步要处理到某张图的占位 token 时，预算够就整张编码；不够，这一步只调度到这张图之前的文本为止。\n3. 编码结果按图像内容的 hash 缓存，后面几步 prefill 和其他请求都能复用。',
+    ref: MMENC,
+  }),
+  b({
+    id: 'bagu-codec-bitrate',
+    topic: '多模态',
+    q: '语音 codec 的码率 = 帧率 × 码本数 × $\\log_2$(码本大小)。Mimi（Moshi 用的 codec）是 12.5 Hz、8 个码本、每个码本 2048 个码字，码率是多少？',
+    a: '$12.5 \\times 8 \\times \\log_2 2048 = 12.5 \\times 8 \\times 11 =$ **1100 bps**，即 1.1 kbps。\n对比 EnCodec（24 kHz）：75 Hz、每个码本 1024 个码字（10 bit），一个码本就是 750 bps，6 kbps 要 8 个码本。帧率低的 codec 每秒要生成的步数少，对 LLM 更友好。',
+    ref: SPEECH,
+  }),
+  b({
+    id: 'bagu-rvq',
+    topic: '多模态',
+    q: '残差向量量化（RVQ）：每一级在码本里找离「当前残差」最近的码字，再减掉它。$x = 0.83$，三级码本依次是 $\\{-1, 0, 1\\}$、$\\{-0.3, 0, 0.3\\}$、$\\{-0.1, 0, 0.1\\}$。每级选哪个？最后还原值和残差是多少？',
+    a: '1. 第 1 级逼近 0.83：选 **1.0**，残差 −0.17。\n2. 第 2 级逼近 −0.17：−0.3 离它 0.13、0 离它 0.17，选 **−0.3**，累计 0.7，残差 0.13。\n3. 第 3 级逼近 0.13：选 **0.1**，累计 **0.8**，残差 **0.03**。\n每多一级误差小一截：前几级定大轮廓（内容、音色），后几级补细节。还原时把各级选中的码字加起来。',
+    ref: SPEECH,
+  }),
+  b({
+    id: 'bagu-codec-steps',
+    topic: '多模态',
+    q: 'Qwen3-Omni 的 codec 是 12.5 Hz、16 个码本。如果把每帧的 16 个 token 拍平，让 Talker 一个个自回归生成，每秒音频要走多少步？Qwen3-Omni 实际怎么做？',
+    a: '拍平：12.5 × 16 = **200 步/秒**，每步都过一遍 Talker，太慢。\nQwen3-Omni 分两层：\n1. Talker（3B 总参数、0.3B 激活的 MoE）每帧只走一步，预测第 0 个码本：**12.5 步/秒**。\n2. MTP 模块（80M 的 dense transformer）接着把剩下 15 个码本补齐，每帧走 15 小步。\n大模型的步数降到 1/16，小模型步数多但每步便宜。Moshi 的 depth transformer 是同一个思路。',
+    ref: SPEECH,
+  }),
+  b({
+    id: 'bagu-omni-rtf',
+    topic: '多模态',
+    q: 'RTF = 生成耗时 ÷ 音频时长。Qwen3-Omni 生成一帧（80 ms 音频）要走：Thinker 一步、Talker 一步、MTP 补齐一帧、解码器解一帧。并发 1 时 Thinker 75 token/s、Talker 140 token/s、MTP 14 ms/帧、解码 3 ms/帧。RTF 是多少？',
+    a: '1. Thinker 一步：1000 / 75 = 13.3 ms。\n2. Talker 一步：1000 / 140 = 7.1 ms。\n3. 加上 MTP 14 ms、解码 3 ms：共 37.5 ms。\n4. RTF = 37.5 / 80 = **0.47**。\nRTF < 1 才不卡：每 80 ms 的音频要在 80 ms 内生成出来。0.47 意味着生成比播放快一倍，余量应该换成更高的并发（论文里并发 6 时 RTF 0.66）。',
+    ref: SPEECH,
+  }),
+  b({
+    id: 'bagu-omni-first-packet',
+    topic: '多模态',
+    q: '语音对话的首包延迟（用户说完到听到第一段声音）由哪几段串行组成？用 Qwen3-Omni 并发 1、音频输入的数字算：预处理和编码 72 ms，Thinker 首 token 88 ms，Talker 首 token 57 ms，MTP 一帧 14 ms，解码一帧 3 ms。',
+    a: '五段依次相加：预处理和编码器 → Thinker 出第一个 token → Talker 出第一帧 → MTP 补齐这一帧 → 解码器出第一段波形。\n72 + 88 + 57 + 14 + 3 = **234 ms**。\n并发升到 6 时首包变成 1172 ms，涨得最多的是 Thinker 首 token（88 → 673 ms），也就是 prefill 在排队。所以并发上限常常由首包延迟决定，而不是 RTF。压首包的办法：Talker 拿到一段文本就开始（流式接力），解码器改成纯因果、逐帧出声。',
+    ref: SPEECH,
+  }),
+
+  b({
+    id: 'bagu-barge-in-truncate',
+    topic: '多模态',
+    q: '语音助手的 RTF = 0.47（生成 1 秒音频要 0.47 秒），用户在播放到 1.5 秒时插话。这时大约已经生成了多少秒音频（忽略首包）？这条回答的文字共 60 个 token、音频共 6 秒，历史里应该保留多少个 token？',
+    a: '1. 已生成：1.5 / 0.47 ≈ **3.2 秒**，比播放的多一倍多。\n2. 按播放比例截文字：60 × 1.5 / 6 = **15** 个 token。\n对话历史要截到**用户实际听到的位置**，不是生成到的位置，否则下一轮模型以为用户听过后面那半段。OpenAI Realtime API 用 `conversation.item.truncate` 的 `audio_end_ms` 做这件事，会同时删掉没播出的文字。完整流程：VAD 检测到开口 → 停止播放 → `response.cancel` → 截断历史。',
+    ref: DUPLEX,
+  }),
+  b({
+    id: 'bagu-duplex-tick',
+    topic: '多模态',
+    q: 'Moshi 是全双工模型，每 80 ms 一步，每步都要吃进用户的音频、吐出自己的一帧（可能是静音）。$B$ 个会话一起跑一个 batch 步耗时 $t(B)$，实时的条件是什么？Moshi 上下文 4096 步，够聊多久？',
+    a: '1. 实时条件：$t(B) \\le 80$ ms，满足它的最大 $B$ 就是并发上限，再留出余量。超了播放会断、用户音频会积压，不像文本 serving 那样只是慢一点。\n2. 上下文：4096 ÷ 12.5 步/秒 ≈ **328 秒**，约 5.5 分钟。\n全双工和按轮次的区别：模型一直在跑，没人说话时也占算力，什么时候说、什么时候停由模型自己决定。',
+    ref: DUPLEX,
+  }),
+  b({
+    id: 'bagu-rtf-direction',
+    topic: '多模态',
+    q: 'Qwen3-Omni 报告 RTF 0.47，Kyutai 的 DSM-ASR 报告 batch 64 时「RTF 3.5」。两者的 RTF 定义一样吗？各自代表比实时快几倍？DSM-ASR 这时相当于多少路实时流？',
+    a: '定义相反：\n1. Qwen：RTF = 生成耗时 ÷ 音频时长，越小越好，0.47 表示比实时快约 **2.1 倍**，必须 < 1。\n2. Kyutai：写的是音频时长 ÷ 耗时，越大越好，3.5 表示快 **3.5 倍**，必须 > 1。\n3. DSM-ASR：3.5 × 64 = **224** 路实时流的处理量（作者报告一张 H100 能实时处理约 400 路）。\n读 RTF 先看定义，换成同一个方向再比较。',
+    ref: DUPLEX,
+  }),
+
+  b({
+    id: 'bagu-dit-tokens',
+    topic: '多模态',
+    q: 'Wan2.1 生成视频：VAE 时间上压 4 倍（第一帧单独）、空间上压 8 倍，之后再把 $2 \\times 2$ 的 latent 合成一个 token。token 数 $L = (1 + \\frac{T-1}{4}) \\cdot \\frac{H}{16} \\cdot \\frac{W}{16}$。1280 × 720、81 帧（16 fps 约 5 秒）是多少 token？',
+    a: '1. 时间：$1 + 80/4 = 21$。\n2. 高：$720/16 = 45$；宽：$1280/16 = 80$。\n3. $21 \\times 45 \\times 80 =$ **75,600** 个 token。\n相当于对 7.5 万个 token 做一次没有因果 mask 的 prefill，而且每一步去噪都要重做一遍。832 × 480 是 $21 \\times 30 \\times 52 = 32{,}760$。Wan2.2 的 5B 模型换了空间压 32 倍（含 patchify）的 VAE，token 数约为 1/4。',
+    ref: DIT,
+  }),
+  b({
+    id: 'bagu-dit-flops',
+    topic: '多模态',
+    q: 'Wan2.1-14B 一次前向：每个 token 碰到的权重约 12B，hidden $d = 5120$，40 层，序列 $L = 75{,}600$。线性层按 $2PL$、self-attention 按 $4L^2d$ 每层算，一次前向多少 FLOP？50 步、每步 CFG 两次前向，一共多少？',
+    a: '1. 线性层：$2 \\times 12\\text{B} \\times 75{,}600 \\approx$ **1.8 PFLOP**。\n2. attention：$4 \\times 75{,}600^2 \\times 5120 \\times 40 \\approx$ **4.7 PFLOP**，占七成。\n3. 一次前向约 6.5 PFLOP；× 50 步 × 2 ≈ **0.65 EFLOP**。\nH100 bf16 峰值 989 TFLOP/s，按 50% 利用率约 22 分钟。视频的 $L^2$ 项压倒线性层，所以加速重点在 attention：稀疏（滑动 tile）、量化（SageAttention）、序列并行。',
+    ref: DIT,
+  }),
+  b({
+    id: 'bagu-dit-no-kv',
+    topic: '多模态',
+    q: 'LLM decode 靠 KV cache 省计算。DiT 去噪为什么没有 KV cache？那它能复用什么？',
+    a: '1. LLM 能缓存 KV，是因为前面 token 的 K、V 算完就不变。DiT 每一步去噪都在更新**整段** latent，所有 token 的输入都变了，K、V 每步都不同，没有可以精确复用的。所以每步都是一次完整的大前向，全程 compute-bound。\n2. 能复用的是「相邻两步的输出很接近」。TeaCache 用被时间步调制后的输入变化量估计输出变化，累计变化小于阈值就直接复用上一步的输出、跳过这一步（作者自测 Open-Sora-Plan 上 4.4 倍）。这是近似：跳多了误差会累积，出现细节丢失。\n另一条路是少走几步：步数蒸馏（LCM、FLUX.1-schnell 用 1–4 步）。',
+    ref: DIT,
+  }),
+  b({
+    id: 'bagu-ulysses-ring',
+    topic: '多模态',
+    q: '视频 DiT 的序列太长，要沿序列维切到多张卡上。Ulysses 和 Ring 两种序列并行各怎么做？Wan2.1-14B 有 40 个 head，Ulysses 最多切几张卡？',
+    a: '1. **Ulysses**：每张卡先持有一段序列；attention 前用 all-to-all 换成「每张卡拿一部分 head、看完整序列」，算完再 all-to-all 换回来。并行度不能超过 head 数，Wan2.1-14B **最多 40**。\n2. **Ring**：每张卡用自己的 Q，K、V 沿环在卡之间传，边收边按块算，用 online softmax 合并结果。没有 head 数限制，通信是点对点。\n3. **USP**：两者组成二维网格。Wan2.1 外层 Ring、内层 Ulysses，作者报告 256K token 时通信开销降到 1% 以下。\n另外每步的有条件 / 无条件两次前向可以放到两张卡上（CFG 并行）。',
+    ref: DIT,
   }),
 
   // ---------------- 系统设计 ----------------

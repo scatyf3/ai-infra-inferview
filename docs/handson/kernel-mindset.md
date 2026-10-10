@@ -47,7 +47,7 @@ sum、max。继续上难度，问题是怎么划分数据、怎么保证写入�
   - **split-K**：matmul 里 K 太长时就这么切
   - 本质都是需要一个全局同步点（kernel 结束 / atomic / 计数器），见 [Reduce](/leetgpu/reduction) 里的追问
 
-还有一类**在线算法**：online softmax、Welford 均值方差。它们把"先算 max 再算 sum"这种两遍归约合成一遍，flash attention 就靠这个。
+还有一类**在线算法**：[online softmax](./online-softmax)、Welford 均值方差。它们把"先算 max 再算 sum"这种两遍归约合成一遍，flash attention 就靠这个。
 
 ### n → n 带前后依赖：scan
 

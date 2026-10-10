@@ -25,6 +25,7 @@ export const stages: Stage[] = [
       '/handson/mha-gqa-forward',
       '/inference/attention-variants',
       '/handson/stable-softmax',
+      '/handson/online-softmax',
       '/handson/rmsnorm',
       '/inference/flash-attention',
       '/inference/prefill-decode-roofline',
