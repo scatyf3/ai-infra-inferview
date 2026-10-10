@@ -147,6 +147,105 @@ rot = torch.cat((-x2, x1), dim=-1)       # (M, D)：[a, b, c, d] → [-c, -d, a,
 output.copy_(Q * cos + rot * sin)
 ```
 
+#### cat vs stack 详解
+
+**一句话区分**：
+- `cat`：在**已有的**某一维上接长，维数不变
+- `stack`：先**新造**一维，再把输入沿这一维排开，维数 +1
+
+拼完以后还要不要知道「这块数据来自第几个输入」？要就用 `stack`，那一维的下标就是输入编号。不要就用 `cat`。
+
+**用同一对输入看全部结果**（输出已在 torch 2.4 上跑过）：
+
+```python
+a = torch.tensor([[1, 2, 3],
+                  [4, 5, 6]])         # (2, 3)
+b = torch.tensor([[7, 8, 9],
+                  [10, 11, 12]])      # (2, 3)
+
+torch.cat((a, b), dim=0)     # (4, 3)    行接在 a 下面
+# [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]
+
+torch.cat((a, b), dim=1)     # (2, 6)    每行接在 a 右边
+# [[1, 2, 3, 7, 8, 9], [4, 5, 6, 10, 11, 12]]
+
+torch.stack((a, b), dim=0)   # (2, 2, 3) out[k] = 第 k 个输入，整块配对
+# [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]]
+
+torch.stack((a, b), dim=1)   # (2, 2, 3) out[i] = [a[i], b[i]]，逐行配对
+# [[[1, 2, 3], [7, 8, 9]], [[4, 5, 6], [10, 11, 12]]]
+
+torch.stack((a, b), dim=2)   # (2, 3, 2) out[i, j] = [a[i,j], b[i,j]]，逐元素配对
+# [[[1, 7], [2, 8], [3, 9]], [[4, 10], [5, 11], [6, 12]]]
+```
+
+`dim=0` 和 `dim=1` 的 stack shape 碰巧都是 `(2, 2, 3)`，因为 `a` 的第 0 维也是 2。内容不一样，只看 shape 分不出来。
+
+**general 的 shape 公式**：n 个输入 $t_0, \dots, t_{n-1}$，每个有 r 维。
+
+- `cat(ts, dim=d)`：除第 d 维外，其余维必须全相同。输出还是 r 维，第 d 维长 $\sum_k t_k.\text{shape}[d]$
+  $$(s_0, \dots, s_d^{(0)}, \dots) \;\to\; (s_0, \dots, \textstyle\sum_k s_d^{(k)}, \dots)$$
+- `stack(ts, dim=d)`：所有维都必须相同。输出 r+1 维，在第 d 位插入一个长度为 n 的新维
+  $$(s_0, \dots, s_{r-1}) \;\to\; (s_0, \dots, s_{d-1},\ n,\ s_d, \dots, s_{r-1})$$
+  `d` 的取值范围是 `[-(r+1), r]`，比 `cat` 多一个位置，因为新维可以插在最末尾
+
+**下标对应**：
+- `cat`：`out` 第 d 维下标 `off_k + i` 处是 `t_k` 的第 i 片，其中 `off_k = t_0..t_{k-1}` 在第 d 维的长度之和
+- `stack`：`out[..., k, ...]`（k 在第 d 位）就是 `t_k`
+
+**`stack` = 每个输入先 `unsqueeze(dim)`，再 `cat`**。在上例的 dim ∈ [-3, 2] 上逐个验证过：
+
+```python
+torch.stack(ts, dim) == torch.cat([t.unsqueeze(dim) for t in ts], dim)
+```
+
+所以只要真正搞懂 `cat`：`stack` 就是给每个输入加一个长度为 1 的维，再沿这维接长。
+
+**`cat` 内部在做什么**（伪代码，和 [modify tensor](#modify-tensor) 里的 `copy_` 是同一件事）：
+
+```python
+def cat(ts, dim):
+    shape = list(ts[0].shape)
+    shape[dim] = sum(t.shape[dim] for t in ts)
+    out = torch.empty(shape, dtype=ts[0].dtype, device=ts[0].device)  # 新内存
+    off = 0
+    for t in ts:
+        out.narrow(dim, off, t.shape[dim]).copy_(t)   # 写进 out 的一段 view
+        off += t.shape[dim]
+    return out
+```
+
+推论：
+- **两者都分配新内存、拷一遍数据**，和输入不共享 storage（`stack((a, b)).data_ptr() != a.data_ptr()`）。开销 = 读写一次所有输入的总字节数
+- **别在循环里反复 `cat`**：每步把已有结果整个再拷一遍。decode T 步、每步 `cache = cat((cache, k_new), dim=seq)`，总共拷 $1 + 2 + \dots + T = T(T+1)/2$ 个 token 的 KV。T = 4096 时约 8.4M 次 token 拷贝，而预分配后每步切片写入（见 [modify tensor](#modify-tensor) 的 `k_cache[:, pos] = k_new`）只拷 T = 4096 次
+- 要逐个产生再合并的：先 `append` 到 Python list，最后一次 `cat` / `stack`
+
+**反操作**：
+- `cat` ↔ `split` / `chunk`：`x1, x2 = x.chunk(2, dim=-1)` 拆回去
+- `stack` ↔ `unbind`：`a, b = out.unbind(dim)`，去掉那一维，返回 view
+
+**报错长什么样**：
+
+```python
+torch.cat((a, b[:, :2]), dim=0)
+# Sizes of tensors must match except in dimension 0. Expected size 3 but got size 2 for tensor number 1 in the list.
+torch.stack((a, b[:, :2]))
+# stack expects each tensor to be equal size, but got [2, 3] at entry 0 and [2, 2] at entry 1
+```
+
+**同一份数据，cat 和 stack 排出来的顺序不同**：RoPE 的两种写法就是这个区别。
+
+```python
+y1 = x1 * cos - x2 * sin       # 各 (M, D/2)
+y2 = x1 * sin + x2 * cos
+
+torch.cat((y1, y2), dim=-1)                 # [y1_0, y1_1, ..., y2_0, y2_1, ...]  前后两半
+torch.stack((y1, y2), dim=-1).flatten(-2)   # [y1_0, y2_0, y1_1, y2_1, ...]       两两交错
+```
+
+- `stack(dim=-1)` 得到 `(M, D/2, 2)`，`flatten(-2)` 按行优先展开，每对 `(y1_i, y2_i)` 相邻。上例 `stack((a, b), dim=2).flatten(-2)` 得到 `[[1, 7, 2, 8, 3, 9], [4, 10, 5, 11, 6, 12]]`
+- RoFormer 原文（[Su et al., 2021, arXiv:2104.09864](https://arxiv.org/abs/2104.09864)）旋转的是相邻的 `(x_{2i}, x_{2i+1})`，对应交错写法；HF LLaMA 的 `rotate_half` 旋转的是 `(x_i, x_{i+D/2})`，对应前后两半写法。两种权重不能混用：用错了不报错，但位置编码静默错
+
 #### 归一化
 
 | 算子 | 用法 | 注意 |
@@ -165,9 +264,21 @@ output.copy_(Q * cos + rot * sin)
 
 #### mask
 
+本站统一用下标比较造 bool `allowed`（True = 能看），完整推导见 [Attention mask 怎么拼](/leetgpu/mask)：
+
+```python
+i = torch.arange(S, device=x.device)[:, None]   # (S, 1) 行 = query
+j = torch.arange(S, device=x.device)[None, :]   # (1, S) 列 = key
+allowed = j <= i                                # causal；其他规则用 & / | 接上
+attn = attn.masked_fill(~allowed, float('-inf'))
+```
+
 | 算子 | 用法 | 注意 |
 |---|---|---|
-| `x.triu(k)` / `torch.triu(x, k)` | `full(-inf).triu(1)` 得加法 causal mask | 保留第 k 条对角线及右上方，其余置 0。`k=1` 不含主对角线；写成 `triu(0)` 会把对角线也盖掉，第一行全 -inf，softmax 出 NaN |
-| `x.masked_fill(mask, value)` | `attn.masked_fill(ones(bool).triu(1), float('-inf'))` | mask 为 True 的位置填 value，mask 广播成 x 的 shape。out-of-place，原地版是 `masked_fill_` |
+| `x.masked_fill(mask, value)` | `attn.masked_fill(~allowed, float('-inf'))` | mask 为 True 的位置填 value，mask 广播成 x 的 shape。out-of-place，原地版是 `masked_fill_` |
+| `~allowed` | bool 取反 | 逐元素 NOT：True 变成「不能看」。只对 bool tensor 用，对 int 是按位取反 |
+| `x.triu(k)` / `torch.triu(x, k)` | 备选：`full(-inf).triu(1)` 得加法 causal mask | 保留第 k 条对角线及右上方，其余置 0。`k=1` 不含主对角线；写成 `triu(0)` 会把对角线也盖掉，第一行全 -inf，softmax 出 NaN |
 
-两种 causal mask 写法等价，都用 `triu(1)` 标出「看不到」的位置：加法 mask（`attn + full(-inf).triu(1)`）和布尔 mask（`attn.masked_fill(ones(bool).triu(1), -inf)`）。都放在 softmax 之前，`exp(-inf) = 0`。
+- 要加法 mask 时从 `allowed` 转：`torch.zeros(S, S, device=x.device).masked_fill(~allowed, float('-inf'))`，和 `full(-inf).triu(1)` 结果相同
+- padding 叠 causal：`allowed = ~pad[:, None, None, :] & (j <= i)`，`(B, 1, 1, S)` 和 `(S, S)` 广播成 `(B, 1, S, S)`
+- 都放在 softmax 之前，`exp(-inf) = 0`。某一行全 False（比如左 padding 时 padding 位置的 query 看不到任何非 padding key）会整行 -inf，softmax 出 NaN
