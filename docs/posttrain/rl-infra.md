@@ -4,7 +4,7 @@ status: draft
 tags: [rl-infra, verl, openrlhf]
 difficulty: 4
 order: 4
-related: [/posttrain/rlhf-ppo-dpo-grpo, /posttrain/grpo-variants, /posttrain/rl-async-rollout, /posttrain/rl-weight-sync, /posttrain/rl-train-infer-mismatch, /posttrain/training-memory, /parallel/zero-fsdp, /inference/batching-scheduling]
+related: [/posttrain/rlhf-ppo-dpo-grpo, /posttrain/grpo-variants, /posttrain/rl-async-rollout, /posttrain/rl-weight-sync, /posttrain/rl-train-infer-mismatch, /posttrain/rl-agentic, /posttrain/training-memory, /parallel/zero-fsdp, /inference/batching-scheduling]
 stack: [ld-load]
 ---
 
@@ -110,6 +110,8 @@ PPO / GRPO 的 importance ratio $\frac{\pi_\theta(a|s)}{\pi_{\text{old}}(a|s)}$ 
 - 环境交互的延迟（跑代码、搜索、浏览器）夹在 decode 之间，GPU 在等 CPU。
 - 每条 trajectory 的轮数、长度都不确定，长尾比单轮推理更严重。
 - 这让 rollout 天然要做成**异步、以请求为单位**的服务（推理引擎以 server 模式部署，环境侧发请求），而不是一个同步的 `generate(batch)`。slime 的 server-based rollout、AReaL 的全异步设计都是朝这个方向。
+
+为什么要 token 进 token 出、工具输出怎么 mask、要多少并发轨迹才能喂饱 GPU，见 [Agentic RL](/posttrain/rl-agentic)。
 
 ### 小结：读框架代码时先找这几个问题的答案
 
