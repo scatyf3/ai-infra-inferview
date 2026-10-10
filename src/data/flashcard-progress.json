@@ -119,6 +119,18 @@
     "due": "2026-10-13T00:02:13.424Z",
     "last_review": "2026-10-05T00:02:13.424Z"
   },
+  "bagu-fa-v2-v3-3": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-10T16:37:29.879Z",
+    "last_review": "2026-10-10T16:27:29.879Z"
+  },
   "bagu-fa-why": {
     "stability": 11.85291529,
     "difficulty": 4.74828477,
