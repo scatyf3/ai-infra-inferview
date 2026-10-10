@@ -112,8 +112,8 @@
     "at": 1791572576835
   },
   "bagu-spec-exact": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1791649797639
   },
   "bagu-spec-expected": {
     "suspended": false,
