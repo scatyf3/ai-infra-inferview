@@ -54,7 +54,7 @@ FastAPI/uvicorn 的 async handler 收到 `/v1/chat/completions`。这里是 asyn
 
 TP 下每张卡是一个 worker 进程，各自执行相同的计算图，在每层的两个点做 all-reduce。attention 用 paged kernel 按 block table gather KV。
 
-decode 阶段通常用 **CUDA Graph** 重放：因为 decode 每步的计算图形状固定（只有序列长度在变，用固定的 bucket 对齐），可以提前捕获整张图，避免每步几百次 kernel launch 的 CPU 开销。prefill 形状多变，一般不用 graph。
+decode 阶段用 **CUDA Graph** 重放整张图（FULL），避免每步几百次 kernel launch 的 CPU 开销；batch 按 `num_tokens` pad 到预先录好的桶。含 prefill 的 batch 用 PIECEWISE 图：attention 之外的部分走图，attention eager 跑。详见 [CUDA Graph](/framework/cuda-graph)。
 
 ### 8. 采样
 
@@ -93,7 +93,7 @@ tokenize、detokenize、JSON 序列化、SSE 封包都是 CPU 密集的，放在
 :::
 
 ::: details Q：CUDA Graph 为什么只用在 decode？
-CUDA Graph 要求计算图的形状固定才能重放。decode 每步只有 1 个 token，形状只随 batch size 和序列长度变化，可以用有限个 bucket（比如 batch 1,2,4,8,...）各捕获一张图。prefill 的 token 数千变万化，捕获数量爆炸，且 prefill 本身 kernel 少、单个 kernel 耗时长，launch 开销占比小，不值得。
+整图（FULL）主要只给纯 decode：图要求 shape 固定，decode 每个请求 1 个 token，只按 batch 大小分桶就够；含 prefill 的 batch 里 attention 的 metadata（每个请求的 query/KV 长度）千变万化，很多 attention backend 录不进图。但 vLLM V1 的默认模式 `FULL_AND_PIECEWISE` 对含 prefill 的 batch 也用图：PIECEWISE 只录 attention 之外逐 token 的算子，按 `num_tokens` 分桶。prefill 的 GPU 时间长、launch 开销占比小，剩下 attention 的 eager 开销盖得住。见 [CUDA Graph：三种图](/framework/cuda-graph#_5-三种图)。
 :::
 
 ::: details Q：增量 detokenize 有什么坑？

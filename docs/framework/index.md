@@ -14,6 +14,7 @@ title: 框架内功
 
 - [PyTorch 内部机制](./pytorch-internals) — dispatcher、autograd、custom op 注册、caching allocator 与碎片
 - [torch.compile：Dynamo / AOTAutograd / Inductor](./torch-compile) — dynamo 抓图、graph break、inductor 生成什么
+- [CUDA Graph：从一次 capture 到 vLLM 的三种图](./cuda-graph) — 为什么 decode 被 CPU 卡住、capture 固定了什么、FULL / PIECEWISE / FULL_AND_PIECEWISE
 - [给 vLLM / SGLang 加一个新模型](./add-model-vllm-sglang) — config 映射、weight loading、model runner、attention backend、tokenizer / chat template
 - [vLLM V1 架构与 SGLang](./vllm-v1-architecture) — EngineCore / scheduler / worker / executor 分层；RadixAttention + 前端语言
 - [服务层：异步请求、Batching 队列、Streaming、多副本路由](./serving-layer) — API server 到 engine 的边界
