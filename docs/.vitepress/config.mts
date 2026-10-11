@@ -41,6 +41,7 @@ export default defineConfig({
       { text: '框架', link: '/framework/' },
       { text: '手撕', link: '/handson/' },
       { text: 'LeetGPU', link: '/leetgpu/' },
+      { text: '我的准备', link: '/private' },
     ],
     sidebar: buildSidebar(),
     search: { provider: 'local', options: { detailedView: true } },

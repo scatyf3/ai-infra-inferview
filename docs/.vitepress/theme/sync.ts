@@ -320,9 +320,17 @@ export async function connectGitHub(token: string): Promise<void> {
   schedule(0)
 }
 
+/** 这台设备配置的 GitHub token；私有笔记页用它读私有仓库 */
+export function githubToken(): string | null {
+  return ls.get(TOKEN_KEY)
+}
+
 export function disconnectGitHub() {
   ls.del(TOKEN_KEY)
   ls.del(LOGIN_KEY)
+  // 私有笔记的本机缓存一起清掉（键名同 src/lib/privateNotes.ts 的 PRIVATE_CACHE_KEY；
+  // 不直接 import，免得每个页面都打包进 markdown-it）
+  ls.del('inferview:private-cache')
   syncState.login = ''
   syncState.error = ''
   syncState.status = 'idle'

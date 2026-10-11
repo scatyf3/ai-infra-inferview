@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { DATA_REPO } from '@lib/github'
+import { withBase } from 'vitepress'
+import { DATA_REPO, PRIVATE_REPO } from '@lib/github'
 import { DATA_BRANCH_URL, connectGitHub, disconnectGitHub, syncNow, syncState, syncsToGitHub } from '../sync'
 
 /**
@@ -161,6 +162,7 @@ onBeforeUnmount(() => {
                 <a :href="tokenUrl" target="_blank" rel="noreferrer">新建一个 fine-grained token</a>：
                 Repository access 选 <i>Only select repositories</i> → <code>{{ DATA_REPO.name }}</code>；
                 Permissions 里 <i>Contents</i> 选 <i>Read and write</i>。
+                要看 <a :href="withBase('/private')">我的准备</a> 页，仓库里再勾上 <code>{{ PRIVATE_REPO.name }}</code>。
               </li>
               <li>把生成的 token 粘贴到下面。它只存在这台设备上；手机丢了就去 GitHub 吊销它。</li>
             </ol>
