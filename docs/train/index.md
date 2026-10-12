@@ -20,14 +20,17 @@ title: 训练系统
 
 - [ZeRO / FSDP](/parallel/zero-fsdp) — 去掉数据并行的冗余
 - [Pipeline 并行调度](./pipeline-schedules) — GPipe、1F1B、Interleaved、Zero Bubble、DualPipe
+- [FSDP2 与 DTensor](./fsdp2-dtensor) — DeviceMesh、placement 与集合通信、fully_shard 的 hook 和预取
 - [并行配置怎么选](./parallel-config) — 从显存约束到 MFU 调优
 - [FP8 训练](./fp8-training) — 哪些 GEMM 用 FP8、scale 怎么定、DeepSeek-V3 的细粒度量化
 - [长上下文训练](./long-context) — Context Parallel、RoPE 外推、分阶段扩长
+- [MoE 训练](./moe-training) — 算力按激活、显存按总量；负载均衡、router 稳定性、为什么 MFU 更低
 
 ## 跑得稳、跑得久
 
 - [训练稳定性](./stability) — loss spike 从哪来、怎么防、怎么救
 - [大规模训练的容错](./fault-tolerance) — 故障率、checkpoint 间隔、快速恢复
+- [分布式训练排障](./debugging) — hang、OOM、NaN、慢，各先查什么
 - [预训练数据管线](./data-pipeline) — 离线 tokenize、混合采样、可确定性恢复
 
 ## SFT 与 RL 提速
