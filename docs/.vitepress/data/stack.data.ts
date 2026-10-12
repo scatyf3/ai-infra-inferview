@@ -1,9 +1,9 @@
 import { createContentLoader } from 'vitepress'
-import { LAYER_IDS, layerOfTopic } from '../layers'
+import { locateKey } from '../layers'
 
 /**
  * docs/stack/<id>.md：分层图里每个格子的基础介绍，构建时渲染成 HTML 供首页面板直接展示。
- * id 是小主题 id（如 kv-paged），或 layer-N 表示第 N 层的总述。
+ * id 是小主题 id（如 kv-paged、tr-p-pp），或 layer-N / train-layer-N 表示推理栈 / 训练栈第 N 层的总述。
  */
 export interface StackIntro {
   id: string
@@ -21,9 +21,7 @@ export default createContentLoader('stack/*.md', {
   transform(raw): StackIntro[] {
     return raw.map((p) => {
       const id = p.url.split('/').filter(Boolean)[1]
-      const layerMatch = id.match(/^layer-(\d+)$/)
-      const ok = layerMatch ? LAYER_IDS.has(Number(layerMatch[1])) : layerOfTopic.has(id)
-      if (!ok) throw new Error(`[stack] docs/stack/${id}.md 不对应 layers.ts 里的任何层或小主题`)
+      if (!locateKey(id)) throw new Error(`[stack] docs/stack/${id}.md 不对应 layers.ts 里任何一张图的层或小主题`)
       return {
         id,
         title: p.frontmatter.title ?? id,

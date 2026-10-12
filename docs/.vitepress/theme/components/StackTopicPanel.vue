@@ -5,26 +5,31 @@ import { data as topics } from '../../data/topics.data'
 import type { Topic } from '../../data/topics.data'
 import { data as intros } from '../../data/stack.data'
 import { domainByDir } from '../../domains'
-import { layerOfTopic, layers } from '../../layers'
+import { keysOfArticle, locateKey } from '../../layers'
 
 /**
  * 分层图里一个格子的内容：基础介绍 + 相关文章。
- * key 是小主题 id（如 kv-paged），或 `layer-N` 表示第 N 层的整层综述。
+ * key 是小主题 id（如 kv-paged、tr-p-pp），或 `layer-N` / `train-layer-N` 表示整层综述。
  * 首页分层图的展开面板和 /stack/<id> 独立页底部都用它。
  */
 // 注意：boolean prop 没传时 Vue 会给 false，所以用「隐藏」而不是「显示」做开关
 const props = defineProps<{ id: string; compact?: boolean; hideIntro?: boolean }>()
 
 const introById = new Map(intros.map((i) => [i.id, i]))
-const keysOf = (t: Topic) => t.stack.map((s) => (typeof s === 'number' ? `layer-${s}` : s))
 
 const intro = computed(() => introById.get(props.id))
-const articles = computed(() => topics.filter((t) => !t.isIndex && keysOf(t).includes(props.id)))
+const articles = computed(() => topics.filter((t) => !t.isIndex && keysOfArticle(t).includes(props.id)))
 
-const topicName = new Map(layers.flatMap((l) => l.topics.map((t) => [t.id, t.name] as const)))
-const keyLabel = (key: string) =>
-  key.startsWith('layer-') ? `L${key.slice(6)} 整层` : `L${layerOfTopic.get(key)} ${topicName.get(key)}`
-const elsewhere = (t: Topic) => keysOf(t).filter((k) => k !== props.id).map(keyLabel)
+// 「also」只列同一张图上的其他格子，推理栈的面板里不混进训练栈的位置，反之亦然
+const keyLabel = (key: string) => {
+  const loc = locateKey(key)!
+  return `${loc.stack.prefix}${loc.layer.id} ${loc.topic?.name ?? '整层'}`
+}
+const stackOf = (key: string) => locateKey(key)?.stack.id
+const elsewhere = (t: Topic) =>
+  keysOfArticle(t)
+    .filter((k) => k !== props.id && stackOf(k) === stackOf(props.id))
+    .map(keyLabel)
 
 const colorOf = (t: Topic) => domainByDir[t.domain]?.color ?? 'var(--st-todo)'
 const statusText = { todo: '未写', draft: '草稿', reviewed: '已复习' } as const

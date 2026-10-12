@@ -20,6 +20,9 @@ export interface RepoConfig {
 
 export const DATA_REPO: RepoConfig = { owner: 'scatyf3', name: 'ai-infra-inferview', branch: 'data' }
 
+/** 私有笔记的仓库（「我的准备」页读它，见 privateNotes.ts）；同一个 token 要能读它 */
+export const PRIVATE_REPO: RepoConfig = { owner: 'scatyf3', name: 'inferview-private', branch: 'main' }
+
 export const GRAPHQL_URL = 'https://api.github.com/graphql'
 
 /** token 不对、过期或被吊销 */

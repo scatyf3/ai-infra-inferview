@@ -6,6 +6,7 @@ difficulty: 4
 order: 4.4
 related: [/posttrain/rl-infra, /posttrain/rl-async-rollout, /posttrain/rl-train-infer-mismatch, /inference/kv-cache-paged-attention]
 stack: []
+train: [tr-r-rlsys]
 ---
 
 # Agentic RL：多轮工具调用的 Rollout 系统

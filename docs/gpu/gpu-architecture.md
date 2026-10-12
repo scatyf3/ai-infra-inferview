@@ -6,6 +6,7 @@ difficulty: 3
 order: 1
 related: [/gpu/tensor-core-gemm, /gpu/profiling, /inference/prefill-decode-roofline, /handson/kernel-mindset, /handson/cuda-tiled-matmul]
 stack: [hw-gpu, hw-mem]
+train: [tr-hw-gpu]
 ---
 
 # GPU 执行模型：SM / Warp / Shared Memory

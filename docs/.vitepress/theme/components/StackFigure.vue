@@ -3,20 +3,21 @@ import { computed, ref } from 'vue'
 import { withBase } from 'vitepress'
 import { data as topics } from '../../data/topics.data'
 import { data as intros } from '../../data/stack.data'
-import { layerOfTopic, layers } from '../../layers'
-import type { Layer, StackTopic } from '../../layers'
+import { keysOfArticle, locateKey, stacks } from '../../layers'
+import type { Layer, StackId, StackTopic } from '../../layers'
 import StackTopicPanel from './StackTopicPanel.vue'
 
-// 首页的紧凑版分层图（论文插图风格）：点左侧层名展开这一层的总述，点格子展开小主题的介绍；都附相关文章
+// 紧凑版分层图（论文插图风格）：点左侧层名展开这一层的总述，点格子展开小主题的介绍；都附相关文章
+// stack="infer"（默认，首页）是推理栈，stack="train"（/train/）是训练栈
+// caption：图上方的一行标题，首页两张图并排时用来区分
+const props = withDefaults(defineProps<{ stack?: StackId; caption?: string }>(), { stack: 'infer' })
+const def = stacks[props.stack]
 
-// key：小主题 id，或 `layer-N` 表示第 N 层的整层综述
+// key：小主题 id，或 def.layerKey(N) 表示第 N 层的整层综述
 const counts = new Map<string, number>()
 for (const t of topics) {
   if (t.isIndex) continue
-  for (const s of t.stack) {
-    const key = typeof s === 'number' ? `layer-${s}` : s
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
+  for (const key of keysOfArticle(t)) counts.set(key, (counts.get(key) ?? 0) + 1)
 }
 const countOf = (key: string) => counts.get(key) ?? 0
 const introUrl = new Map(intros.map((i) => [i.id, i.url]))
@@ -30,31 +31,27 @@ function groupTopics(l: Layer) {
   }
   return groups
 }
-const rows = [...layers].reverse().map((l) => ({ ...l, groups: groupTopics(l) }))
+const rows = [...def.layers].reverse().map((l) => ({ ...l, key: def.layerKey(l.id), groups: groupTopics(l) }))
 
-const topicName = new Map(layers.flatMap((l) => l.topics.map((t) => [t.id, t.name] as const)))
-const keyName = (key: string) => (key.startsWith('layer-') ? '本层总述' : topicName.get(key) ?? key)
+const keyName = (key: string) => locateKey(key)?.topic?.name ?? '本层总述'
 
 const open = ref<string | null>(null)
-const openLayer = computed(() => {
-  const k = open.value
-  if (!k) return null
-  return k.startsWith('layer-') ? Number(k.slice(6)) : layerOfTopic.get(k) ?? null
-})
+const openLayer = computed(() => (open.value ? locateKey(open.value)?.layer.id ?? null : null))
 const toggle = (key: string) => (open.value = open.value === key ? null : key)
 </script>
 
 <template>
   <figure class="sf">
-    <div class="sf-fig">
+    <figcaption v-if="caption" class="sf-cap">{{ caption }}</figcaption>
+    <div class="sf-fig" :class="{ 'no-rail': stack !== 'infer' }">
       <div class="sf-rows">
         <div v-for="l in rows" :key="l.id" class="sf-row" :class="{ active: openLayer === l.id }" :style="{ '--lc': l.color }">
           <button
             class="sf-label"
-            :class="{ open: open === `layer-${l.id}` }"
-            :aria-expanded="open === `layer-${l.id}`"
+            :class="{ open: open === l.key }"
+            :aria-expanded="open === l.key"
             :title="`${l.name}：本层总述`"
-            @click="toggle(`layer-${l.id}`)"
+            @click="toggle(l.key)"
           >
             <span class="sf-id">{{ l.id }}</span>
             <span class="sf-label-text">
@@ -80,7 +77,7 @@ const toggle = (key: string) => (open.value = open.value === key ? null : key)
 
           <div v-if="openLayer === l.id && open" class="sf-panel">
             <div class="sf-panel-head">
-              <b>L{{ l.id }} · {{ keyName(open) }}</b>
+              <b>{{ def.prefix }}{{ l.id }} · {{ keyName(open) }}</b>
               <span class="sf-panel-actions">
                 <a v-if="introUrl.get(open)" :href="withBase(introUrl.get(open)!)" class="sf-page">单独页面 ↗</a>
                 <button class="sf-close" aria-label="收起" @click="toggle(open)">✕</button>
@@ -91,7 +88,7 @@ const toggle = (key: string) => (open.value = open.value === key ? null : key)
         </div>
       </div>
 
-      <div class="sf-rail" aria-hidden="true">
+      <div v-if="stack === 'infer'" class="sf-rail" aria-hidden="true">
         <div class="sf-arrow down"><span>request</span></div>
         <div class="sf-arrow up"><span>response</span></div>
       </div>
@@ -108,6 +105,7 @@ const toggle = (key: string) => (open.value = open.value === key ? null : key)
   padding: 0 24px;
   font-family: Inter, 'Helvetica Neue', Arial, var(--vp-font-family-base);
 }
+.sf-cap { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--vp-c-text-2); }
 .sf-fig {
   display: grid;
   grid-template-columns: 1fr 64px;
@@ -117,6 +115,7 @@ const toggle = (key: string) => (open.value = open.value === key ? null : key)
   border-radius: 4px;
   background: var(--vp-c-bg);
 }
+.sf-fig.no-rail { grid-template-columns: 1fr; }
 .sf-rows { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 
 .sf-row {

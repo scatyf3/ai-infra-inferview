@@ -6,6 +6,7 @@ difficulty: 4
 order: 5
 related: [/parallel/parallelism-overview, /parallel/collective-comm, /parallel/comm-overlap, /inference/prefill-decode-roofline]
 stack: [d-intra, f-model]
+train: [tr-p-ep]
 ---
 
 # MoE 与 Expert Parallel

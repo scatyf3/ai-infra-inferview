@@ -59,6 +59,12 @@ describe('flashcard deck', () => {
     }
   })
 
+  it('每张卡的公式都能被 KaTeX 渲染（防 \\frac 丢反斜杠变成 \\f 之类）', () => {
+    for (const c of cards) {
+      for (const text of [c.q, c.a]) expect(inlineMd(text), c.id).not.toContain('katex-error')
+    }
+  })
+
   it('仓库里的记录、批注文件格式正确，且不引用已删除的卡片', () => {
     expect(isProgress(progressFile)).toBe(true)
     expect(isNotes(notesFile)).toBe(true)

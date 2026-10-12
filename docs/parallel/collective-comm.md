@@ -6,6 +6,7 @@ difficulty: 3
 order: 4
 related: [/parallel/parallelism-overview, /parallel/zero-fsdp, /parallel/megatron-tp, /parallel/moe-ep, /parallel/comm-overlap]
 stack: [d-comm, hw-link]
+train: [tr-c-coll, tr-hw-link]
 ---
 
 # 集合通信原语与 NCCL

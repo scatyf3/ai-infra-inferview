@@ -3,7 +3,7 @@
  *
  * 归组规则（见 sidebar.ts）：
  *   1. overrides 里写了的，按它来（跨层的文章在这里指定）；
- *   2. 非推理栈目录（posttrain / basics / handson / leetgpu）整个目录一组；
+ *   2. 非推理栈目录（train / posttrain / basics / handson / leetgpu）整个目录一组；
  *   3. 其余按 frontmatter `stack` 的第一项归到对应的层（小主题 id 或层号）；
  *   4. 没有 stack 的放进「系统全景」。
  * 新写的文章只要 `stack` 标对，就会自动出现在对应的层里。
@@ -21,7 +21,8 @@ export const sections: Section[] = [
   { id: 'account', label: '先算账：roofline / 显存 / 指标' },
   ...layers.map((l) => ({ id: `L${l.id}`, label: `L${l.id} ${l.name}`, link: `/stack/layer-${l.id}` })),
   { id: 'overview', label: '系统全景：把各层串起来' },
-  { id: 'train', label: '训练与 Post-train', link: '/posttrain/' },
+  { id: 'pretrain', label: '训练系统：算力、并行、稳定性', link: '/train/' },
+  { id: 'train', label: 'Post-train：SFT / RL', link: '/posttrain/' },
   { id: 'basics', label: '基础不能挂', link: '/basics/' },
   { id: 'handson', label: '手撕高频', link: '/handson/' },
   { id: 'leetgpu', label: 'LeetGPU 题解', link: '/leetgpu/' },
@@ -29,6 +30,7 @@ export const sections: Section[] = [
 
 /** 不属于推理栈的目录：整个目录一组 */
 export const dirSection: Record<string, string> = {
+  train: 'pretrain',
   posttrain: 'train',
   basics: 'basics',
   handson: 'handson',
@@ -52,7 +54,8 @@ export const overrides: Record<string, string> = {
   'framework/request-lifecycle': 'overview',
   'framework/vllm-v1-architecture': 'overview',
   'framework/vllm-release-history': 'overview',
-  'parallel/zero-fsdp': 'train', // ZeRO / FSDP 是训练侧
+  'parallel/zero-fsdp': 'pretrain', // ZeRO / FSDP 是训练侧
+  'posttrain/training-memory': 'pretrain', // 训练显存账是通用的，不限于 post-train
   'basics/system-design-llm-serving': 'overview',
 }
 
@@ -73,6 +76,24 @@ export const sectionOrder: Record<string, string[]> = {
     'inference/speculative-decoding',
     'inference/speculative-sampling-math',
     'framework/add-model-vllm-sglang',
+  ],
+  pretrain: [
+    'train/compute-mfu',
+    'posttrain/training-memory',
+    'train/optimizer-lr',
+    'parallel/zero-fsdp',
+    'train/pipeline-schedules',
+    'train/fsdp2-dtensor',
+    'train/parallel-config',
+    'train/fp8-training',
+    'train/long-context',
+    'train/moe-training',
+    'train/stability',
+    'train/fault-tolerance',
+    'train/debugging',
+    'train/data-pipeline',
+    'train/efficient-sft',
+    'train/efficient-rl',
   ],
   L6: ['parallel/parallelism-overview', 'parallel/collective-comm', 'parallel/megatron-tp', 'parallel/moe-ep', 'parallel/comm-overlap'],
   overview: [

@@ -19,6 +19,7 @@ import RooflineChart from './components/ui/RooflineChart.vue'
 import StackPageExtras from './components/StackPageExtras.vue'
 import ReaderNotes from './components/ReaderNotes.vue'
 import SyncControl from './components/SyncControl.vue'
+import PrivateNotes from './components/PrivateNotes.vue'
 import { registerServiceWorker } from './pwa'
 import 'katex/dist/katex.min.css'
 import './custom.css'
@@ -48,6 +49,7 @@ export default {
     app.component('RoadmapFigure', RoadmapFigure)
     app.component('TritonProgramViz', TritonProgramViz)
     app.component('Flashcards', Flashcards)
+    app.component('PrivateNotes', PrivateNotes)
     app.component('QuantGranularity', QuantGranularity)
     app.component('RooflineChart', RooflineChart)
   },

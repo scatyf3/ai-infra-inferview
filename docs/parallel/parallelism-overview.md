@@ -6,6 +6,7 @@ difficulty: 3
 order: 1
 related: [/parallel/megatron-tp, /parallel/collective-comm, /inference/memory-accounting]
 stack: [d-intra]
+train: [4]
 ---
 
 # TP / PP / DP / EP / SP / CP 总览

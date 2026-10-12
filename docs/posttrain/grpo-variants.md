@@ -6,6 +6,7 @@ difficulty: 4
 order: 3.5
 related: [/posttrain/rlhf-ppo-dpo-grpo, /posttrain/rl-infra, /posttrain/rl-train-infer-mismatch]
 stack: []
+train: [tr-r-rlalgo]
 ---
 
 # GRPO 变体：DAPO / Dr. GRPO / GSPO / CISPO

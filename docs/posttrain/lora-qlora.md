@@ -6,6 +6,7 @@ difficulty: 3
 order: 2
 related: [/posttrain/training-memory, /posttrain/sft, /inference/quantization, /inference/memory-accounting, /inference/batching-scheduling, /parallel/zero-fsdp]
 stack: [f-runner]
+train: [tr-r-sft]
 ---
 
 # LoRA / QLoRA 原理与显存账

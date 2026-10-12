@@ -6,6 +6,7 @@ difficulty: 3
 order: 3
 related: [/posttrain/training-memory, /parallel/collective-comm, /parallel/megatron-tp]
 stack: []
+train: [tr-p-dp]
 ---
 
 # ZeRO 1 / 2 / 3 与 FSDP

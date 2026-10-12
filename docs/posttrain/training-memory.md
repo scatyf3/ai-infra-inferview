@@ -6,6 +6,7 @@ difficulty: 3
 order: 5
 related: [/parallel/zero-fsdp, /posttrain/lora-qlora, /inference/memory-accounting, /inference/flash-attention]
 stack: []
+train: [tr-m-account, tr-m-recompute, tr-m-precision]
 ---
 
 # 混合精度、Grad Checkpointing 与优化器状态显存账

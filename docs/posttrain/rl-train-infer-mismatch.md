@@ -6,6 +6,7 @@ difficulty: 4
 order: 4.2
 related: [/posttrain/rl-infra, /posttrain/grpo-variants, /posttrain/rlhf-ppo-dpo-grpo, /posttrain/training-memory]
 stack: []
+train: [tr-r-rlsys]
 ---
 
 # 训推不一致：同一份权重，两个引擎算出不同的概率
