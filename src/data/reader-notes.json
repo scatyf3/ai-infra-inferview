@@ -5,9 +5,9 @@
       "exact": "算得快（Tensor Core 的 bf16 / fp8 峰值）、连得快（同步训练每一步都要通信）、存得下也读得快（checkpoint 和数据）。",
       "prefix": "与 IO1T0 · 本层总述单独页面 ↗✕训练对硬件有三个要求：",
       "suffix": "上面每一层的优化，最后都落到「哪一个先打满」。\n\n算力：MFU ",
-      "note": "这里我们不care hbm带宽，因为training是compute bound，只care计算能力，通信能力和weight/data的存算（gpu to ssd？）",
+      "note": "这里我们不care hbm带宽，因为training是compute bound，只care计算能力，通信能力和weight/data的存算（主要是weight，一般是 gpu写到cpu内存，然后在写入文件系统）",
       "created": 1791829546175,
-      "at": 1791829584954
+      "at": 1791829704786
     }
   ],
   "/ai-infra-inferview/framework/cuda-graph": [
