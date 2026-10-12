@@ -6,6 +6,7 @@ difficulty: 3
 order: 2
 related: [/posttrain/training-memory, /parallel/zero-fsdp, /posttrain/sft, /parallel/comm-overlap, /train/stability]
 stack: []
+train: [tr-st-opt, tr-st-lr, tr-st-accum]
 ---
 
 # 一个训练 step：AdamW、学习率调度与梯度裁剪

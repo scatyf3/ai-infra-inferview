@@ -6,6 +6,7 @@ difficulty: 4
 order: 8.5
 related: [/parallel/moe-ep, /parallel/comm-overlap, /train/compute-mfu, /train/pipeline-schedules, /train/parallel-config, /train/stability, /train/fp8-training, /posttrain/training-memory]
 stack: []
+train: [tr-r-moe, tr-p-ep]
 ---
 
 # MoE 训练：路由怎么稳、负载怎么均、为什么 MFU 更低

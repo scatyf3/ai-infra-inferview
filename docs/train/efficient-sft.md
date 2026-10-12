@@ -6,6 +6,7 @@ difficulty: 3
 order: 10
 related: [/train/compute-mfu, /train/parallel-config, /posttrain/sft, /posttrain/lora-qlora, /posttrain/training-memory, /parallel/zero-fsdp, /framework/torch-compile]
 stack: []
+train: [tr-r-sft, tr-k-fused]
 ---
 
 # SFT 训练提速：时间和显存都花在哪，按什么顺序优化

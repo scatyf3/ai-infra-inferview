@@ -6,6 +6,7 @@ difficulty: 4
 order: 4.3
 related: [/posttrain/rl-infra, /posttrain/rl-async-rollout, /parallel/zero-fsdp, /parallel/megatron-tp]
 stack: []
+train: [tr-r-rlsys]
 ---
 
 # RL 权重同步：从训练引擎到推理引擎

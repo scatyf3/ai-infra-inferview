@@ -6,6 +6,7 @@ difficulty: 3
 order: 7
 related: [/posttrain/training-memory, /parallel/zero-fsdp, /parallel/parallelism-overview, /parallel/collective-comm]
 stack: []
+train: [tr-j-ft, tr-hw-io]
 ---
 
 # 大规模训练的容错：故障率、Checkpoint 间隔与快速恢复

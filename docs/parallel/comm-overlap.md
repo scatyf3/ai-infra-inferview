@@ -6,6 +6,7 @@ difficulty: 3
 order: 6
 related: [/parallel/collective-comm, /parallel/megatron-tp, /parallel/zero-fsdp, /parallel/moe-ep, /parallel/parallelism-overview, /gpu/profiling]
 stack: [d-comm]
+train: [tr-c-overlap]
 ---
 
 # 计算通信 Overlap

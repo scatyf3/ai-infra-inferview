@@ -6,6 +6,7 @@ difficulty: 3
 order: 1
 related: [/posttrain/training-memory, /train/parallel-config, /train/fault-tolerance, /inference/prefill-decode-roofline, /parallel/comm-overlap]
 stack: []
+train: [tr-j-plan]
 ---
 
 # 训练算力账：6ND、MFU 与训练时长

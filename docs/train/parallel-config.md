@@ -6,6 +6,7 @@ difficulty: 3
 order: 4
 related: [/posttrain/training-memory, /train/compute-mfu, /train/pipeline-schedules, /train/long-context, /parallel/zero-fsdp, /parallel/comm-overlap, /gpu/profiling]
 stack: []
+train: [tr-c-config]
 ---
 
 # 并行配置怎么选：从显存约束到 MFU 调优

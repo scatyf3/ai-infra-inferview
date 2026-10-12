@@ -6,6 +6,7 @@ difficulty: 3
 order: 7.5
 related: [/train/fault-tolerance, /train/stability, /gpu/profiling, /posttrain/training-memory, /framework/pytorch-internals, /train/compute-mfu, /train/efficient-sft, /posttrain/rl-train-infer-mismatch, /parallel/comm-overlap]
 stack: []
+train: [tr-j-debug]
 ---
 
 # 分布式训练排障：hang、OOM、NaN、慢，各先查什么

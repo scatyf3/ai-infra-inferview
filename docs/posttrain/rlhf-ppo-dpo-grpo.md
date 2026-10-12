@@ -6,6 +6,7 @@ difficulty: 4
 order: 3
 related: [/posttrain/rl-infra, /posttrain/sft, /posttrain/training-memory]
 stack: []
+train: [tr-r-rlalgo]
 ---
 
 # RLHF 全家桶：PPO / DPO / GRPO

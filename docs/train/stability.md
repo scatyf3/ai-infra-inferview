@@ -6,6 +6,7 @@ difficulty: 3
 order: 6
 related: [/train/optimizer-lr, /posttrain/training-memory, /posttrain/rl-monitoring, /inference/flash-attention, /parallel/megatron-tp]
 stack: []
+train: [tr-j-stab]
 ---
 
 # 训练稳定性：loss spike 从哪来、怎么防、怎么救

@@ -6,6 +6,7 @@ difficulty: 4
 order: 4.1
 related: [/posttrain/rl-infra, /posttrain/rl-train-infer-mismatch, /posttrain/grpo-variants, /inference/batching-scheduling]
 stack: []
+train: [tr-r-rlsys]
 ---
 
 # 异步 Rollout：长尾、Partial Rollout 与 Staleness

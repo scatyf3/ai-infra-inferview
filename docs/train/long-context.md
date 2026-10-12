@@ -6,6 +6,7 @@ difficulty: 4
 order: 8
 related: [/posttrain/training-memory, /parallel/parallelism-overview, /parallel/comm-overlap, /inference/flash-attention, /posttrain/sft, /inference/dit-serving]
 stack: []
+train: [tr-r-long, tr-p-cp]
 ---
 
 # 长上下文训练：Context Parallel、RoPE 外推与分阶段扩长

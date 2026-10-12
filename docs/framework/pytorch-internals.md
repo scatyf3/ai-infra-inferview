@@ -6,6 +6,7 @@ difficulty: 4
 order: 1
 related: [/handson/torch-primitives, /framework/torch-compile, /framework/cuda-graph, /basics/python, /inference/memory-accounting]
 stack: [3]
+train: [tr-st-autograd]
 ---
 
 # PyTorch 内部机制

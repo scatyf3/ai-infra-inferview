@@ -6,6 +6,7 @@ difficulty: 4
 order: 4.5
 related: [/parallel/zero-fsdp, /parallel/comm-overlap, /framework/pytorch-internals, /train/parallel-config, /parallel/megatron-tp, /posttrain/training-memory, /train/fault-tolerance, /parallel/collective-comm]
 stack: []
+train: [tr-p-dp, tr-c-config]
 ---
 
 # FSDP2 与 DTensor：PyTorch 原生分布式训练是怎么实现的

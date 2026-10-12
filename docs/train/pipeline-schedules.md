@@ -6,6 +6,7 @@ difficulty: 3
 order: 3
 related: [/parallel/parallelism-overview, /parallel/comm-overlap, /parallel/moe-ep, /posttrain/training-memory, /parallel/megatron-tp]
 stack: []
+train: [tr-p-pp]
 ---
 
 # Pipeline 并行调度：GPipe、1F1B、Interleaved、Zero Bubble、DualPipe

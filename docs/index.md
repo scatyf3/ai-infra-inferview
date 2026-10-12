@@ -11,6 +11,8 @@ hero:
       link: /flashcards
 ---
 
-<StackFigure />
+<StackFigure caption="推理栈：一个请求从上往下、再从下往上" />
+
+<StackFigure stack="train" caption="训练栈：从硬件到训练阶段" />
 
 <RoadmapFigure />

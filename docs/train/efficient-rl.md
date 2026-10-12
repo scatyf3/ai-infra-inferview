@@ -6,6 +6,7 @@ difficulty: 3
 order: 11
 related: [/posttrain/rl-infra, /posttrain/rl-async-rollout, /posttrain/rl-weight-sync, /posttrain/rl-train-infer-mismatch, /posttrain/rl-monitoring, /inference/prefill-decode-roofline, /inference/kv-cache-paged-attention, /posttrain/training-memory, /parallel/zero-fsdp]
 stack: []
+train: [tr-r-rlsys, tr-m-offload]
 ---
 
 # RL 训练提速：一步的时间拆开看，每一段怎么压

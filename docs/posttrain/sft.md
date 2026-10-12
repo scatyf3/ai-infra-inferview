@@ -6,6 +6,7 @@ difficulty: 2
 order: 1
 related: [/posttrain/training-memory, /posttrain/lora-qlora, /posttrain/rlhf-ppo-dpo-grpo, /leetgpu/variable-length-causal-attention, /leetgpu/mask, /parallel/parallelism-overview]
 stack: []
+train: [tr-r-sft, tr-d-pack]
 ---
 
 # SFT：Packing、Loss Mask、长上下文

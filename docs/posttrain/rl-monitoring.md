@@ -6,6 +6,7 @@ difficulty: 3
 order: 4.5
 related: [/posttrain/grpo-variants, /posttrain/rl-train-infer-mismatch, /posttrain/rl-infra, /posttrain/rlhf-ppo-dpo-grpo]
 stack: []
+train: [tr-r-rlalgo]
 ---
 
 # RL 训练监控与排障：看哪些曲线，坏了先查什么

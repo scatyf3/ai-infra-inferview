@@ -6,6 +6,7 @@ difficulty: 2
 order: 5
 related: [/inference/prefill-decode-roofline]
 stack: [k-lang]
+train: [tr-j-debug]
 ---
 
 # Profiling：nsys / ncu / torch profiler

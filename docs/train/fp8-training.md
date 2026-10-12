@@ -6,6 +6,7 @@ difficulty: 3
 order: 5
 related: [/posttrain/training-memory, /inference/quantization, /gpu/tensor-core-gemm, /parallel/zero-fsdp, /parallel/moe-ep]
 stack: []
+train: [tr-m-precision, tr-k-gemm]
 ---
 
 # FP8 训练：哪些算子用 FP8、scale 怎么定、DeepSeek-V3 改了什么

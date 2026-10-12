@@ -6,6 +6,7 @@ difficulty: 3
 order: 9
 related: [/train/compute-mfu, /train/stability, /train/fault-tolerance, /train/long-context, /posttrain/sft, /parallel/megatron-tp, /gpu/profiling]
 stack: []
+train: [tr-d-format, tr-d-mix, tr-d-pack, tr-d-loader]
 ---
 
 # 预训练数据管线：从 token 到 GPU，不让数据拖后腿

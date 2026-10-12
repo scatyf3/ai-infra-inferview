@@ -2,7 +2,7 @@ import { createContentLoader } from 'vitepress'
 // data loader 在 vite 别名之外单独打包，这里只能走相对路径
 import { isFamiliarity } from '../../../src/lib/fam'
 import leetgpu from '../../../src/data/leetgpu-challenges.json'
-import { LAYER_IDS, layerOfTopic } from '../layers'
+import { LAYER_IDS, TRAIN_LAYER_IDS, layerOfTopic, trainLayerOfTopic } from '../layers'
 
 const LEETGPU_IDS = new Set(leetgpu.map((c) => c.id))
 
@@ -28,6 +28,8 @@ export interface Topic {
   stack: (string | number)[]
   /** 由 stack 推出来的层号，升序去重；空 = 不在推理栈上 */
   layers: number[]
+  /** 挂在训练栈分层图的哪些位置：字符串 = 小主题 id（tr- 开头），数字 = 整层 */
+  train: (string | number)[]
 }
 
 declare const data: Topic[]
@@ -58,6 +60,11 @@ export default createContentLoader('*/*.md', {
           const ok = typeof s === 'number' ? LAYER_IDS.has(s) : layerOfTopic.has(s)
           if (!ok) throw new Error(`[topics] unknown stack entry "${s}" in ${p.url} (expected a layer 0–8 or a topic id from layers.ts)`)
         }
+        const train: (string | number)[] = fm.train ?? []
+        for (const s of train) {
+          const ok = typeof s === 'number' ? TRAIN_LAYER_IDS.has(s) : trainLayerOfTopic.has(s)
+          if (!ok) throw new Error(`[topics] unknown train entry "${s}" in ${p.url} (expected a layer 0–8 or a tr- topic id from layers.ts)`)
+        }
         const layers = [...new Set(stack.map((s) => (typeof s === 'number' ? s : layerOfTopic.get(s)!)))]
         const lg: number[] = fm.leetgpu ?? []
         for (const id of lg) {
@@ -78,6 +85,7 @@ export default createContentLoader('*/*.md', {
           leetgpu: lg,
           stack,
           layers: layers.sort((a, b) => a - b),
+          train,
         }
       })
       .sort((a, b) => a.domain.localeCompare(b.domain) || a.order - b.order || a.slug.localeCompare(b.slug))

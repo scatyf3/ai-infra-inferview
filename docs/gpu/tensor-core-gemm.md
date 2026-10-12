@@ -6,6 +6,7 @@ difficulty: 3
 order: 2
 related: [/gpu/gpu-architecture, /inference/prefill-decode-roofline, /handson/cuda-tiled-matmul, /gpu/triton, /inference/quantization]
 stack: [k-gemm, hw-gpu]
+train: [tr-k-gemm]
 ---
 
 # Tensor Core 与 GEMM Tiling

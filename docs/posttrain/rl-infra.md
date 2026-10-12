@@ -6,6 +6,7 @@ difficulty: 4
 order: 4
 related: [/posttrain/rlhf-ppo-dpo-grpo, /posttrain/grpo-variants, /posttrain/rl-async-rollout, /posttrain/rl-weight-sync, /posttrain/rl-train-infer-mismatch, /posttrain/rl-agentic, /posttrain/rl-monitoring, /posttrain/training-memory, /parallel/zero-fsdp, /inference/batching-scheduling]
 stack: [ld-load]
+train: [tr-r-rlsys]
 ---
 
 # RL Infra：Rollout 与 Training 分离

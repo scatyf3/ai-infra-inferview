@@ -6,6 +6,7 @@ difficulty: 4
 order: 2
 related: [/framework/pytorch-internals, /framework/cuda-graph, /gpu/cuda-graph-fusion, /gpu/triton, /inference/prefill-decode-roofline]
 stack: [f-graph]
+train: [tr-k-compile]
 ---
 
 # torch.compile：Dynamo / AOTAutograd / Inductor

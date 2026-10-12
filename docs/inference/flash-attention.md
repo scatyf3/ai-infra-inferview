@@ -6,6 +6,7 @@ difficulty: 4
 order: 5
 related: [/handson/online-softmax, /handson/stable-softmax, /inference/attention-variants, /inference/prefill-decode-roofline, /inference/kv-cache-paged-attention, /gpu/tensor-core-gemm, /gpu/profiling]
 stack: [k-attn]
+train: [tr-k-attn]
 ---
 
 # FlashAttention v1 / v2 / v3
