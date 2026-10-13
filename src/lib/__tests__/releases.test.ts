@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  DATASETS,
   RELEASE_TAGS,
   compareVersion,
   eras,
@@ -129,5 +130,39 @@ describe('vllm-releases.json integrity', () => {
   it('every era is used by at least one release', () => {
     const g = groupByEra(releases, eras)
     expect(g.map((x) => x.era.id)).toEqual(eras.map((e) => e.id))
+  })
+})
+
+describe('sglang-omni-releases.json integrity', () => {
+  const ds = DATASETS['sglang-omni']
+
+  it('sorted, unique versions, ISO dates, known tags', () => {
+    const versions = ds.releases.map((r) => r.version)
+    expect(new Set(versions).size).toBe(versions.length)
+    for (let i = 1; i < ds.releases.length; i++) expect(ds.releases[i - 1].date <= ds.releases[i].date).toBe(true)
+    for (const r of ds.releases) {
+      expect(r.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+      expect(r.tags.length).toBeGreaterThan(0)
+      for (const t of r.tags) expect(ds.tags, r.version).toContain(t)
+    }
+  })
+
+  it('every tag falls into one of the dataset filter groups', () => {
+    for (const t of ds.tags) expect(ds.groups.some((g) => ds.tagGroups[g].includes(t)), t).toBe(true)
+  })
+
+  it('milestones are complete; related paths exist; sources are https; every era used', () => {
+    const eraIds = new Set(ds.eras.map((e) => e.id))
+    for (const m of milestones(ds.releases)) {
+      expect(eraIds.has(m.era!), m.version).toBe(true)
+      for (const k of ['observation', 'scenario', 'how'] as const) expect(m[k]!.length, `${m.version}.${k}`).toBeGreaterThan(10)
+      expect(m.related?.length, m.version).toBeGreaterThan(0)
+    }
+    for (const r of ds.releases) {
+      for (const p of r.related ?? []) expect(existsSync(resolve(docsDir, p.slice(1) + '.md')), `${r.version}: ${p}`).toBe(true)
+      expect(r.sources?.length, r.version).toBeGreaterThan(0)
+      for (const s of r.sources ?? []) expect(s.startsWith('https://')).toBe(true)
+    }
+    expect(groupByEra(ds.releases, ds.eras).map((x) => x.era.id)).toEqual(ds.eras.map((e) => e.id))
   })
 })

@@ -54,6 +54,7 @@ export const overrides: Record<string, string> = {
   'framework/request-lifecycle': 'overview',
   'framework/vllm-v1-architecture': 'overview',
   'framework/vllm-release-history': 'overview',
+  'framework/sglang-omni': 'overview',
   'parallel/zero-fsdp': 'pretrain', // ZeRO / FSDP 是训练侧
   'posttrain/training-memory': 'pretrain', // 训练显存账是通用的，不限于 post-train
   'basics/system-design-llm-serving': 'overview',
@@ -105,6 +106,7 @@ export const sectionOrder: Record<string, string[]> = {
     'inference/speech-output',
     'inference/omni-duplex',
     'inference/dit-serving',
+    'framework/sglang-omni',
     'framework/vllm-release-history',
   ],
 }

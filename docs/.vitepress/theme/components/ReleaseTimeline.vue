@@ -2,16 +2,14 @@
 import { computed, ref } from 'vue'
 import { withBase } from 'vitepress'
 import {
-  FILTER_GROUPS,
-  GROUP_LABEL,
-  eras,
+  DATASETS,
   filterByGroup,
   groupByEra,
   groupOfTag,
   milestones,
-  releases,
   type FilterGroup,
   type Release,
+  type ReleaseDataset,
   type ReleaseTag,
 } from '@lib/releases'
 import { renderMarks } from '@lib/annotate'
@@ -24,9 +22,14 @@ const props = withDefaults(
     showEras?: boolean
     onlyMilestones?: boolean
     initialOpen?: string
+    dataset?: ReleaseDataset['id']
   }>(),
-  { view: 'timeline', group: 'all', showEras: true, onlyMilestones: false, initialOpen: undefined },
+  { view: 'timeline', group: 'all', showEras: true, onlyMilestones: false, initialOpen: undefined, dataset: 'vllm' },
 )
+
+const ds = computed(() => DATASETS[props.dataset])
+const releases = computed(() => ds.value.releases)
+const eras = computed(() => ds.value.eras)
 
 const mode = ref<'timeline' | 'table'>(props.view)
 const activeGroup = ref<FilterGroup | 'all'>(props.group)
@@ -53,21 +56,25 @@ const TAG_LABEL: Record<ReleaseTag, string> = {
   models: 'models',
   serving: 'serving',
   hardware: 'hardware',
+  pipeline: 'pipeline',
+  transport: 'transport',
+  streaming: 'streaming',
 }
 
 const visible = computed(() => {
-  const byGroup = filterByGroup(releases, activeGroup.value)
+  const byGroup = filterByGroup(releases.value, activeGroup.value, ds.value.tagGroups)
   return milestoneOnly.value ? milestones(byGroup) : byGroup
 })
-const grouped = computed(() => groupByEra(visible.value, eras))
-const totalMilestones = computed(() => milestones(releases).length)
+const grouped = computed(() => groupByEra(visible.value, eras.value))
+const totalMilestones = computed(() => milestones(releases.value).length)
 const span = computed(() => {
-  const first = releases[0]?.date.slice(0, 7) ?? ''
-  const last = releases[releases.length - 1]?.date.slice(0, 7) ?? ''
+  const rs = releases.value
+  const first = rs[0]?.date.slice(0, 7) ?? ''
+  const last = rs[rs.length - 1]?.date.slice(0, 7) ?? ''
   return `${first} → ${last}`
 })
 
-const tagColor = (t: ReleaseTag) => GROUP_COLOR[groupOfTag(t)]
+const tagColor = (t: ReleaseTag) => GROUP_COLOR[groupOfTag(t, ds.value.tagGroups)]
 const tagStyle = (t: ReleaseTag) => ({
   color: tagColor(t),
   borderColor: tagColor(t),
@@ -78,25 +85,25 @@ const isOpen = (r: Release) => open.value === r.version
 const hostOf = (url: string) => {
   const m = url.match(/^https?:\/\/([^/]+)\/(.*)$/)
   if (!m) return url
-  const tag = m[2].match(/releases\/tag\/(v[\d.]+)/)
+  const tag = m[2].match(/releases\/tag\/(v?[\d.]+)/)
   return tag ? `release ${tag[1]}` : m[1].replace(/^www\./, '')
 }
 </script>
 
 <template>
   <div class="widget rt">
-    <h4>vLLM 版本演进：{{ releases.length }} 个 minor 版本 · {{ totalMilestones }} 个里程碑</h4>
+    <h4>{{ ds.title }}：{{ releases.length }} 个{{ ds.unit }} · {{ totalMilestones }} 个里程碑</h4>
 
     <div class="row controls">
       <div class="toggle-group">
         <button :class="{ active: activeGroup === 'all' }" @click="activeGroup = 'all'">全部</button>
         <button
-          v-for="g in FILTER_GROUPS"
+          v-for="g in ds.groups"
           :key="g"
           :class="{ active: activeGroup === g }"
           :style="activeGroup === g ? { background: GROUP_COLOR[g], color: '#fff' } : {}"
           @click="activeGroup = g"
-        >{{ GROUP_LABEL[g] }}</button>
+        >{{ ds.groupLabel[g] }}</button>
       </div>
       <div class="toggle-group">
         <button :class="{ active: mode === 'timeline' }" @click="mode = 'timeline'">时间线</button>
@@ -106,10 +113,10 @@ const hostOf = (url: string) => {
     </div>
 
     <div class="grid stats">
-      <StatCard label="minor 版本" :value="String(releases.length)" :sub="span" />
+      <StatCard :label="ds.unit" :value="String(releases.length)" :sub="span" />
       <StatCard label="里程碑" :value="String(totalMilestones)" sub="带 observation / 场景 / 做法" tone="good" />
       <StatCard label="阶段" :value="String(eras.length)" sub="按瓶颈转移划分" />
-      <StatCard label="当前筛选" :value="String(visible.length)" :sub="activeGroup === 'all' ? '未筛选' : GROUP_LABEL[activeGroup]" :tone="visible.length ? 'default' : 'warn'" />
+      <StatCard label="当前筛选" :value="String(visible.length)" :sub="activeGroup === 'all' ? '未筛选' : ds.groupLabel[activeGroup]" :tone="visible.length ? 'default' : 'warn'" />
     </div>
 
     <p v-if="!visible.length" class="muted">这个筛选下没有版本。</p>
@@ -196,7 +203,7 @@ const hostOf = (url: string) => {
 
     <p class="muted note">
       大圆点（表格里带 ★）是里程碑，点开看这一版观察到了什么瓶颈、优化谁、怎么做；小圆点是功能累积版本，只给一行摘要和 release note 链接。
-      按类别筛选时看的是「这条线上的瓶颈怎么一步步转移」，比如选「调度」能看到 continuous batching → chunked prefill → multi-step → token-budget 统一调度 → async scheduling。
+      {{ ds.note }}
     </p>
   </div>
 </template>
