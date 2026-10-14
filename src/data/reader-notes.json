@@ -23,6 +23,17 @@
       "deleted": true
     }
   ],
+  "/ai-infra-inferview/framework/sglang-omni": [
+    {
+      "id": "mv7ctg1ho1z4",
+      "exact": "所以 SGLang-Omni 只管 stage 图、stage 生命周期、stage 间传输和 OpenAI 兼容 API；AR stage 内部的 continuous batching、radix cache、CUDA graph 直接复用 SGLang。",
+      "prefix": "，单个 TTS 也至少是「AR 主干 + vocoder」两级。",
+      "suffix": "SGLangSGLang-Omni调度单位一个 AR 模型的 b",
+      "note": "",
+      "created": 1791936654965,
+      "at": 1791936654965
+    }
+  ],
   "/ai-infra-inferview/handson/torch-primitives": [
     {
       "id": "murkt2qtx8ou",
