@@ -1,0 +1,309 @@
+{
+  "eras": [
+    {
+      "id": "2026h1-v1",
+      "label": "2026 H1 · 起步与 V1 重写",
+      "summary": "1 月从 ZMQ 控制面 + SHM/NIXL 数据面起步，3 月接入 SGLang 并跑通 Qwen3-Omni 语音输出和第一个 TTS（S2-Pro）；5 月 V1 pipeline 取代 V0，同卡 colocation 和拓扑感知传输压低 stage 间开销，6 月打出 0.1.0。"
+    },
+    {
+      "id": "2026summer-host",
+      "label": "2026 夏 · 产品化与 host 开销",
+      "summary": "上 PyPI，模型扩到十几个 TTS/ASR；GPU 计算已经不是瓶颈，瓶颈变成 stage 间搬运、GIL 争用、host sync 和 vocoder 读回，分别用 CUDA IPC、admission 攒批、拆进程、BCG 和异步 D2H 解决。"
+    },
+    {
+      "id": "2026sep-topology",
+      "label": "2026 年 9 月 · 部署拓扑与多硬件",
+      "summary": "部署方式从\"一个服务一套 pipeline\"变成可声明的进程/GPU 拓扑：process replica、原生 CUDA MPS、同卡权重共享、KV 绝对字节预算、Rust router、最小 PD；同时铺开 ROCm、MUSA、XPU、NPU、Apple。"
+    },
+    {
+      "id": "2026fall-session",
+      "label": "2026 秋 · 会话与全双工",
+      "summary": "请求从一次性变成长会话：session 生命周期、跨会话批量 append、MiniCPM-o 全双工；工程上补齐预热、CPU/NUMA 绑定和失败路径一致性；Voxt 把 ASR 带到 Mac 本地。"
+    }
+  ],
+  "releases": [
+    {
+      "version": "dev·01",
+      "date": "2026-01-06",
+      "headline": "骨架：ZMQ 控制面 + SHM 数据面；relay 接入 NIXL / NCCL；第一个真实模型是 Qwen3-Omni 的 encoder",
+      "tags": [
+        "pipeline",
+        "transport"
+      ],
+      "milestone": true,
+      "era": "2026h1-v1",
+      "observation": "README（2026-03）原文：omni 模型 \"typically consist of multiple stages, making SGLang's LLM-specific architecture no longer suitable\"。SGLang 的 scheduler 只会调度一个自回归模型，编码器、talker、vocoder 放不进去。",
+      "scenario": "多模态进、多模态出的 omni 模型，比如 Qwen3-Omni 的 encoder → thinker → talker → code2wav。",
+      "how": "第一个 commit 就是 \"add control panel and data panel on SHM\"：ZMQ + msgpack 只传 Submit / DataReady / Abort / Complete 这类小消息，张量写进共享内存。1 月里 relay 加了 NIXL（RDMA，从 Dynamo 搬来）和 p2p NCCL，并加了 credits 做流控；#28（01-27）接入 Qwen3-Omni encoder，#32 定下 typed pipeline state。2 月加了 Mooncake relay 和 worker 并发处理请求（#42，此前是串行）。",
+      "related": [
+        "/inference/omni-serving"
+      ],
+      "sources": [
+        "https://github.com/sgl-project/sglang-omni/commit/ddb9b7ecd",
+        "https://github.com/sgl-project/sglang-omni/pull/32",
+        "https://github.com/sgl-project/sglang-omni/pull/42"
+      ]
+    },
+    {
+      "version": "dev·03",
+      "date": "2026-03-04",
+      "headline": "AR stage 换成 SGLang 后端；S2-Pro 成为第一个 TTS；Qwen3-Omni talker + code2wav 跑通，stage 间 token 级流式",
+      "tags": [
+        "pipeline",
+        "streaming",
+        "models"
+      ],
+      "milestone": true,
+      "era": "2026h1-v1",
+      "observation": "自研的 AR runtime 没有 SGLang 的 radix cache、CUDA graph、continuous batching；语音输出要等 thinker 整段生成完才开始，首包太慢。",
+      "scenario": "Qwen3-Omni 的文本 + 语音输出；单 AR + vocoder 结构的 TTS（S2-Pro）。",
+      "how": "#120/#123（03-04）vendor SGLang 的 Qwen3-Omni thinker/talker，thinker 走 SGLang 后端；#132 把 ViT 的 Conv3d（kernel = stride）换成 reshape + Linear，\"10-15x speedup\"；#143 S2-Pro；03-17 一天合入 token 级 stage 间流式（#167）、talker + code predictor + code2wav（#168）、文本 + 音频流式输出（#169）和 overlap scheduler（#156，V1 上后来不再支持，由 lookahead async decode 取代）。#260 多模态占位 token 改用内容 hash 做 pad value，隔离 RadixCache。",
+      "related": [
+        "/inference/speech-output",
+        "/inference/kv-cache-paged-attention"
+      ],
+      "sources": [
+        "https://github.com/sgl-project/sglang-omni/pull/123",
+        "https://github.com/sgl-project/sglang-omni/pull/167",
+        "https://github.com/sgl-project/sglang-omni/pull/169",
+        "https://github.com/sgl-project/sglang-omni/pull/260"
+      ]
+    },
+    {
+      "version": "V1",
+      "date": "2026-05-02",
+      "headline": "V1 pipeline 重写，05-14 V0 退役：OmniScheduler 组合 SGLang Scheduler，talker / thinker CUDA graph 默认开",
+      "tags": [
+        "pipeline",
+        "scheduling",
+        "kernel"
+      ],
+      "milestone": true,
+      "era": "2026h1-v1",
+      "observation": "V0 的 talker 一次只服务一个请求（\"V0 talker was c=1 serial\"）；每个模型自带一套 scheduler（比如 FishScheduler），SGLang 的调度能力用不上。RFC #294 定的迁移原则是 \"every intermediate state has a working server\"。",
+      "scenario": "所有 AR stage：Qwen3-Omni 的 thinker / talker、各 TTS 的 AR 主干。",
+      "how": "#334 `--version v1`：链路变成 HTTP → Client → Coordinator → Stage →（Scheduler → ModelRunner）。AR stage 的 OmniScheduler 组合 SGLang Scheduler 的 get_next_batch_to_run / process_batch_result，只覆写 recv_requests 和 run_batch；非 AR stage 用 SimpleScheduler。#384 talker MoE 改走 FusedMoE，从而能用 piecewise CUDA graph，#387/#404 talker、thinker CUDA graph 默认开。同一台 H200 上 V0 → V1：\"SeedTTS talker: ~22-26x faster latency\"，\"MMSU thinker: ~1.4-1.5x faster\"（#411）。",
+      "related": [
+        "/framework/vllm-v1-architecture",
+        "/framework/cuda-graph"
+      ],
+      "sources": [
+        "https://github.com/sgl-project/sglang-omni/pull/334",
+        "https://github.com/sgl-project/sglang-omni/pull/435",
+        "https://github.com/sgl-project/sglang-omni/pull/411"
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "date": "2026-06-14",
+      "headline": "首个 tag：打包 1–6 月的工作。V1 之后的重点是同卡 colocation、拓扑感知传输、stage fusion、one-step lookahead async decode",
+      "tags": [
+        "pipeline",
+        "parallel",
+        "transport",
+        "streaming",
+        "models"
+      ],
+      "milestone": true,
+      "era": "2026h1-v1",
+      "observation": "V1 之后 stage 间开销成了主要矛盾：speech stage 不允许同卡放置，RFC 记录这 \"left Talker on H200 at <2% utilization long-term\"；同进程、同卡的 stage 之间张量也一律走 relay；Qwen3-Omni 的 `stream=true` 实际上是 no-op。",
+      "scenario": "thinker→talker→code2wav 的多阶段语音输出模型（Qwen3-Omni、Ming-Omni），以及 AR 主干 + vocoder 的 TTS（S2-Pro、Higgs、Qwen3-TTS、MOSS-TTS）。",
+      "how": "#430 colocation 按 per-stage `total_gpu_memory_fraction` 记账，不再依赖 SGLang 的 \"global free memory\"；#461 stage → placement → 进程 → GPU 的拓扑，TP 每 rank 一个进程，Coordinator 只和 rank 0 通信；#496 同进程走 LOCAL_OBJECT、同卡 stream chunk 走 CUDA IPC，relay 降为 fallback，text-only \"-33% mean latency\"；#589 stage fusion；#406 真流式；#475/#617 thinker 流出 3 个 chunk 后 talker 就开始（partial-prefix start）；#590 one-step lookahead async decode。release notes 漏收了 #143–#203，那段见 dev·03。",
+      "related": [
+        "/inference/omni-serving",
+        "/framework/vllm-v1-architecture"
+      ],
+      "sources": [
+        "https://github.com/sgl-project/sglang-omni/releases/tag/0.1.0"
+      ]
+    },
+    {
+      "version": "0.1.1",
+      "date": "2026-08-08",
+      "headline": "首个 PyPI 版本：NVLink CUDA-IPC 数据面、Lazy TensorRef、prefill admission coalescing、同卡 MPS DP + 权重共享、多进程 router；TTS 架构重构、RL 接口",
+      "tags": [
+        "transport",
+        "scheduling",
+        "parallel",
+        "serving",
+        "models"
+      ],
+      "milestone": true,
+      "era": "2026summer-host",
+      "observation": "#808 原文：视频场景 \"latency is dominated by inter-stage *delivery* of the large video embeddings, not compute\"，thinker 满队列空等约 140 s；同节点 GPU 张量要绕道 host 内存；Higgs 的 vocoder 与 scheduler 抢 GIL，\"prefill steps stretch +38% while it is active\"。",
+      "scenario": "视频理解这类 stage 间有大张量的请求；单卡高并发 TTS（小模型吃不满一张 H100）；需要 OpenAI speech API 或 RL rollout 的接入方。",
+      "how": "#869 CudaIpcRelay + TransportRouter：同进程传引用、同节点 GPU 间走 cuda_ipc、其余走 shm；#808 TensorRef 懒物化，\"latency_mean_s 160-179s -> 36-37s (~4.5x)\"；#1071 Higgs 三招（prefill 攒批 admission、vocoder 拆进程、compile codec decode）合计 \"48.5 -> 99.3 QPS (+105%)\"，#1073 推广到所有 AR stage；#986/#1124 同卡 DP + CUDA MPS + CUDA IPC 权重共享；#1049 多进程 CP/DP router；#908 thinker async decode；#1364 breakable prefill CUDA graph；OpenAI speech/voice/WebSocket API；RL weight sync、Miles /generate、统一 seed。新模型：MOSS-TD、Fun-ASR、ARK-ASR、ZONOS2、dots.tts、Ming-Omni-TTS。",
+      "related": [
+        "/inference/speech-output",
+        "/posttrain/rl-weight-sync"
+      ],
+      "sources": [
+        "https://github.com/sgl-project/sglang-omni/releases/tag/0.1.1"
+      ]
+    },
+    {
+      "version": "v0.1.2",
+      "date": "2026-08-16",
+      "headline": "paged KV 传输基础设施（CUDA IPC + TP rank-to-rank）；去掉 thinker prefill 的 host sync；BCG 推广到 thinker/ASR；接入 sglang serve；Intel XPU",
+      "tags": [
+        "transport",
+        "kernel",
+        "scheduling",
+        "hardware",
+        "models"
+      ],
+      "milestone": false,
+      "era": "2026summer-host",
+      "observation": "thinker prefill 在每个请求上都有 \"mask.any()/mask.sum().item()/torch.where host syncs on the prefill hot path\"；Code2Wav 的固定攒批里 \"waiting for future arrivals costs more than batching saves\"，可变窗口又让 graph bucket 匹配不上。",
+      "scenario": "Qwen3-Omni 多模态 prefill、流式语音输出的 vocoder，以及高并发 ASR。",
+      "how": "#1161 多模态 embedding merge 改为每 batch 一次 index_copy_；#1237 Code2Wav 按 chunk 对齐 dispatch，并批量 capture CUDA graph；BCG 覆盖 Thinker、Qwen3-ASR、MOSS-TD；ASR 加 prefill coalescing 和 bs=1 async lookahead；#1315/#1382 paged KV cache 传输（只走 CUDA IPC）和 TP rank-to-rank KV，为 PD 打底；#1235 code2wav 默认放到 thinker 的 GPU，让 talker 独占一卡；#1531 接入 sglang serve；Intel XPU、NPU talker；realtime barge-in。新模型：MiniMax Music 3。",
+      "related": [
+        "/inference/multimodal-encoder",
+        "/framework/cuda-graph"
+      ],
+      "sources": [
+        "https://github.com/sgl-project/sglang-omni/releases/tag/v0.1.2"
+      ]
+    },
+    {
+      "version": "v0.1.3",
+      "date": "2026-08-20",
+      "headline": "小版本：Code2Wav 读回与 vocoder launch 重叠、outbox 批量 drain、encoder 微批 + pinned 缓存；Fun-CosyVoice3",
+      "tags": [
+        "scheduling",
+        "streaming",
+        "kernel",
+        "models"
+      ],
+      "milestone": false,
+      "era": "2026summer-host",
+      "observation": "#1567 原文：默认路径（开 graph、关 batching）下，每个窗口的 waveform readback \"blocked the scheduler thread between vocoder launches\"，阻塞来自 pageable .cpu()、dtype 转换、序列化，以及每帧一次的 EOS .item()。",
+      "scenario": "Qwen3-Omni 流式语音输出（talker→code2wav）的 TTFA 和 ITL，以及 ASR 的 encoder 前置服务。",
+      "how": "#1567 depth-2 流水：在同一 stream 上异步 D2H 到 pinned slot，每个 slot 配一个 CUDA event，窗口 N-1 物化时窗口 N 已在计算，\"scheduler thread occupancy per window p50 8.98->0.65 ms at c1 (-93%)\"；#1384 每次唤醒 drain 所有就绪的 outbox 消息；#1564 encoder 微批等待 + 批内去重；#1591 pre-LM encoder 缓存放 pinned host memory；#1449 Qwen3-TTS 等待队列有界，超过上限快速拒绝；BCG 扩到 speech 和 MOSS-TTS。",
+      "related": [
+        "/inference/speech-output"
+      ],
+      "sources": [
+        "https://github.com/sgl-project/sglang-omni/releases/tag/v0.1.3"
+      ]
+    },
+    {
+      "version": "v0.1.4",
+      "date": "2026-09-01",
+      "headline": "Process replica、原生 CUDA MPS (off/on/auto)、canonical config core、Rust router 起步；去掉 mm_aggregate 一跳；ROCm / MUSA / Apple MLX",
+      "tags": [
+        "parallel",
+        "serving",
+        "pipeline",
+        "transport",
+        "hardware"
+      ],
+      "milestone": true,
+      "era": "2026sep-topology",
+      "observation": "单个 stage 成为瓶颈时，只能把整个服务复制一份；同卡多进程默认时间片轮转、互相抢 SM；Qwen3-Omni speech pipeline 里 mm_aggregate 是一次多余的 stage 跳转，thinker→talker 的流式 payload 也偏大。",
+      "scenario": "多 GPU 节点上 stage 负载不均的 Qwen3-Omni 部署；在 AMD、摩尔线程、Mac 上部署。",
+      "how": "#1175 process replica 复制完整 process group，由 coordinator 做副本绑定；#1635 原生 CUDA MPS，只给单卡非 TP 进程开，attach 失败时 \"fails closed instead of silently time-slicing\"；#1494 统一配置内核；#1818 Rust router；#1548 去掉 mm_aggregate hop，#1574 缩小 thinker→talker payload，#1628 encoder 条件攒批 + layer CUDA graph；#1724 radix tree 改用 lazy eviction heap；MOSS-TTS-Local 的 sampler 融合成单个 Triton kernel（\"8.21x at bs 8\"）；平台新增 ROCm、MUSA、Apple MLX/MPS。SGLang 0.5.18。",
+      "related": [
+        "/framework/serving-layer"
+      ],
+      "sources": [
+        "https://github.com/sgl-project/sglang-omni/releases/tag/v0.1.4"
+      ]
+    },
+    {
+      "version": "v0.1.5",
+      "date": "2026-09-10",
+      "headline": "per-stage KV 绝对字节预算、同卡副本原生 CUDA IPC 权重共享、Rust router 补齐 Omni 路由、vocoder/预处理拆进程；Qwen3-TTS 有状态增量 codec；AuK Day-0",
+      "tags": [
+        "parallel",
+        "serving",
+        "streaming",
+        "kernel",
+        "models",
+        "hardware"
+      ],
+      "milestone": false,
+      "era": "2026sep-topology",
+      "observation": "SGLang 的 mem_fraction_static 是 \"a fraction of remaining VRAM after weights load\"，多个 stage 依次加载时含义不清；Python 写的 vocoder 循环和预处理与 AR scheduler 共用解释器；流式 vocoder \"recomputed left context on every chunk\"，导致播放 underrun。",
+      "scenario": "单卡上多 stage、多副本的部署；高并发流式 TTS 的播放连续性。",
+      "how": "#1616 stage 声明 kv_cache_bytes / total_reserve_bytes，起副本前先做 preflight；#1892 同卡副本按 leader/follower 共享权重；拆进程：#1923 Qwen3-TTS 预处理 \"+23.0% at cap 64\"，#1924 MOSS-TTS vocoder \"about +70% single-replica throughput on H200\"；#1997 有状态增量 codec 默认开，\"1147 kernels to 356\"，underrun \"from 20.9% to 0.6-2.3%\"；Rust router 新增健康感知、Omni 请求分类、speech/realtime WebSocket（#1819–#1824）；#2041 TP stage 关 NCCL NVLS；#1910 talker KV pool 按自身 20 层估算；realtime 语义 VAD、ASR 实时转写。SGLang 0.5.19。",
+      "related": [
+        "/inference/memory-accounting",
+        "/inference/speech-output"
+      ],
+      "sources": [
+        "https://github.com/sgl-project/sglang-omni/releases/tag/v0.1.5"
+      ]
+    },
+    {
+      "version": "v0.1.6",
+      "date": "2026-09-17",
+      "headline": "最小 PD 分离（KV page handoff）；scheduler 空闲时阻塞等待；CosyVoice3 整个 Flow solver 走 CUDA graph；Nemotron VoiceChat 离线",
+      "tags": [
+        "scheduling",
+        "transport",
+        "kernel",
+        "models",
+        "hardware"
+      ],
+      "milestone": false,
+      "era": "2026sep-topology",
+      "observation": "#1809 原文：\"An idle scheduler wakes about a thousand times a second\"，Apple M4 上空闲的 ASR worker 占 \"4.11% of a core\"；prefill 和 decode 挤在同一个 stage，互相抢算力。",
+      "scenario": "端侧和低负载的常驻服务；想把 prefill 和 decode 拆到不同 stage 的部署。",
+      "how": "#1773 与模型无关的 KV page handoff：Prefill 侧的 KV 释放推迟到 scheduler 线程，Decode 侧 allocator 串行化，副本绑定随 handoff 传递（作者注明 \"GPU inference was not run\"，目前是框架层的最小实现）；#1809 inbox 为空时改成阻塞 get，默认唤醒间隔 20 ms；#2115 abort 的行过滤推迟到安全边界；CosyVoice3 整个 solver 的 Flow CUDA graph、packed Flow，streaming vocoder 作为 serving loop 的一步；长音频 ASR 加全局 admission cap；NPU 支持 Ming-Omni 和 Qwen3-TTS。",
+      "related": [
+        "/inference/batching-scheduling"
+      ],
+      "sources": [
+        "https://github.com/sgl-project/sglang-omni/releases/tag/v0.1.6"
+      ]
+    },
+    {
+      "version": "v0.1.7",
+      "date": "2026-09-28",
+      "headline": "pipeline 有了 session 生命周期，并桥接 SGLang streaming session；torch.compile 默认开；code2wav 并入 talker 进程走优先级 stream；MiniCPM-o 4.5、PersonaPlex-7B",
+      "tags": [
+        "pipeline",
+        "streaming",
+        "scheduling",
+        "kernel",
+        "models"
+      ],
+      "milestone": false,
+      "era": "2026fall-session",
+      "observation": "实时语音对话不是一次性请求，同一会话的多轮输入要复用 KV 和状态；code2wav 在独立进程里，每个窗口都要跨进程传一次；一个请求的 build 若跑完时本轮 admit 已结束，要多等一个 decode step 才能进 batch。",
+      "scenario": "realtime 和多轮语音 agent；colocated 部署的 Qwen3-Omni 和 Qwen3-TTS 的首包延迟。",
+      "how": "#2035 pipeline 支持 session 生命周期，#2069 桥接 SGLang streaming sessions，#2070 共享 realtime session 走 WebSocket；#2374 code2wav 默认跑在 talker 进程里，用优先级 stream，按 codes-ready event 排序；#2380 talker prefill 走 BCG；#2175 talker 交接只传 token id；#2073 talker admission 的 new-token 估计按语音长度截断；#2216 本轮 iteration 内 build 完成的请求立即 admit，\"first playable p50 at 20 rps 50.5 to 42.8 ms\"；#2212 torch.compile 默认开。SGLang 0.5.20。",
+      "related": [
+        "/framework/torch-compile",
+        "/inference/omni-duplex"
+      ],
+      "sources": [
+        "https://github.com/sgl-project/sglang-omni/releases/tag/v0.1.7"
+      ]
+    },
+    {
+      "version": "v0.1.8",
+      "date": "2026-10-12",
+      "headline": "MiniCPM-o 原生全双工、跨会话批量 append；stage 进程绑定 GPU 邻近 CPU、CPU 线程预算；预热完成才报 /health；大批失败路径修复；Voxt 原生 MLX 运行时",
+      "tags": [
+        "streaming",
+        "scheduling",
+        "parallel",
+        "models",
+        "hardware"
+      ],
+      "milestone": true,
+      "era": "2026fall-session",
+      "observation": "全双工对话里，很多会话同时追加小片段，逐个会话调用无法成批；多个 stage 进程在一台主机上争 CPU、跨 NUMA 访问；冷启动的第一批请求要承担 JIT 和 graph 的首次开销；abort 和 admin 操作在 TP 各 rank 上生效不一致，会导致请求挂起。",
+      "scenario": "全双工语音助手（MiniCPM-o、Nemotron VoiceChat realtime）；多 GPU 主机上的多 stage 部署；Mac 本地 ASR。",
+      "how": "#2377 MiniCPM-o native full-duplex（session unit、跨 unit 复用 KV、Token2Wav 带状态流式）；#2534 按会话限额 session state，#2535 \"Batch session appends across sessions\"；#2636 每个 stage 进程绑定到其 GPU 附近的 CPU，#2439 给最终各 worker 分配 CPU 线程预算；#2686 预热完成才报 ready；#2638 bs=1 时默认开 decode lookahead，#2637 thinker prefill BCG 默认开；code2wav 窗口拷贝完即发、同长度窗口一次 replay（#2545/#2628）；abort/admin 在每个 TP rank 同一 pass 生效（#2510/#2643）；/v1/audio/speech 支持 SSE；Voxt 原生 C++ MLX ASR 运行时。SGLang 0.5.21。",
+      "related": [
+        "/inference/omni-duplex"
+      ],
+      "sources": [
+        "https://github.com/sgl-project/sglang-omni/releases/tag/v0.1.8"
+      ]
+    }
+  ]
+}

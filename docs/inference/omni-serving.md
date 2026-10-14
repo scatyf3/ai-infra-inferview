@@ -4,7 +4,7 @@ status: draft
 tags: [omni, multimodal, serving, tts]
 difficulty: 4
 order: 10
-related: [/inference/multimodal-encoder, /inference/speech-output, /inference/omni-duplex, /inference/dit-serving, /inference/batching-scheduling, /inference/kv-cache-paged-attention, /inference/metrics-benchmark]
+related: [/framework/sglang-omni, /inference/multimodal-encoder, /inference/speech-output, /inference/omni-duplex, /inference/dit-serving, /inference/batching-scheduling, /inference/kv-cache-paged-attention, /inference/metrics-benchmark]
 stack: []
 ---
 
@@ -111,6 +111,8 @@ async_chunk 开和关的对比（作者自测，2 × 2 张 H100）：
 | 32 | 508 / 3420 ms | 72.6 / 136.6 s |
 
 并发高时差距最大：不开的话每一级都要等上一级整段做完，排队一层层叠加。2 张 H200 上，并发从 1 到 32，首包从 212 ms 涨到 500 ms，RTF 从 0.08 涨到 0.21（新的 model runner）。
+
+**SGLang-Omni** 是同一思路的另一个实现：AR stage 借用 SGLang 的调度器，stage 间传输按拓扑自动选（同进程传引用、同卡 CUDA IPC、SHM、Mooncake），并把同卡多副本 + MPS 当成一等公民。架构、优化 trick 和版本演进见 [SGLang-Omni](/framework/sglang-omni)。
 
 全双工会话、打断和容量见 [全双工语音服务](/inference/omni-duplex)；输出侧的图像、视频生成（扩散 stage）见 [DiT 推理与 Serving](/inference/dit-serving)。
 
