@@ -32,6 +32,15 @@
       "note": "",
       "created": 1791936654965,
       "at": 1791936654965
+    },
+    {
+      "id": "mv7cttq5d2jn",
+      "exact": "和纯 LLM serving 最大的不同是瓶颈在 host，不在 GPU：模型小（0.6–4B），batch 又被首包延迟卡小，GPU 大部分时间在等 CPU。所以大部分优化都在砍 host 开销（CUDA graph 覆盖多码本内循环、one-step lookahead、合并 D2H、拆进程躲 GIL、同卡多副本 + MPS），再加上语音特有的几件事：首包、播放不卡顿、参考音色缓存。",
+      "prefix": "；stage 之间是 ZMQ 控制面 + 按拓扑自动选的数据面。",
+      "suffix": "1. 定位：为什么不直接用 SGLang 2026-03 的 R",
+      "note": "",
+      "created": 1791936672702,
+      "at": 1791936672702
     }
   ],
   "/ai-infra-inferview/handson/torch-primitives": [
