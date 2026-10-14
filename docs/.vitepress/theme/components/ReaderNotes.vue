@@ -19,11 +19,11 @@ import { syncState, syncsToGitHub, useSyncedDoc } from '../sync'
  * 用文本锚点（原文 + 前后文）定位，文档小改后仍能找回。
  * 存储：src/data/reader-notes.json，改动先存本机，再在设备间同步（GitHub / 本机仓库文件，见 ../sync.ts）。
  * 删除留删除记录，合并时才盖得过别的设备上的旧副本（见 src/lib/readerNotes.ts）。
- * 交互 widget（.widget）里的 DOM 由 Vue 管理，不往里插 mark。
+ * 交互 widget（.widget）和栈图（.sf，面板点开才渲染）里的 DOM 由 Vue 管理，不往里插 mark，也不让在里面划词。
  */
 
 const ROOT = '.vp-doc'
-const SKIP = '.widget, .rn-ui, .anno-note, .header-anchor, script, style'
+const SKIP = '.widget, .sf, .rn-ui, .anno-note, .term-note, .header-anchor, script, style'
 
 const route = useRoute()
 const ready = ref(false)

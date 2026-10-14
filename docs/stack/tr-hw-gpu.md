@@ -4,7 +4,16 @@ title: "GPU 算力与精度"
 
 # GPU 算力与精度
 
-训练的算力上限由 Tensor Core 在所用精度下的 dense 峰值决定：H100 SXM bf16 989 TFLOP/s，fp8 翻倍。MFU 就是实际有效 FLOP/s 除以这个峰值，所以报 MFU 时分母要和训练精度对上。
+我们存在一个GPU硬件的算力上限，given这个上限和我们想使用的精度，我们可以计算出训练的计算峰值，TFLOP/s。
 
-- **精度**：bf16 是默认，fp8 只加速 GEMM，其余算子不变。
-- **SM 与 HBM**：非 GEMM 算子受 HBM 带宽限制，是 MFU 上不去的原因之一。
+$$
+\text{峰值 FLOP/s} = \text{SM 个数} \times \text{每个 SM 每个时钟周期能做的 FLOP（看精度）} \times \text{时钟频率}
+$$
+
+以 H100 SXM 为例：
+
+| 精度 | 每个 SM 每周期的 FLOP | × 132 SM × 1.83 GHz |
+|---|---|---|
+| bf16 | 512 FMA × 2 × 4 个 Tensor Core = 4096 | ≈ 989 TFLOP/s |
+| fp8 | 1024 FMA × 2 × 4 = 8192 | ≈ 1979 TFLOP/s |
+

@@ -131,6 +131,46 @@ mark.anno:focus .anno-note,
 mark.anno:focus-within .anno-note { display: block; }
 mark.anno:focus { outline: 2px solid var(--vp-c-brand-1); outline-offset: 1px; }
 
+/* ---------- 术语悬浮提示（markdown/glossary.ts） ---------- */
+.term {
+  position: relative;
+  cursor: help;
+  border-bottom: 1.5px dotted var(--vp-c-brand-1);
+}
+.term .term-note {
+  display: none;
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  top: calc(100% + 6px);
+  width: max-content;
+  max-width: min(340px, 80vw);
+  padding: 8px 10px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background: var(--vp-c-bg-elv);
+  box-shadow: var(--vp-shadow-3);
+  color: var(--vp-c-text-1);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.6;
+  white-space: normal;
+  cursor: auto;
+}
+/* 盖住术语和提示框之间 6px 的空隙，鼠标移过去点「详见」时提示框不消失 */
+.term .term-note::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -7px;
+  height: 7px;
+}
+.term:hover .term-note,
+.term:focus .term-note,
+.term:focus-within .term-note { display: block; }
+.term:focus { outline: 2px solid var(--vp-c-brand-1); outline-offset: 1px; }
+
 /* ---------- 读者侧划词高亮（ReaderNotes.vue） ---------- */
 html mark.rn-hl {
   background: var(--vp-c-green-soft) !important;

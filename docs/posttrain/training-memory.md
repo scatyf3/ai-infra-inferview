@@ -15,9 +15,27 @@ train: [tr-m-account, tr-m-recompute, tr-m-precision]
 
 ## 一句话结论
 
-训练显存 = **模型状态**（参数、梯度、优化器状态，和数据无关，只看参数量）+ **激活**（forward 留给 backward 用的中间结果，随 batch、序列长度、层数涨）+ 临时 buffer 与碎片。混合精度 Adam 下模型状态是**每参数 16 字节**，7B 就是 112 GB；激活按 [Korthikanti et al. 2022](https://arxiv.org/abs/2205.05198) 的公式是每层 $sbh(34 + 5as/h)$ 字节，7B、seq 4k、micro-batch 1 时约 104 GB。FlashAttention 去掉 $s^2$ 项后剩约 18 GB，gradient checkpointing 再压到约 1 GB，代价是多算一次 forward（约 +33% 计算）。
+训练显存 = **模型状态**（参数、梯度、优化器状态，和数据无关，只看参数量）+ **激活**（forward 留给 backward 用的中间结果，随 batch、序列长度、层数涨）+ 临时 buffer 与碎片。
 
-## 推导
+混合精度 Adam 下模型状态是**每参数 16 字节**，7B 就是 112 GB；激活按 [Korthikanti et al. 2022](https://arxiv.org/abs/2205.05198) 的公式是每层 $sbh(34 + 5as/h)$ 字节，7B、seq 4k、micro-batch 1 时约 104 GB。FlashAttention 去掉 $s^2$ 项后剩约 18 GB，gradient checkpointing 再压到约 1 GB，代价是多算一次 forward（约 +33% 计算）。
+
+## 通用公式
+
+面试和估算时最常用的就是两个数：模型状态 **16 字节 / 参数**，激活约 **$34h$ 字节 / token / 层**（有 FlashAttention、不重算）。下面的公式把它们和各种优化放到一起，每一项的来历见后面的「推导」。
+
+单卡显存（不含 buffer），数据并行度 $N$：
+
+$$
+M \approx \underbrace{\Psi \cdot B_{\text{state}}}_{\text{模型状态}} + \underbrace{L \cdot sbh \cdot c}_{\text{激活}} + \underbrace{2sbV}_{\text{logits}}
+$$
+
+- $B_{\text{state}}$：每参数字节数，全参 Adam 是 16，ZeRO / LoRA 下的取值见「推导」里的「ZeRO / FSDP、LoRA 怎么改这本账」。
+- $c$：每层激活系数。不重算 $34 + 5as/h$；FlashAttention 或 selective $34$；full recomputation $2$（另加重算时一层的峰值）。
+- 有 TP 度 $t$ 且开 sequence parallel 时，$c$ 再除以 $t$。
+- **$c$ 和模型结构有关**：34 是论文按 GPT-3 式结构（LayerNorm、$4h$ GeLU MLP、dropout、MHA）数的。Llama 式结构（RMSNorm、SwiGLU、无 dropout、GQA）用同样方法数，记 $g = n_{kv}/n_{\text{heads}}$、$i$ 为 FFN 中间维：两个 norm 的输入 4，attention（QKV 共享输入、$Q$、$K$、$V$、输出投影输入）$6 + 4g$，SwiGLU（共享输入、gate 输出、up 输出、down 输入）$2 + 6i/h$，合计 $c \approx 12 + 4g + 6i/h$（自己数的，非论文数字）。Llama 2 7B（$g=1$，$i/h=2.69$）32.1；Llama 3 8B（$g=0.25$，$i/h=3.5$）34；Llama 3 70B（$g=0.125$）33.5。dense 模型基本落在 32–34，估算直接用 34。
+- **MoE**：$\Psi$ 用**总参数量**（所有专家都要存权重、梯度和优化器状态），DeepSeek-V3 按 671B 算而不是激活的 37B；激活里 FFN 项换成 $6k\,i_e/h$（$k$ 个激活专家，$i_e$ 为单个专家中间维），另加 token 分发 / 重排的 buffer。
+- **logits 项看词表**：$V = 32\text{k}$（Llama 2）时 $s = 4096$ 一条样本 0.26 GB；$V = 128\text{k}$（Llama 3）时 1.05 GB，cross-entropy upcast 到 fp32 再加 2.1 GB，比一整层激活（0.57 GB）还大。大词表常用分块 / fused cross-entropy，不一次实例化完整 logits。
+- **激活和 $b$ 成正比**：gradient accumulation 就是用小 $b$ 多跑几次 forward/backward 再更新，等效 batch 不变，激活按小 $b$ 算。
 
 ### 记号约定
 
@@ -33,6 +51,36 @@ train: [tr-m-account, tr-m-recompute, tr-m-precision]
 | $t$ | tensor parallel 度 | 1 |
 
 单位：本页 GB 指 $10^9$ 字节，和 [ZeRO / FSDP](/parallel/zero-fsdp) 页的 $7 \times 16 = 112$ GB 保持一致。
+
+## 算一笔：7B 全参微调，seq 4096，micro-batch 1，单卡
+
+模型状态：$7\times10^9 \times 16 = 112$ GB。
+
+激活（$sbh = 4096 \times 1 \times 4096 = 1.68\times10^7$）：
+
+| 项 | 公式 | 每层 | ×32 层 |
+|---|---|---|---|
+| 线性项 | $34sbh$ | 0.57 GB | 18.3 GB |
+| 平方项 | $5as^2b = 5 \times 32 \times 4096^2$ | 2.68 GB | 85.9 GB |
+| 合计（不重算） | | 3.25 GB | **104.2 GB** |
+| FlashAttention / selective | $34sbh$ | 0.57 GB | **18.3 GB** |
+| full recomputation | $2sbh$ | 0.034 GB | **1.07 GB**（+ 重算时一层的 0.57 GB） |
+
+再加 logits 约 0.26–0.5 GB。汇总：
+
+| 配置 | 模型状态 | 激活 | 合计（不含 buffer） |
+|---|---|---|---|
+| 朴素 attention，不重算 | 112 | 104 | ~216 GB |
+| FlashAttention | 112 | 18 | ~131 GB |
+| FlashAttention + full checkpointing | 112 | ~1.6 | ~114 GB |
+| 上一行 + ZeRO-3 8 卡 | 14 | ~1.6 | ~16 GB / 卡 |
+
+结论：
+- seq 4k 下，不用 FlashAttention 时激活和模型状态一样大，$s^2$ 项占了激活的 80%。
+- 把激活压干净以后，单卡依然放不下 112 GB 的模型状态。激活省不了模型状态，模型状态要靠 ZeRO 切。
+- 序列翻倍：平方项 ×4、线性项 ×2。$s=8192$ 时不重算要 380 GB 激活，FlashAttention 下 36.5 GB。
+
+## 推导
 
 ### 第 0 步：训练比推理多存了什么
 
@@ -81,6 +129,12 @@ train: [tr-m-account, tr-m-recompute, tr-m-precision]
 
 ### fp16 要 loss scaling，bf16 不要
 
+先 recap 一下：16 位里 1 位符号，剩下 15 位在指数和尾数之间分。**指数位决定范围，尾数位决定精度**。
+
+1. **bf16 是 e8m7**：指数和 fp32 一样 8 位，范围相同（最大约 $3.4\times10^{38}$）；尾数只有 7 位，精度粗。
+2. **fp16 是 e5m10**：尾数 10 位，精度比 bf16 高 8 倍；指数只有 5 位，最大 65504，最小正规数 $6.1\times10^{-5}$，范围窄。
+3. 主流混合精度训练用 bf16。fp16 主要见于没有 bf16 Tensor Core 的老卡（V100、T4，bf16 从 A100 才有）；另外 RL 微调为了减小训推不一致又回到 fp16（见 [训推不一致](/posttrain/rl-train-infer-mismatch)），而 fp8 的逐张量 / 逐块 scale 是下面 loss scaling 的推广。
+
 fp16 的问题不只是精度，还有**范围**：指数位只有 5 位，最小正规数 $6.1\times10^{-5}$，最小非正规数 $2^{-24} \approx 6\times10^{-8}$，再小就下溢成 0。[Micikevicius et al.](https://arxiv.org/abs/1710.03740) 统计了激活梯度的分布，发现有相当一部分落在 fp16 表示范围之下（作者自测）。
 
 Loss scaling：反向前把 loss 乘一个大数 $S$（比如 $2^{16}$），由链式法则所有梯度都放大 $S$ 倍，挪进 fp16 的表示范围；更新前在 fp32 里除回 $S$。动态版本：梯度出现 inf/NaN 就跳过这一步并把 $S$ 减半，连续若干步正常就加倍。
@@ -102,6 +156,38 @@ bf16 的指数位和 fp32 一样是 8 位，范围相同，小梯度不会下溢
 两种格式的范围都远比 bf16 窄，所以每个张量还要配一个 fp32 的缩放系数，先把数值挪到格式能表示的范围里再 cast。
 
 ### 激活：一层存了哪些张量
+
+**TL;DR**： 只存每个算子 backward 要用的。方法是把一层 forward 写出来，逐行按下表标出存什么，再把 $sbh$ 项和 $s^2$ 项分开加。
+
+| 算子 | 存什么 | 原因 |
+|---|---|---|
+| Linear $y = xW$ | 输入 $x$ | $dW = x^\top dy$ |
+| 矩阵乘 $QK^\top$、$PV$ | 两个输入 | 两边都要求梯度 |
+| GeLU / SiLU | 输入 | 导数是输入的函数 |
+| softmax | **输出** | 导数 $p \odot (dp - \langle p, dp\rangle)$ 只用输出 |
+| dropout | mask（1 字节 / 元素） | 反向按同一个 mask 乘 |
+| LayerNorm / RMSNorm | 输入（每行统计量可忽略） | 反向要重算归一化 |
+| 残差加 | 不存 | 导数是 1 |
+
+同一个张量被几个算子共用时只存一份（如 Q、K、V 共享输入）。一层 GPT 式 block 按这个方法数下来：
+
+```python
+x1 = LayerNorm(x)          # x                  2sbh
+q, k, v = x1 @ W_qkv       # x1                 2sbh
+S = q @ k.T                # q, k               4sbh
+P = softmax(S)             # P                  2as²b   ← s²
+P = dropout(P)             # mask               as²b    ← s²
+o = P @ v                  # dropout 后的 P, v  2as²b + 2sbh   ← s²
+y = dropout(o @ W_o)       # o, mask            2sbh + sbh
+x2 = LayerNorm(x + y)      # x + y              2sbh
+u = x2 @ W_1               # x2                 2sbh
+g = gelu(u)                # u（4h 维）         8sbh
+z = dropout(g @ W_2)       # g（4h 维）, mask   8sbh + sbh
+```
+
+线性项 $2+2+4+2+3+2+2+8+9 = 34$，平方项 $2+1+2 = 5$，即每层 $sbh(34 + 5as/h)$ 字节。FlashAttention 去掉标 `← s²` 的三行；full recompute 只留第一行的 $x$。不想手数可以用 `torch.autograd.graph.saved_tensors_hooks` 在 pack 时累加 `numel() * element_size()` 实测（同一 storage 会被重复计，要按 `data_ptr` 去重）。
+
+下面是论文逐项的明细。
 
 [Korthikanti et al. 2022](https://arxiv.org/abs/2205.05198) 对 GPT 式结构（LayerNorm、4h 的 GeLU MLP、带 dropout）逐个数了 backward 要用的张量。约定：激活存 16 位（每元素 2 字节），dropout mask 每元素 1 字节；$sbh$ 是一个 $[s, b, h]$ 张量的元素数，所以一个 bf16 的 $[s,b,h]$ 张量是 $2sbh$ 字节。
 
@@ -134,7 +220,7 @@ $$
 再乘层数 $L$ 就是总激活（论文式 (5)，$t=1$ 时）。embedding、最后的 LayerNorm、输出 logits 不在式里，单独算：logits 是 $[s, b, V]$，bf16 下 $2sbV$ 字节，7B、$s=4096$ 是 0.26 GB，cross-entropy 若 upcast 到 fp32 再翻倍。
 
 ::: tip Llama 式结构的常数
-Llama 没有 dropout、用 RMSNorm 和 SwiGLU（中间维 $i = 11008 \approx 2.69h$），同样的方法自己数（非论文数字）：attention 去掉两个 mask 和 dropout 输出，剩 $10sbh + 2as^2b$；SwiGLU 存 gate/up 共享输入 $2sbh$、gate 输出 $2sbi$、up 输出 $2sbi$、down 的输入 $2sbi$，约 $2sbh + 6sbi \approx 18sbh$；两个 norm $4sbh$。合计约 $32sbh + 2as^2b$。和 34 差得不多，下面的例子直接用论文公式。
+Llama 没有 dropout、用 RMSNorm 和 SwiGLU（中间维 $i = 11008 \approx 2.69h$），同样的方法自己数（非论文数字）：attention 去掉两个 mask 和 dropout 输出，剩 $10sbh + 2as^2b$；SwiGLU 存 gate/up 共享输入 $2sbh$、gate 输出 $2sbi$、up 输出 $2sbi$、down 的输入 $2sbi$，约 $2sbh + 6sbi \approx 18sbh$；两个 norm $4sbh$。合计约 $32sbh + 2as^2b$。和 34 差得不多，本页的例子直接用论文公式。
 :::
 
 ### FlashAttention 为什么能去掉 $s^2$ 项
@@ -190,47 +276,6 @@ $$
 论文实测（作者自测）：22B 模型单层 forward+backward，selective 开销 7%，full 39%；配合 sequence parallel 后 selective 降到 4%。有 TP / SP 时每层激活还会再除以 $t$，完整表见论文 Table 2，TP / SP 本身见 [Megatron TP](/parallel/megatron-tp)。
 
 用了 FlashAttention 就等于已经白拿了 selective recomputation，再要省只能上 full。
-
-### 算一笔：7B 全参微调，seq 4096，micro-batch 1，单卡
-
-模型状态：$7\times10^9 \times 16 = 112$ GB。
-
-激活（$sbh = 4096 \times 1 \times 4096 = 1.68\times10^7$）：
-
-| 项 | 公式 | 每层 | ×32 层 |
-|---|---|---|---|
-| 线性项 | $34sbh$ | 0.57 GB | 18.3 GB |
-| 平方项 | $5as^2b = 5 \times 32 \times 4096^2$ | 2.68 GB | 85.9 GB |
-| 合计（不重算） | | 3.25 GB | **104.2 GB** |
-| FlashAttention / selective | $34sbh$ | 0.57 GB | **18.3 GB** |
-| full recomputation | $2sbh$ | 0.034 GB | **1.07 GB**（+ 重算时一层的 0.57 GB） |
-
-再加 logits 约 0.26–0.5 GB。汇总：
-
-| 配置 | 模型状态 | 激活 | 合计（不含 buffer） |
-|---|---|---|---|
-| 朴素 attention，不重算 | 112 | 104 | ~216 GB |
-| FlashAttention | 112 | 18 | ~131 GB |
-| FlashAttention + full checkpointing | 112 | ~1.6 | ~114 GB |
-| 上一行 + ZeRO-3 8 卡 | 14 | ~1.6 | ~16 GB / 卡 |
-
-结论：
-- seq 4k 下，不用 FlashAttention 时激活和模型状态一样大，$s^2$ 项占了激活的 80%。
-- 把激活压干净以后，单卡依然放不下 112 GB 的模型状态。激活省不了模型状态，模型状态要靠 ZeRO 切。
-- 序列翻倍：平方项 ×4、线性项 ×2。$s=8192$ 时不重算要 380 GB 激活，FlashAttention 下 36.5 GB。
-
-### 通用公式
-
-单卡显存（不含 buffer），数据并行度 $N$：
-
-$$
-M \approx \underbrace{\Psi \cdot B_{\text{state}}}_{\text{模型状态}} + \underbrace{L \cdot sbh \cdot c}_{\text{激活}} + \underbrace{2sbV}_{\text{logits}}
-$$
-
-- $B_{\text{state}}$：每参数字节数，按下节的表取。
-- $c$：每层激活系数。不重算 $34 + 5as/h$；FlashAttention 或 selective $34$；full recomputation $2$（另加重算时一层的峰值）。
-- 有 TP 度 $t$ 且开 sequence parallel 时，$c$ 再除以 $t$。
-- **激活和 $b$ 成正比**：gradient accumulation 就是用小 $b$ 多跑几次 forward/backward 再更新，等效 batch 不变，激活按小 $b$ 算。
 
 ### ZeRO / FSDP、LoRA 怎么改这本账
 

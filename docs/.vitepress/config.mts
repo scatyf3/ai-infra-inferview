@@ -2,6 +2,7 @@ import { defineConfig } from 'vitepress'
 import { fileURLToPath } from 'node:url'
 import { buildSidebar } from './sidebar'
 import { markPlugin } from './markdown/mark'
+import { glossaryPlugin } from './markdown/glossary'
 import { dataStore } from './dataStore'
 
 const BASE = '/ai-infra-inferview/'
@@ -31,6 +32,7 @@ export default defineConfig({
     lineNumbers: false,
     config: (md) => {
       md.use(markPlugin)
+      md.use(glossaryPlugin)
     },
   },
   themeConfig: {

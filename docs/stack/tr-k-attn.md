@@ -8,3 +8,5 @@ FlashAttention 的 forward 分块算 softmax，只存输出和每行的 logsumex
 
 - **causal**：只算下三角，实际 FLOPs 是满额的一半。
 - **长序列**：CP 把 attention 拆到多卡，各块结果用 online softmax 合并。
+
+反向怎么只靠 $O$ 和 LSE 重算、$D = \text{rowsum}(dO \circ O)$ 的推导、分块伪代码和 FLOPs 账，见 [FlashAttention backward](/train/flash-attention-backward)。

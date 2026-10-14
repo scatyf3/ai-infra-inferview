@@ -13,9 +13,23 @@ train: [tr-k-attn]
 
 > tiling + online softmax，为什么省的是 HBM 访问而不是 FLOPs；v2 改了什么切分；v3 怎么用 Hopper；decode 用的 FlashDecoding
 
-## 一句话结论
 
-标准 attention 要把 $S \times S$ 的 score 矩阵写到 HBM 再读回来做 softmax，FlashAttention 用 tiling 把 Q、K、V 分块搬进 SRAM，用 online softmax 在块之间增量更新 max 和分母，整个过程不把 score 矩阵写回 HBM。FLOPs 没少，省的是 HBM 读写：下面的例子里，标准实现的算术强度约 63 FLOP/B，是 memory-bound；FlashAttention 把它推到约 4000 FLOP/B，变成 compute-bound。之后的 v2、v3 不再省字节，而是想办法把 tensor core 用满。
+## tldr
+
+1. 标准 attention 要把 $S \times S$ 的 score 矩阵写到 HBM 再读回来做 softmax，FlashAttention 用 tiling 把 Q、K、V 分块搬进 SRAM，用 online softmax 在块之间增量更新 max 和分母，整个过程不把 score 矩阵写回 HBM。
+2. FLOPs 没少，省的是 HBM 读写：下面的例子里，标准实现的算术强度约 63 FLOP/B，是 memory-bound；FlashAttention 把它推到约 4000 FLOP/B，变成 compute-bound。之后的 v2、v3 不再省字节，而是想办法把 tensor core 用满。
+3. FA1: online softmax
+4. FA2: 对Q tile load全部kv，节省写partial result，允许split k（在seqlen维度切分）
+5. 后面就是各种硬件特性
+
+online softmax可以理解为attention的tiling吗，还是对reduce操作的并行化？
+两种说法都不够准确。更贴切的理解是：online softmax 把 softmax 改写成了一个可以分块合并的 reduce。有了这个性质，FlashAttention 才能做 tiling；同样因为这个性质，这个 reduce 才能并行。所以它是这两件事的前提，本身既不是 tiling，也不是并行化。
+
+如果没online softmax，我们如何尽我们最大努力tiling？
+1. 早期fused softmax只切Q的seqlen维度，每个token的softmax互不相关，但是k不切分，所以score是[B,H,Sq,Sfull]，单个threadblock要放下 [Br, Sk]，这一项随 Sk 增长，所以 SRAM 放不下无法常驻sram，q读一遍
+2. 另外一个做法是两次，pass1 求max，pass2 做标准 tiled matmul，这样每个k重复读了两遍
+
+
 
 ## 推导
 
@@ -73,32 +87,64 @@ $$
 有了这个递推，一个 Q 块（$B_r$ 行）可以常驻 SRAM，让 K/V 一块一块流过，每块的 score 只是 $B_r \times B_c$ 的小 tile，算完就丢。前向伪代码（v2 的循环顺序，下节解释），单个 head：
 
 ```python
+# fused attention, directly compute O based on QKV
 def flash_attn_fwd(Q, K, V, Br=128, Bc=128, causal=True):
-    S, d = Q.shape                              # 行主序，每行一个 token
-    O, LSE = zeros(S, d), zeros(S)
-    # 每个 Q 块交给一个 thread block，块之间并行
+    # batch and head is parallelized internally
+    # Q: [S,d]
+    S, d = Q.shape 
+    # allocate output and partial sum                             
+    O, LSE = torch.empty_like(Q), Q.new_empty(S)
+    # assign each Q to a thread block, parallel compute(but write as for demo)
+    # tiled Q: [Br,d]
     for q0 in range(0, S, Br):
-        q = load(Q[q0:q0+Br])                   # HBM -> SRAM，只读一次
-        m = full(Br, -inf); l = zeros(Br); acc = zeros(Br, d)   # 都在寄存器里
-        k_end = q0 + Br if causal else S        # causal：右上方整块被 mask 的 tile 直接跳过
+        # load current q tile from HBM to SRAM
+        q = load(Q[q0:q0+Br])
+        # local max, row sum , output for v
+        # m: [Br], l: [Br] , acc: [Br,d]
+        # for each query, we have ,max/sum/output
+        m = Q.new_full((Br,), -torch.inf)
+        l = Q.new_zeros(Br)
+        acc = Q.new_zeros(Br, d)
+        # if causal, we only care about current tile
+        # compute [0,k_end] if causal(skip upper), else full attention without mask
+        k_end = q0 + Br if causal else S
+        # iterate kv for q, compute o
         for k0 in range(0, k_end, Bc):
             k, v = load(K[k0:k0+Bc]), load(V[k0:k0+Bc])
-            s = q @ k.T / sqrt(d)               # [Br, Bc] tile，不写回 HBM
+            s = q @ k.mT * d**-0.5              # [Br, Bc] tile，不写回 HBM
             if causal and k0 + Bc > q0:         # 只有对角 tile 需要逐元素 mask
-                i = arange(q0, q0 + Br)[:, None]
-                j = arange(k0, k0 + Bc)[None, :]
+                i = torch.arange(q0, q0 + Br)[:, None]
+                j = torch.arange(k0, k0 + Bc)[None, :]
                 allowed = j <= i
-                s = where(allowed, s, -inf)
-            m_new = maximum(m, s.max(axis=1))
-            alpha = exp(m - m_new)              # 旧结果的修正因子
-            p = exp(s - m_new[:, None])
-            l = alpha * l + p.sum(axis=1)
+                s = torch.where(allowed, s, -torch.inf)
+            m_new = torch.maximum(m, s.amax(dim=-1))
+            alpha = torch.exp(m - m_new)        
+            # partial attention score for V
+            p = torch.exp(s - m_new[:, None])
+            l = alpha * l + p.sum(dim=-1)
             acc = alpha[:, None] * acc + p @ v
             m = m_new
         O[q0:q0+Br] = acc / l[:, None]          # 最后只除一次
-        LSE[q0:q0+Br] = m + log(l)              # 存 logsumexp，反向用来重算 P
+        LSE[q0:q0+Br] = m + torch.log(l)        # 存 logsumexp，反向用来重算 P
     return O, LSE
 ```
+
+`k_end` 的由来：causal 下第 $i$ 个 query 只能看 $j \le i$ 的 key。当前 Q 块最靠后的一行是 `q0+Br-1`，所以 `j ≥ q0+Br` 的 key 对块内所有行都被 mask，整块跳过，不加载也不计算。以 $S = 512$、$B_r = B_c = 128$ 为例，共 4×4 个 tile：
+
+```
+              k块0   k块1   k块2   k块3
+             0-127 128-255 256-383 384-511
+q块0  0-127   [◣]    ✗      ✗      ✗      k_end = 128 → 算 1 块
+q块1 128-255  [■]   [◣]     ✗      ✗      k_end = 256 → 算 2 块
+q块2 256-383  [■]   [■]    [◣]     ✗      k_end = 384 → 算 3 块
+q块3 384-511  [■]   [■]    [■]    [◣]     k_end = 512 → 算 4 块
+
+■ 整块可见：直接算，不用 mask
+◣ 对角块：一半可见，逐元素 mask（伪代码里 k0 + Bc > q0 那段）
+✗ 整块不可见：k_end 直接跳过
+```
+
+16 个 tile 只算 10 个；一般地是 $\frac{n(n+1)/2}{n^2}$（$n = S/B_r$），$S$ 越大越接近一半。这里默认 $B_r = B_c$，对角区域正好落在一个 K 块上；不相等时对角区域会横跨多个 K 块，`k0 + Bc > q0` 的判断会把它们都加上 mask，结果仍然正确。
 
 ### 访存账：省了多少，为什么 FLOPs 不降
 
