@@ -1020,16 +1020,16 @@
     "last_review": "2026-10-09T12:32:19.520Z"
   },
   "torch-read-stack": {
-    "stability": 1.88678762,
-    "difficulty": 6.40211507,
-    "elapsed_days": 1,
+    "stability": 0.5716297,
+    "difficulty": 8.80262806,
+    "elapsed_days": 5,
     "scheduled_days": 0,
-    "reps": 2,
+    "reps": 3,
     "lapses": 0,
-    "learning_steps": 1,
+    "learning_steps": 0,
     "state": 1,
-    "due": "2026-10-10T04:40:33.084Z",
-    "last_review": "2026-10-10T04:30:33.084Z"
+    "due": "2026-10-15T23:04:35.609Z",
+    "last_review": "2026-10-15T23:03:35.609Z"
   },
   "torch-read-transpose": {
     "stability": 8.2956,
