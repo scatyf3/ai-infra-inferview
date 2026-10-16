@@ -791,6 +791,18 @@
     "due": "2027-01-04T04:55:57.399Z",
     "last_review": "2026-10-16T04:55:57.399Z"
   },
+  "torch-keepdim": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-16T05:21:57.494Z",
+    "last_review": "2026-10-16T05:11:57.494Z"
+  },
   "torch-masked-fill": {
     "stability": 1.47935568,
     "difficulty": 7.01519095,
