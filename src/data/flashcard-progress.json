@@ -1092,16 +1092,16 @@
     "last_review": "2026-10-09T14:00:42.298Z"
   },
   "torch-softmax-fn": {
-    "stability": 8.2956,
+    "stability": 79.80449519,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 11,
+    "scheduled_days": 80,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-13T01:47:54.854Z",
-    "last_review": "2026-10-05T01:47:54.854Z"
+    "due": "2027-01-04T04:55:27.105Z",
+    "last_review": "2026-10-16T04:55:27.105Z"
   },
   "torch-storage-index": {
     "stability": 12.02806048,
