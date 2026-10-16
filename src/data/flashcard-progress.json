@@ -312,16 +312,16 @@
     "last_review": "2026-10-09T04:29:12.199Z"
   },
   "bagu-long-context-prefill": {
-    "stability": 8.2956,
-    "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
-    "lapses": 0,
+    "stability": 1.45846674,
+    "difficulty": 7.02698957,
+    "elapsed_days": 12,
+    "scheduled_days": 0,
+    "reps": 2,
+    "lapses": 1,
     "learning_steps": 0,
-    "state": 2,
-    "due": "2026-10-12T15:21:45.432Z",
-    "last_review": "2026-10-04T15:21:45.432Z"
+    "state": 3,
+    "due": "2026-10-16T05:36:57.760Z",
+    "last_review": "2026-10-16T05:26:57.760Z"
   },
   "bagu-lora": {
     "stability": 16.17726312,
