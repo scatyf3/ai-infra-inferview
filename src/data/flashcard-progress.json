@@ -1548,16 +1548,16 @@
     "last_review": "2026-10-04T06:13:34.875Z"
   },
   "triton-store-shape": {
-    "stability": 8.2956,
-    "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
-    "lapses": 0,
+    "stability": 1.45846674,
+    "difficulty": 7.02698957,
+    "elapsed_days": 12,
+    "scheduled_days": 0,
+    "reps": 2,
+    "lapses": 1,
     "learning_steps": 0,
-    "state": 2,
-    "due": "2026-10-12T06:04:40.117Z",
-    "last_review": "2026-10-04T06:04:40.117Z"
+    "state": 3,
+    "due": "2026-10-16T05:30:18.410Z",
+    "last_review": "2026-10-16T05:20:18.410Z"
   },
   "triton-stream-order": {
     "stability": 8.90467756,
