@@ -396,16 +396,16 @@
     "last_review": "2026-10-04T23:26:39.058Z"
   },
   "bagu-preempt-whom": {
-    "stability": 2.36913529,
-    "difficulty": 3.4509278,
-    "elapsed_days": 0,
-    "scheduled_days": 2,
-    "reps": 3,
+    "stability": 18.74101538,
+    "difficulty": 3.44270524,
+    "elapsed_days": 7,
+    "scheduled_days": 19,
+    "reps": 4,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-11T15:42:58.168Z",
-    "last_review": "2026-10-09T15:42:58.168Z"
+    "due": "2026-11-04T04:47:55.240Z",
+    "last_review": "2026-10-16T04:47:55.240Z"
   },
   "bagu-prefill-ai": {
     "stability": 16.08387556,
