@@ -456,16 +456,16 @@
     "last_review": "2026-10-09T14:03:14.074Z"
   },
   "bagu-radix": {
-    "stability": 8.2956,
+    "stability": 84.0276558,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 12,
+    "scheduled_days": 84,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-12T23:26:26.886Z",
-    "last_review": "2026-10-04T23:26:26.886Z"
+    "due": "2027-01-08T05:28:25.870Z",
+    "last_review": "2026-10-16T05:28:25.870Z"
   },
   "bagu-request-lifecycle": {
     "stability": 13.80509466,
