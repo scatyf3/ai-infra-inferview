@@ -1428,16 +1428,16 @@
     "last_review": "2026-10-16T04:51:04.464Z"
   },
   "triton-exp-xor": {
-    "stability": 8.2956,
+    "stability": 48.73131776,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 12,
+    "scheduled_days": 49,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-12T06:13:29.584Z",
-    "last_review": "2026-10-04T06:13:29.584Z"
+    "due": "2026-12-04T05:21:24.296Z",
+    "last_review": "2026-10-16T05:21:24.296Z"
   },
   "triton-grid-cdiv": {
     "stability": 15.74349117,
