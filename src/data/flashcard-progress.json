@@ -1500,16 +1500,16 @@
     "last_review": "2026-10-09T03:45:01.984Z"
   },
   "triton-program-vs-thread": {
-    "stability": 8.2956,
+    "stability": 48.73131776,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 12,
+    "scheduled_days": 49,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-12T05:56:26.605Z",
-    "last_review": "2026-10-04T05:56:26.605Z"
+    "due": "2026-12-04T04:50:30.490Z",
+    "last_review": "2026-10-16T04:50:30.490Z"
   },
   "triton-reduce-axis": {
     "stability": 8.2956,
