@@ -360,16 +360,16 @@
     "last_review": "2026-10-05T00:57:43.453Z"
   },
   "bagu-paged-why": {
-    "stability": 8.2956,
+    "stability": 84.0276558,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 12,
+    "scheduled_days": 84,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-12T15:27:22.626Z",
-    "last_review": "2026-10-04T15:27:22.626Z"
+    "due": "2027-01-08T05:28:17.086Z",
+    "last_review": "2026-10-16T05:28:17.086Z"
   },
   "bagu-pd-disagg": {
     "stability": 32.03626588,
