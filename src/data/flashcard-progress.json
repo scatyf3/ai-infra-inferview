@@ -804,16 +804,16 @@
     "last_review": "2026-10-05T02:54:48.776Z"
   },
   "torch-matmul-batch": {
-    "stability": 8.2956,
+    "stability": 79.80449519,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 11,
+    "scheduled_days": 80,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-13T01:44:02.027Z",
-    "last_review": "2026-10-05T01:44:02.027Z"
+    "due": "2027-01-04T04:54:00.134Z",
+    "last_review": "2026-10-16T04:54:00.134Z"
   },
   "torch-meta-vs-copy": {
     "stability": 39.62368493,
