@@ -1451,6 +1451,18 @@
     "due": "2026-10-25T12:52:18.740Z",
     "last_review": "2026-10-09T12:52:18.740Z"
   },
+  "triton-group-m": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-16T05:34:55.165Z",
+    "last_review": "2026-10-16T05:24:55.165Z"
+  },
   "triton-load-other": {
     "stability": 15.74349117,
     "difficulty": 3.45587856,
