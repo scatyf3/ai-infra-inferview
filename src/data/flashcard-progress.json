@@ -36,16 +36,16 @@
     "last_review": "2026-10-04T23:23:45.671Z"
   },
   "bagu-caching-allocator": {
-    "stability": 2.3065,
-    "difficulty": 2.11121424,
-    "elapsed_days": 0,
-    "scheduled_days": 2,
-    "reps": 2,
+    "stability": 21.42621176,
+    "difficulty": 2.1043314,
+    "elapsed_days": 7,
+    "scheduled_days": 21,
+    "reps": 3,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-11T17:23:08.803Z",
-    "last_review": "2026-10-09T17:23:08.803Z"
+    "due": "2026-11-06T04:49:46.150Z",
+    "last_review": "2026-10-16T04:49:46.150Z"
   },
   "bagu-chunked-prefill": {
     "stability": 8.2956,
