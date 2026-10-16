@@ -1475,6 +1475,18 @@
     "due": "2026-11-18T05:18:23.833Z",
     "last_review": "2026-10-16T05:18:23.833Z"
   },
+  "triton-matmul-program": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-16T05:34:47.456Z",
+    "last_review": "2026-10-16T05:24:47.456Z"
+  },
   "triton-no-grid-sync": {
     "stability": 2.3065,
     "difficulty": 2.11810397,
