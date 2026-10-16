@@ -732,16 +732,16 @@
     "last_review": "2026-10-16T04:53:50.150Z"
   },
   "torch-deterministic": {
-    "stability": 8.2956,
+    "stability": 79.80449519,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 11,
+    "scheduled_days": 80,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-13T01:49:17.101Z",
-    "last_review": "2026-10-05T01:49:17.101Z"
+    "due": "2027-01-04T04:56:05.198Z",
+    "last_review": "2026-10-16T04:56:05.198Z"
   },
   "torch-expand-gqa": {
     "stability": 5.83725644,
