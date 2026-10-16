@@ -1500,16 +1500,16 @@
     "last_review": "2026-10-09T12:53:08.077Z"
   },
   "triton-partial-deterministic": {
-    "stability": 5.83725644,
-    "difficulty": 5.19004872,
-    "elapsed_days": 5,
-    "scheduled_days": 6,
-    "reps": 3,
+    "stability": 34.79933684,
+    "difficulty": 3.56801552,
+    "elapsed_days": 7,
+    "scheduled_days": 35,
+    "reps": 4,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-15T03:45:01.984Z",
-    "last_review": "2026-10-09T03:45:01.984Z"
+    "due": "2026-11-20T05:21:48.877Z",
+    "last_review": "2026-10-16T05:21:48.877Z"
   },
   "triton-program-vs-thread": {
     "stability": 48.73131776,
