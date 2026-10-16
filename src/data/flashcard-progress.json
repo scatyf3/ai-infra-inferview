@@ -1475,6 +1475,18 @@
     "due": "2026-11-18T05:18:23.833Z",
     "last_review": "2026-10-16T05:18:23.833Z"
   },
+  "triton-num-warps": {
+    "stability": 1.2931,
+    "difficulty": 5.11217071,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-16T05:30:29.100Z",
+    "last_review": "2026-10-16T05:24:29.100Z"
+  },
   "triton-offs-mask": {
     "stability": 1.49485577,
     "difficulty": 7.01519095,
