@@ -24,16 +24,16 @@
     "last_review": "2026-10-09T15:43:03.585Z"
   },
   "bagu-block-size": {
-    "stability": 8.2956,
+    "stability": 84.0276558,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 12,
+    "scheduled_days": 84,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-12T23:23:45.671Z",
-    "last_review": "2026-10-04T23:23:45.671Z"
+    "due": "2027-01-08T05:28:23.168Z",
+    "last_review": "2026-10-16T05:28:23.168Z"
   },
   "bagu-caching-allocator": {
     "stability": 21.42621176,
