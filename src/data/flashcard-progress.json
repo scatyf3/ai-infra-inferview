@@ -1236,16 +1236,16 @@
     "last_review": "2026-10-09T12:29:48.596Z"
   },
   "torch-write-permute": {
-    "stability": 8.2956,
+    "stability": 46.47643997,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 11,
+    "scheduled_days": 46,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-13T03:26:10.409Z",
-    "last_review": "2026-10-05T03:26:10.409Z"
+    "due": "2026-12-01T05:00:28.153Z",
+    "last_review": "2026-10-16T05:00:28.153Z"
   },
   "torch-write-reduce": {
     "stability": 12.88248078,
