@@ -1536,16 +1536,16 @@
     "last_review": "2026-10-16T05:20:25.144Z"
   },
   "triton-softmax-largeN": {
-    "stability": 8.2956,
+    "stability": 84.0276558,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 12,
+    "scheduled_days": 84,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-12T06:13:34.875Z",
-    "last_review": "2026-10-04T06:13:34.875Z"
+    "due": "2027-01-08T05:21:34.019Z",
+    "last_review": "2026-10-16T05:21:34.019Z"
   },
   "triton-store-shape": {
     "stability": 1.45846674,
