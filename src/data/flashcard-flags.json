@@ -220,8 +220,8 @@
     "at": 1792105336149
   },
   "triton-2d-ptrs": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1792128134648
   },
   "triton-group-m": {
     "suspended": false,
