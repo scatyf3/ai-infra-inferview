@@ -288,16 +288,16 @@
     "last_review": "2026-10-04T15:23:20.738Z"
   },
   "bagu-kv-quant": {
-    "stability": 2.3065,
-    "difficulty": 2.11121424,
-    "elapsed_days": 0,
-    "scheduled_days": 2,
-    "reps": 2,
+    "stability": 13.80509466,
+    "difficulty": 4.74828477,
+    "elapsed_days": 7,
+    "scheduled_days": 14,
+    "reps": 3,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-11T14:18:40.138Z",
-    "last_review": "2026-10-09T14:18:40.138Z"
+    "due": "2026-10-30T04:47:43.522Z",
+    "last_review": "2026-10-16T04:47:43.522Z"
   },
   "bagu-layer-params": {
     "stability": 0.212,
