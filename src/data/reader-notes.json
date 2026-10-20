@@ -11,6 +11,17 @@
       "deleted": true
     }
   ],
+  "/ai-infra-inferview/basics/cpp": [
+    {
+      "id": "mvh4502gy3ns",
+      "exact": "管理",
+      "prefix": "of 0 / 3 / 5（cppreference）：类如果自己",
+      "suffix": "资源，就要把析构、拷贝构造、拷贝赋值、移动构造、移动赋值这五个一",
+      "note": "",
+      "created": 1792526739352,
+      "at": 1792526739352
+    }
+  ],
   "/ai-infra-inferview/framework/cuda-graph": [
     {
       "id": "mv1cn8zw2glt",
