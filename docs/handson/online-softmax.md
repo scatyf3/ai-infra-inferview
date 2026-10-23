@@ -31,110 +31,61 @@ y_i = exp(x_i - m) / s      # 第三遍：归一化
 
 ### 逐元素递推
 
-符号：$x_1, \dots, x_n$ 是输入，每个 $x_i$ 是一行 score 中的单个元素（分块版本见下文「两段合并」）；处理完前 $k$ 个元素后，
+>TLDR：利用unsafe版本的无依赖，所以一个直觉告诉我们safe版本一定也有一趟扫完的方法，利用一个中间变量T，从unsafe版本的递推推出safe版本的递推
 
-$$
-m_k = \max_{i \le k} x_i, \qquad s_k = \sum_{i \le k} e^{x_i - m_k}
-$$
+**定义**：对前 $k$ 个元素，记
 
-$s_k$ 是「以当前最大值 $m_k$ 为基准」的部分和。来了 $x_{k+1}$：
-
-$$
-m_{k+1} = \max(m_k,\ x_{k+1}), \qquad
-s_{k+1} = s_k \cdot e^{m_k - m_{k+1}} + e^{x_{k+1} - m_{k+1}}
+$$  
+m_k = \max_{i \le k} x_i, \qquad  
+T_k = \sum_{i \le k} e^{x_i}, \qquad  
+s_k = \sum_{i \le k} e^{x_i - m_k}  
 $$
 
-**为什么对。** 按定义，$s_{k+1}$ 的每一项都是 $e^{x_i - m_{k+1}}$（减新 max），而手上 $s_k$ 的每一项是 $e^{x_i - m_k}$（减旧 max）。要做的就是把前 $k$ 项的基准从 $m_k$ 换成 $m_{k+1}$。
+其中 $T_k$ 是 unsafe 的部分和，可能溢出，只在推导中使用。由 $e^{x_i - m_k} = e^{x_i} / e^{m_k}$ 可得
 
-先看单独一项。乘上修正因子，用 $e^a \cdot e^b = e^{a+b}$：
+$$s_k = \frac{T_k}{e^{m_k}}, \qquad \text{即}\quad T_k = s_k \cdot e^{m_k}$$
 
-$$
-e^{x_i - m_k} \cdot e^{m_k - m_{k+1}}
-= e^{(x_i - m_k) + (m_k - m_{k+1})}
-= e^{x_i - m_{k+1}}
-$$
+**更新规则**：来了 $x_{k+1}$ 之后，
 
-指数里 $-m_k$ 和 $+m_k$ 抵消，剩下的就是新基准下的那一项。修正因子就是专门挑来消掉旧 max 的。
-
-再看整个和。每一项乘的是同一个数，按分配律等于整个和乘一次：
-
-$$
-s_k \cdot e^{m_k - m_{k+1}} = \sum_{i \le k} e^{x_i - m_k} \cdot e^{m_k - m_{k+1}} = \sum_{i \le k} e^{x_i - m_{k+1}}
+$$  
+m_{k+1} = \max(m_k,\ x_{k+1}), \qquad  
+s_{k+1} = s_k \cdot e^{m_k - m_{k+1}} + e^{x_{k+1} - m_{k+1}}  
 $$
 
-所以不用回头找每个 $x_i$，拿手上的 $s_k$ 乘一下就行，online 成立靠的就是这一点。这样就得到了前 $k$ 项在新基准下的和，再加上第 $k+1$ 项 $e^{x_{k+1} - m_{k+1}}$，就是 $s_{k+1}$。下面数字例子的第 2 步就是这个过程：$s_1 = e^{1-1} = 1$，乘 $e^{1-3}$ 变成 $e^{1-3}$，正好是 $x_1$ 在新 max $3$ 下的那一项。
+初值取 $m_0 = -\infty$、$s_0 = 0$。
 
-可以把 $s_k$ 看成「以 $m_k$ 为单位记的账」：max 变了，单位也变了，旧账要乘一个汇率 $e^{m_k - m_{k+1}}$ 才能和新的一项相加。
+**Correctness 证明**：$T$ 的更新就是普通的累加：
 
-初值 $m_0 = -\infty$、$s_0 = 0$：第一步修正因子 $e^{-\infty} = 0$，旧的和直接清零。
+$$T_{k+1} = T_k + e^{x_{k+1}}$$
 
-数值上也安全：$m_{k+1} \ge m_k$，$m_{k+1} \ge x_{k+1}$，两个指数都 $\le 0$，`exp` 的结果在 $(0, 1]$，不会上溢。
+两边同时除以 $e^{m_{k+1}}$：
 
-**数字例子**，$x = [1, 3, 2]$：
+$$s_{k+1} = \frac{T_{k+1}}{e^{m_{k+1}}} = \frac{T_k}{e^{m_{k+1}}} + e^{x_{k+1} - m_{k+1}}$$
 
-| 步 | $x_k$ | $m_k$ | 修正因子 $e^{m_{k-1} - m_k}$ | $s_k$ |
-|---|---|---|---|---|
-| 1 | 1 | 1 | $e^{-\infty} = 0$ | $0 + e^{0} = 1$ |
-| 2 | 3 | 3 | $e^{1-3} = 0.1353$ | $1 \times 0.1353 + e^{0} = 1.1353$ |
-| 3 | 2 | 3 | $e^{0} = 1$ | $1.1353 + e^{-1} = 1.5032$ |
+再代入 $T_k = s_k \cdot e^{m_k}$：
 
-直接算：$e^{1-3} + e^{3-3} + e^{2-3} = 0.1353 + 1 + 0.3679 = 1.5032$，对上。第 3 步 max 没变，修正因子是 1，退化成普通累加。
+$$s_{k+1} = s_k \cdot e^{m_k - m_{k+1}} + e^{x_{k+1} - m_{k+1}} \qquad \blacksquare$$
 
-扫完得到 $(m_n, s_n)$，再扫一遍算 $y_i = e^{x_i - m_n} / s_n$。所以求 softmax 本身是**两遍**（比三遍少一遍），不是一遍。
+**数值安全**：由于 $m_{k+1} \ge m_k$ 且 $m_{k+1} \ge x_{k+1}$，两个指数都 $\le 0$，exp 的结果落在 $(0, 1]$ 内，不会上溢。
 
-### 两段合并
 
-把 $x$ 切成两段 $A$、$B$，各自扫完得到 $(m_A, s_A)$、$(m_B, s_B)$。合并：
+## tile-wise的解释
 
-$$
-m = \max(m_A, m_B), \qquad
-s = s_A \cdot e^{m_A - m} + s_B \cdot e^{m_B - m}
-$$
+当然，这个递推被我们扩展到tile-wise，tile内部做树形规约求tile内max，然后基于max求sum，每个tile内调用两轮规约kernel，tile外用推广的方法merge，即优化后，tile内还有依赖，只是tile间online合并，允许把reduce的维度切分给多个tile，在对attention dim=-1，即`seqlen_k`做更大粒度并行。
 
-理由和上面一样：两边各自换算到共同基准 $m$ 再相加。逐元素递推只是 $B$ 只有一个元素的特例（$m_B = x_{k+1}$，$s_B = 1$）。
+如果没有online softmax，我们在max和sum之间要全局规约，有online softmax之后可以免于全局规约，直接通过per tile的online update，从而免于全局规约，也允许了后续的fuse。
 
-这个合并满足结合律和交换律，所以：
+tile-wise online update的算法如下：
+1. 每个tile各自max - sum
+2. tile之间串行update自己的max和sum
 
-- 可以按任意块大小分块，一块一块顺序合并（FlashAttention 沿 K/V 方向）；
-- 可以做树形归约，比如 warp 内用 shuffle 两两合并（[reduce](./reduce) 里的套路，把加法换成这个合并）；
-- 可以先切开并行算，最后一次合并（FlashDecoding 的 split-KV，Ring Attention 每卡持一段 KV）。
+note：
+1. 也可以不串行，选择串行是因为其他维度的并行度已经足够，而串行能用最小的片上状态，并且方便和访存做流水
+	- 片上只需要一份 $(m, l, O)$。树形合并需要同时保存多份 $O$，寄存器放不下。
+	- 可以和 $K_j, V_j$ 的加载形成流水线。
+	- 并行度已经由 $S_q$、batch 和 head 提供，KV 方向不需要再并行
+2. splitk就是非串行reduce，有个reduce kernel
 
-### 带上 $V$：attention 只要一遍
-
-attention 要的不是 $y$ 本身，而是 $o = \sum_i y_i v_i$（$v_i$ 是 $V$ 的第 $i$ 行，长度 $d$）。再维护一个未归一化的输出
-
-$$
-\text{acc}_k = \sum_{i \le k} e^{x_i - m_k}\, v_i
-$$
-
-它和 $s_k$ 用的是同一个基准 $m_k$，所以换基准时乘同一个修正因子。按块写，第 $j$ 块 score 是 $x^{(j)}$、对应的 V 行是 $V^{(j)}$：
-
-$$
-m' = \max\big(m, \max x^{(j)}\big),\quad
-\alpha = e^{m - m'},\quad
-s' = \alpha\, s + \sum e^{x^{(j)} - m'},\quad
-\text{acc}' = \alpha\, \text{acc} + e^{x^{(j)} - m'}\, V^{(j)}
-$$
-
-全部块处理完，$o = \text{acc} / s$。这里只扫了一遍：每块的 $e^{x^{(j)} - m'}$ 算完立刻乘 $V^{(j)}$ 累进 $\text{acc}$，然后就扔掉，不需要回头。除以 $s$ 留到最后做一次。
-
-**数字例子**接上面，$d = 1$，$v = [10, 20, 30]$，一块一个元素：
-
-| 步 | $\alpha$ | $\text{acc}_k$ | $s_k$ |
-|---|---|---|---|
-| 1 | 0 | $e^{0} \times 10 = 10$ | 1 |
-| 2 | 0.1353 | $10 \times 0.1353 + e^{0} \times 20 = 21.353$ | 1.1353 |
-| 3 | 1 | $21.353 + e^{-1} \times 30 = 32.389$ | 1.5032 |
-
-$o = 32.389 / 1.5032 = 21.55$。直接算：$(0.1353 \times 10 + 1 \times 20 + 0.3679 \times 30) / 1.5032 = 21.55$，对上。
-
-如果第 2 步忘了给 $\text{acc}$ 乘 $\alpha$，$\text{acc}_3 = 10 + 20 + 11.04 = 41.04$，$o = 27.30$：第一个元素的权重被放大了 $e^{2} \approx 7.4$ 倍，结果错了但不报错。
-
-### 在 FlashAttention 里是什么样
-
-一行 score 是 $Q$ 的一行和所有 $K$ 行的点积。Q 块常驻 SRAM，K/V 一块一块流过，每块只产生 $B_r \times B_c$ 的 score tile，用上面的块递推更新 $(m, s, \text{acc})$ 后就丢掉，$S \times S$ 的 score 矩阵从不写回 HBM。FLOPs 没少（每块还多了 rescale），省的是 HBM 读写。访存账和 v1/v2/v3 的区别见 [FlashAttention](/inference/flash-attention)。
-
-反向时也不用存 score：前向只额外存每行的 $\text{LSE} = m + \log s$，反向重算 score 后 $P = e^{x - \text{LSE}}$ 一步就恢复出概率。
 
 ## 手撕
 

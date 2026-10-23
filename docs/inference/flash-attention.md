@@ -11,16 +11,70 @@ train: [tr-k-attn]
 
 # FlashAttention v1 / v2 / v3
 
-> tiling + online softmax，为什么省的是 HBM 访问而不是 FLOPs；v2 改了什么切分；v3 怎么用 Hopper；decode 用的 FlashDecoding
+
+## naive attention
+
+```python
+def attn(q,k,v):
+	d = q.size(-1)
+	attn = torch.matmul(q,k.transpose(-1,-2))/ math.sqrt(d)
+	attn = attn.masked_fill(~mask, float('-inf'))
+	attn = torch.softmax(attn,dim=-1)
+	out =  torch.matmul(attn,v)
+	return out
+```
+
+这里从简单的kernel的角度，我们需要launch 3个kernel：
+1. $QK^T$
+2. softmax归一化attention score
+3. $\text{attn} \times V$
+
+>当然，我们还写了`/sqrt d`和+mask，但是在torch compile下，会被fuse进softmax，因为前两个是简单的pointwise，后面是reduction。这部分可以近似看作一个softmax kernel。
+
+assume input是`[B,(H,)S,d]`：
+1. 计算量：
+	1. qk: $B \times S^2 \times d$个乘加
+	2. softmax: 5BS² FLOPS
+	   scale 1 次、mask select 1 次、求 max 1 次比较、减 max 1 次、exp 1 次、求 sum 1 次加法、归一化 1 次乘（乘倒数），合计约 5 次 FLOP 加 1 次 exp（exp 走 SFU）
+	3. attnv: [B,S,S] x [B,S,d]: $B \times S^2 \times d$个乘加
+2. memory traffic：
+	1. qk: 读 2 $B\times S \times d$, 写$B\times S^2$
+	2. softmax: 读写都是$B\times S^2$
+		1. 看mask如何实现，如果meterialize mask,还要多读$B\times S^2$，若kernel根据index现算则没有这项overhead
+	3. attnv: 读  $B\times S^2$+ $B\times S \times d$，写 $B\times S \times d$
+
+anyway，这是一些细节，batch和dim在实际的计算里有限，我们考虑S大的量级，此时$S^2$ 支配复杂度，然后大家都batching所以B默认消掉，H同理，所以：
+1. 计算：4d+5 O(S^2)
+2. traffic：4xbf16 O(S^2)
+所以算/存大概是d/2这个constant，从经验而论，每个head的d大概在128，但通常好的A100的ridge point在(A100)150～(H100)300。尤其是三个kernel还是串行，其中softmax最mem-bound。
+3. QKᵀ / attn·V: intensity ≈ d
+4. softmax: intensity ≈ 5 / 4 ≈ 1.25
+
+## 怎么办
+
+- recap：标准 attention 要把 $S \times S$ 的 score 矩阵写到 HBM 再读回来做 softmax，
+- TLDR：FlashAttention 用 tiling 把 Q、K、V 分块搬进 SRAM，用 online softmax 在块之间增量更新 max 和分母，整个过程不把 score 矩阵写回 HBM。在这个过程中， FLOPs 没少，省的是 HBM 读写：下面的例子里，标准实现的算术强度约 63 FLOP/B，是 memory-bound；FlashAttention 把它推到约 4000 FLOP/B，变成 compute-bound。之后的 v2、v3 不再省字节，而是想办法把 tensor core 用满。
 
 
-## tldr
+所以说这个naive attention最恶心的是softmax
+1. 自己是个reduce，读进来的每个元素都用一次，严重memory bound
+2. 在这个过程里引入非线性，阻碍进一步fuse，如果没有，
+	1. 两个matmul可以fuse成一个gemm，which是一个非常传统的fuse trick $O = \sum_j (Q K_j^\top) V_j$
+	2. 甚至还可以狂，用结合律换顺序 $(QK^\top)V = Q(K^\top V)$，把S换到规约维度，计算量从 4S²d 降到 **4Sd²**，这从计算流来论其实就是linear attention，只不过从算法角度，它有一些更好的数学性质...
 
-1. 标准 attention 要把 $S \times S$ 的 score 矩阵写到 HBM 再读回来做 softmax，FlashAttention 用 tiling 把 Q、K、V 分块搬进 SRAM，用 online softmax 在块之间增量更新 max 和分母，整个过程不把 score 矩阵写回 HBM。
-2. FLOPs 没少，省的是 HBM 读写：下面的例子里，标准实现的算术强度约 63 FLOP/B，是 memory-bound；FlashAttention 把它推到约 4000 FLOP/B，变成 compute-bound。之后的 v2、v3 不再省字节，而是想办法把 tensor core 用满。
-3. FA1: online softmax
-4. FA2: 对Q tile load全部kv，节省写partial result，允许split k（在seqlen维度切分）
-5. 后面就是各种硬件特性
+
+softmax内部自己也有3轮 linear kernel
+1. scan for max
+2. scan for sum
+3. per element compute
+
+
+[[online-softmax]]是一篇老paper，fuse了max和sum两个scan
+
+
+
+
+tiling方面的理解：
 
 online softmax可以理解为attention的tiling吗，还是对reduce操作的并行化？
 两种说法都不够准确。更贴切的理解是：online softmax 把 softmax 改写成了一个可以分块合并的 reduce。有了这个性质，FlashAttention 才能做 tiling；同样因为这个性质，这个 reduce 才能并行。所以它是这两件事的前提，本身既不是 tiling，也不是并行化。
@@ -29,60 +83,135 @@ online softmax可以理解为attention的tiling吗，还是对reduce操作的并
 1. 早期fused softmax只切Q的seqlen维度，每个token的softmax互不相关，但是k不切分，所以score是[B,H,Sq,Sfull]，单个threadblock要放下 [Br, Sk]，这一项随 Sk 增长，所以 SRAM 放不下无法常驻sram，q读一遍
 2. 另外一个做法是两次，pass1 求max，pass2 做标准 tiled matmul，这样每个k重复读了两遍
 
+given online softmax这个特质，为啥softmax能和前后的gemm fuse呢？
+
+**为什么能和前一个 GEMM（QKᵀ）融合**
+
+S_j 这个 tile 算出来时就在寄存器 / SMEM 里。exp、rowmax、rowsum 都是 epilogue 级别的 elementwise 运算加行内 reduction，直接消费掉即可，不需要写回 HBM。
+
+如果没有 online softmax，在发出 P 之前必须先拿到整行（长度 N）的 max 和 sum，就只能把整行 S 物化下来。N 一大，SRAM 放不下，融合就不成立了。
+
+>这里就是可以分tile算完之后立刻用，不用写回，belike一个gemm和一个普通的elementwise也能这样fuse
+>agent: **GEMM + elementwise + 一个可修正的 running row reduction**。正是"可修正"这一点让"算完立刻用"合法。
 
 
-## 推导
+**为什么能和后一个 GEMM（PV）融合**
 
-### 符号和约定
+这是更关键的一点。PV 的 reduction 维**正好是 softmax 归一化的那一维**（KV 序列维）。一般来说，"依赖整个 reduction 维的非线性"是没法塞进 GEMM 的 K-loop 的。这里能塞进去，原因是：
 
-| 符号 | 含义 |
-|---|---|
-| $S$ | 序列长度（prefill 时 query 和 key 都是 $S$ 个） |
-| $d_h$ | 每个 head 的维度，常见 64 / 128 |
-| $H$ | Q head 数，$d = H d_h$ |
-| $B_r, B_c$ | Q 块的行数、K/V 块的行数（tile 大小） |
-| $b$ | 每个元素的字节数，bf16 = 2 |
+1. 修正项 $e^{m-m'}$ 和 $1/\ell$ 都是**行标量**，也就是左乘一个对角矩阵：$\text{diag}(a)(PV) = (\text{diag}(a)P)V$。对角缩放和矩阵乘可交换，所以可以先乘后修，也可以先修后乘。
+2. GEMM 对 P 是**线性**的，所以分块部分和可以先算，之后再统一缩放。
+3. 归一化可以**推迟到最后**：FA2 就是这么做的，循环内不除 ℓ，只在最后除一次。
 
-单个 head 的 attention：$O = \text{softmax}(QK^\top / \sqrt{d_h})\,V$，其中 $Q, K, V, O \in \mathbb{R}^{S \times d_h}$，按行主序存放，每行是一个 token。下文的 FLOPs 先按乘加（MAC）数再 ×2，规则同 [Roofline 页](/inference/prefill-decode-roofline#符号和计数规则)。
+>维度match，把修正推迟到最后
 
-GPU 有两级存储要分清。**HBM** 是显存，H100 SXM 80 GB、3.35 TB/s。**SRAM** 指每个 SM 上的 shared memory 和寄存器，H100 每个 SM 的 shared memory 最多 228 KB（[Hopper Tuning Guide](https://docs.nvidia.com/cuda/hopper-tuning-guide/index.html)），132 个 SM 加起来也就 30 MB 左右，但带宽比 HBM 高一个数量级。FlashAttention 论文给的 A100 数字是 SRAM 约 19 TB/s、HBM 1.5–2.0 TB/s（[Dao et al., 2022, §2.1](https://arxiv.org/abs/2205.14135)）。
+**更抽象的说法**
 
-### 标准实现：score 矩阵来回搬
+$(m, \ell, \tilde o)$ 构成一个满足结合律的 monoid，merge 算子就是上面那组式子。所以沿 KV 维随便切、按任意顺序合并都对。Flash-Decoding 的 split-KV 和 FlashInfer 的 attention state merge 都是这个性质的直接应用。
 
-教科书写法是三个 kernel（[FlashAttention 论文 Algorithm 0](https://arxiv.org/abs/2205.14135)）：
 
-1. 读 $Q, K$，算 $S_{\text{score}} = QK^\top$，**写** $S \times S$ 到 HBM。
-2. **读** $S_{\text{score}}$，做 softmax，**写** $P$（还是 $S \times S$）。
-3. **读** $P$ 和 $V$，算 $O = PV$，写 $O$。
+**线性代数的formulation**
 
-为什么必须拆成三步、中间要等上一步全部写完（barrier）：softmax 要先知道**整行**的最大值和分母，才能算出这一行的任何一个元素，而一整行 score 要等 $QK^\top$ 把这一行全算完才有。所以只能先把整个 $S_{\text{score}}$ 写回 HBM，再起下一个 kernel 读回来。FlashAttention 用 [online softmax](/handson/online-softmax) 拆掉的就是这个依赖：边算边更新最大值和分母，不用等整行。
+记号沿用 [Zihao Ye, *From Online Softmax to FlashAttention*](https://courses.cs.washington.edu/courses/cse599m/23sp/notes/flashattn.pdf)。只看 $Q$ 的第 $k$ 行，各行之间完全独立，多行时每行各维护一套 $(m, d', o')$ 即可。
 
-$S \times S$ 的矩阵被搬了 4 遍。算一笔：$S = 8192$，$H = 64$，$d_h = 128$，bf16，一层，batch 1，按 MHA 数（GQA 只会让 K/V 更小，不影响结论）：
+| 符号 | 形状 | 含义 |
+|---|---|---|
+| $Q[k,:]$ | $1\times d$ | $Q$ 的第 $k$ 行 |
+| $K^\top[:,i]$ | $d\times 1$ | $K^\top$ 的第 $i$ 列 |
+| $V[i,:]$ | $1\times d$ | $V$ 的第 $i$ 行 |
+| $x_i = Q[k,:]\,K^\top[:,i]$ | 标量 | 第 $i$ 个 score（$1/\sqrt d$ 并进 $Q$） |
+| $N$ | 标量 | KV 长度 |
+| $m_i$ | 标量 | 前 $i$ 个 score 的 max，$m_0=-\infty$ |
+| $d'_i$ | 标量 | 前 $i$ 个的分母，以 $m_i$ 为基准，即伪代码里的 `l` |
+| $o'_i$ | $1\times d$ | 前 $i$ 个的**已归一化**输出 |
 
-- 一份 score：$S^2 \cdot H \cdot b = 8192^2 \times 64 \times 2 \approx 8.6$ GB。搬 4 遍约 34 GB，按 3.35 TB/s 要 **10.3 ms**。
-- FLOPs：$QK^\top$ 和 $PV$ 各 $S^2 d_h$ 次 MAC/head，乘 $H$ 得 $2S^2 d$ MAC，即 $4 S^2 d = 4 \times 8192^2 \times 8192 \approx 2.2$ TFLOP（不带 causal mask 的满额）。按 989 TFLOP/s 要 **2.2 ms**。
-- 算术强度 $\text{AI} = 2.2\text{T} / 34\text{G} \approx 63$ FLOP/B，远低于 H100 的 ridge 295 → **memory-bound**，时间被 score 的搬运决定。
+目标：$O[k,:] = \sum_{i=1}^{N} \dfrac{e^{x_i}}{\sum_{j} e^{x_j}}\,V[i,:]$。约定 $e^{-\infty}=0$。
 
-注意这还没算显存：8.6 GB 的 score 要真实存在 HBM 里，长序列直接 OOM。
+**引理 1（平移不变）** 对任意常数 $c$，
 
-### tiling + online softmax：score 不出 SRAM
+$$\frac{e^{x_i-c}}{\sum_j e^{x_j-c}} = \frac{e^{x_i}}{\sum_j e^{x_j}}$$
 
-难点在 softmax：每一行要先知道整行的最大值和分母才能归一化，看起来必须先算完整行 score。online softmax（[Milakov & Gimelshein, 2018](https://arxiv.org/abs/1805.02867)）解决了这个：一行分成若干块依次处理，维护三个量：
+证明：分子分母同乘 $e^c$。
 
-- $m$：目前见过的最大值
-- $\ell$：目前的分母 $\sum e^{s - m}$
-- $\text{acc}$：目前未归一化的输出 $\sum e^{s - m} v$
+取 $c = m_N$ 时所有指数 $\le 0$，不会溢出，这就是 safe softmax。代价是要先扫一遍拿到 $m_N$。
 
-新来一块 score $s^{(j)}$ 时，最大值可能变大，旧的 $\ell$ 和 $\text{acc}$ 都是按旧 $m$ 算的，乘一个修正因子换算过来：
+**引理 2（online 分母）** 定义 $d'_i := \sum_{j=1}^{i} e^{x_j - m_i}$，则
+
+$$d'_i = d'_{i-1}\,e^{m_{i-1}-m_i} + e^{x_i-m_i},\qquad d'_0 = 0,\qquad d'_N = \sum_{j=1}^N e^{x_j-m_N}$$
+
+证明见 [Online Softmax](/handson/online-softmax#逐元素递推)，思路和下面的定理 3 完全一样。$m$ 和 $d'$ 可以在同一遍里求出（online softmax）；但输出那一遍还要用 $m_N, d'_N$，所以整个 attention 仍然是 2-pass。
+
+**定理 3（online 输出，FA1 形式）** 定义 $o'_i := \sum_{j=1}^{i} \dfrac{e^{x_j - m_i}}{d'_i}\,V[j,:]$，则
+
+$$o'_i = o'_{i-1}\cdot\frac{d'_{i-1}\,e^{m_{i-1}-m_i}}{d'_i} + \frac{e^{x_i-m_i}}{d'_i}\,V[i,:],\qquad o'_0=0,\qquad o'_N = O[k,:]$$
+
+证明分三步。
+
+**第 1 步：从定义式里拆出最后一项。** 把定义里 $j=1..i$ 的求和拆成 $j=1..i-1$ 和 $j=i$ 两部分：
+
+$$o'_i = \sum_{j=1}^{i-1} \frac{e^{x_j-m_i}}{d'_i}V[j,:] \;+\; \frac{e^{x_i-m_i}}{d'_i}V[i,:]$$
+
+第二项就是递推式的第二项。第一项的系数用的是第 $i$ 步的 $m_i, d'_i$，所以它还不等于 $o'_{i-1}$。
+
+**第 2 步：比较第一项的系数和 $o'_{i-1}$ 的系数。** $o'_{i-1}$ 中第 $j$ 项的系数是 $\alpha_j = \dfrac{e^{x_j-m_{i-1}}}{d'_{i-1}}$。两者相除：
+
+$$\frac{e^{x_j-m_i}/d'_i}{e^{x_j-m_{i-1}}/d'_{i-1}} = \frac{d'_{i-1}\,e^{m_{i-1}-m_i}}{d'_i} =: c_i$$
+
+$x_j$ 被约掉了，所以 **$c_i$ 与求和下标 $j$ 无关**：它只依赖第 $i$ 步前后的统计量 $(m_{i-1}, d'_{i-1}, m_i, d'_i)$，这几个都是已经在手上的标量，不需要回头看之前的 $x_j$ 或 $V[j,:]$。于是第一项的每个系数都可以写成 $\alpha_j \cdot c_i$。
+
+**第 3 步：提出公因子。**
+
+$$\sum_{j=1}^{i-1}\alpha_j\,c_i\,V[j,:] = c_i\sum_{j=1}^{i-1}\alpha_j\,V[j,:] = c_i\cdot o'_{i-1}$$
+
+代回第 1 步，即得递推式。
+
+这就是为什么 $o'_i$ 要定义成「只用前 $i$ 个元素、以当前的 $(m_i, d'_i)$ 为基准算出的输出」：这样前缀部分正好是上一步的 $o'_{i-1}$ 乘一个标量，递推能闭合。起作用的是「以 running 统计量为基准」，而不是「已归一化」：FA2 的 $\tilde o_i = d'_i\,o'_i$ 不归一化，递推同样闭合，只是系数变成 $e^{m_{i-1}-m_i}$（见推论 5）。
+
+终点：$o'_N = \sum_j \dfrac{e^{x_j-m_N}}{d'_N}V[j,:]$。由引理 2，$d'_N = \sum_j e^{x_j-m_N}$；再由引理 1，这些系数就是真正的 softmax 权重，所以 $o'_N = O[k,:]$。即只要分tile 迭代，最后的结果就是最后的partial O
+
+$c_i$ 的直觉：$o'_{i-1}$ 是按旧标准 $(m_{i-1}, d'_{i-1})$ 归一化的。换到新标准分三步：① 乘 $d'_{i-1}$，撤销旧的归一化；② 乘 $e^{m_{i-1}-m_i}$，换 max；③ 除以 $d'_i$，按新分母重新归一化。
+
+到这里，所有量都只依赖下标 $\le i$ 的元素，一遍就能扫完，这就是 1-pass 的 FlashAttention。
+
+::: details 数值例子：$x = (1, 3)$，$V$ 取标量 $v_1, v_2$
+- $i=1$：$m_1 = 1$，$d'_1 = 1$，$o'_1 = v_1$
+- $i=2$：$m_2 = 3$，$d'_2 = 1\cdot e^{1-3} + e^0 = e^{-2}+1$
+
+$$o'_2 = v_1\cdot\frac{1\cdot e^{-2}}{e^{-2}+1} + \frac{1}{e^{-2}+1}\,v_2$$
+
+直接计算 softmax 权重：$\dfrac{e^1}{e^1+e^3} = \dfrac{e^{-2}}{e^{-2}+1}$，$\dfrac{e^3}{e^1+e^3} = \dfrac{1}{e^{-2}+1}$，两者一致。
+:::
+
+**定理 4（tiling）** 把 KV 切成 $T = N/b$ 块，第 $t$ 块覆盖位置 $(t-1)b+1, \dots, tb$。记 $\mathbf{x}_t \in \mathbb{R}^{1\times b}$ 为这一块的 score，$V_t \in \mathbb{R}^{b\times d}$ 为对应的 $V$ 行：
 
 $$
-m' = \max(m, \max s^{(j)}),\quad
-\alpha = e^{m - m'},\quad
-\ell' = \alpha \ell + \sum e^{s^{(j)} - m'},\quad
-\text{acc}' = \alpha\, \text{acc} + e^{s^{(j)} - m'} V^{(j)}
+\begin{aligned}
+\mathbf{x}_t &= Q[k,:]\,K^\top[:,(t-1)b+1:tb] \\
+m_t &= \max\big(m_{t-1},\ \max_j \mathbf{x}_t[j]\big) \\
+d'_t &= d'_{t-1}\,e^{m_{t-1}-m_t} + \textstyle\sum_{j=1}^{b} e^{\mathbf{x}_t[j]-m_t} \\
+o'_t &= o'_{t-1}\cdot\dfrac{d'_{t-1}\,e^{m_{t-1}-m_t}}{d'_t} + \dfrac{e^{\mathbf{x}_t-m_t}}{d'_t}\,V_t
+\end{aligned}
 $$
 
-全部块处理完，$O = \text{acc} / \ell$。逐步推导和数字例子见 [Online Softmax](/handson/online-softmax)。
+则 $o'_T = O[k,:]$。
+
+证明：记 $\mathcal{P}_t$ 为前 $t$ 块覆盖的位置集合，对 $t$ 归纳证明以下不变量：
+
+$$m_t = \max_{p\in\mathcal{P}_t} x_p,\qquad d'_t = \sum_{p\in\mathcal{P}_t} e^{x_p-m_t},\qquad o'_t = \sum_{p\in\mathcal{P}_t}\frac{e^{x_p-m_t}}{d'_t}V[p,:]$$
+
+- $m$：并集上的 max 等于两部分各自 max 的 max。
+- $d'$ 和 $o'$：证明和引理 2、定理 3 完全相同，只是把「最后一个元素」换成「最后一块」。把 $\mathcal{P}_t$ 上的和拆成 $\mathcal{P}_{t-1}$ 上的部分和第 $t$ 块上的部分，前一部分乘上同一个与 $p$ 无关的 $c_t$。
+
+$t=T$ 时 $\mathcal{P}_T$ 就是全部位置，再用引理 1 收尾。
+
+块内的两个求和就是两个小 GEMM：$\mathbf{x}_t$ 是 $QK^\top$ 的一个 tile，$e^{\mathbf{x}_t - m_t}V_t$ 是一个 $(1\times b)(b\times d)$ 的 $PV$ tile。两个 GEMM 落在同一个循环里，这就是 fuse。
+
+**推论 5（FA2：循环内不归一化）** 令 $\tilde o_t := d'_t\,o'_t$（未归一化的输出），把定理 4 中 $o'$ 的递推两边同乘 $d'_t$：
+
+$$\tilde o_t = \tilde o_{t-1}\,e^{m_{t-1}-m_t} + e^{\mathbf{x}_t-m_t}\,V_t,\qquad O[k,:] = \tilde o_T / d'_T$$
+
+$d'$ 从递推式里消失了，循环内不再有除法，只在最后除一次。与下文伪代码一一对应：`alpha` $= e^{m_{t-1}-m_t}$，`l` $= d'_t$，`acc` $= \tilde o_t$。
+
 
 有了这个递推，一个 Q 块（$B_r$ 行）可以常驻 SRAM，让 K/V 一块一块流过，每块的 score 只是 $B_r \times B_c$ 的小 tile，算完就丢。前向伪代码（v2 的循环顺序，下节解释），单个 head：
 
@@ -92,21 +221,20 @@ def flash_attn_fwd(Q, K, V, Br=128, Bc=128, causal=True):
     # batch and head is parallelized internally
     # Q: [S,d]
     S, d = Q.shape 
-    # allocate output and partial sum                             
+    # allocate output and lse for backprop
+    # lse：softmax 分母取对数                            
     O, LSE = torch.empty_like(Q), Q.new_empty(S)
-    # assign each Q to a thread block, parallel compute(but write as for demo)
     # tiled Q: [Br,d]
     for q0 in range(0, S, Br):
         # load current q tile from HBM to SRAM
         q = load(Q[q0:q0+Br])
-        # local max, row sum , output for v
-        # m: [Br], l: [Br] , acc: [Br,d]
-        # for each query, we have ,max/sum/output
+        # m, d',o'
         m = Q.new_full((Br,), -torch.inf)
         l = Q.new_zeros(Br)
         acc = Q.new_zeros(Br, d)
-        # if causal, we only care about current tile
-        # compute [0,k_end] if causal(skip upper), else full attention without mask
+        # compute [0,k_end] if causal(skip upper),
+        # else full attention without mask
+        # 这里是可视化里面的决定k的右end
         k_end = q0 + Br if causal else S
         # iterate kv for q, compute o
         for k0 in range(0, k_end, Bc):
@@ -117,11 +245,13 @@ def flash_attn_fwd(Q, K, V, Br=128, Bc=128, causal=True):
                 j = torch.arange(k0, k0 + Bc)[None, :]
                 allowed = j <= i
                 s = torch.where(allowed, s, -torch.inf)
-            m_new = torch.maximum(m, s.amax(dim=-1))
-            alpha = torch.exp(m - m_new)        
-            # partial attention score for V
+            m_new = torch.maximum(m, s.amax(dim=-1)) # update max
+            alpha = torch.exp(m - m_new) # update d using this
+            # partial attention score with new m
             p = torch.exp(s - m_new[:, None])
+            # d' for final reduce
             l = alpha * l + p.sum(dim=-1)
+            # O'
             acc = alpha[:, None] * acc + p @ v
             m = m_new
         O[q0:q0+Br] = acc / l[:, None]          # 最后只除一次
@@ -201,7 +331,75 @@ $$
 
 $e^{\text{lse}_j - \text{lse}}$ 就是「第 $j$ 段的分母占总分母的比例」。上例切 $s = 16$ 段，block 数从 8 变成 128，接近 SM 数。
 
-作者自测：CodeLlama-34B、batch 1、长序列下端到端 decode 最多快 8 倍，attention 算子本身最多快 50 倍，且到 32k 长度时 attention 时间几乎不随长度增加（[FlashDecoding 博客](https://crfm.stanford.edu/2023/10/12/flashdecoding.html)）。$s$ 不是越大越好：段太短时每个 block 的工作量太小，合并 kernel 的开销占比上升。batch 大时 $B \times H_{kv}$ 本身就够填满 SM，就不用切了。后续的 FlashDecoding++（[Hong et al., 2023](https://arxiv.org/abs/2311.01282)）进一步用一个预设的统一最大值去掉段间同步，这里不展开。
+伪代码：
+
+```python
+# split-KV (Flash-Decoding): 在 FA2 的基础上，再沿 KV 维切成 num_splits 段
+# kernel 1: grid = (Q 块) x (split)，每个 (q0, sp) 一个 thread block，互相独立
+# kernel 2: 把各段的 (O_part, LSE_part) 合并成最终的 O
+def flash_attn_fwd_splitkv(Q, K, V, Br=128, Bc=128, num_splits=4, causal=True):
+    # Q: [S_q, d], K/V: [S_k, d]；causal 时假设 S_q == S_k（prefill）
+    S_q, d = Q.shape
+    S_k = K.shape[0]
+    # 每段的长度，向上取整到 Bc 的倍数
+    seg = ceil(ceil(S_k / num_splits) / Bc) * Bc
+
+    # 中间结果：每个 split 一份，要写回 HBM（比 FA2 多出来的开销）
+    # O_part 每段内部已经归一化，LSE_part 是每段自己的 log 分母
+    O_part   = torch.zeros(num_splits, S_q, d, dtype=torch.float32)
+    LSE_part = torch.full((num_splits, S_q), -torch.inf)
+
+    # ---------------- kernel 1 ----------------
+    # 下面两层循环在 GPU 上是 grid 的两个维度，并行执行
+    for q0 in range(0, S_q, Br):
+        for sp in range(num_splits):
+            # 这一段负责的 KV 区间 [kv_start, kv_end)
+            kv_start = sp * seg
+            kv_end   = min(kv_start + seg, S_k)
+            if causal:
+                kv_end = min(kv_end, q0 + Br)    # 对角线右边的部分跳过；可能整段为空
+
+            q = load(Q[q0:q0+Br])
+            # 和 FA2 完全一样的 running state：m, d', õ
+            m   = torch.full((Br,), -torch.inf)
+            l   = torch.zeros(Br)
+            acc = torch.zeros(Br, d)
+
+            # 只扫自己这一段 KV，而不是 [0, k_end)
+            for k0 in range(kv_start, kv_end, Bc):
+                k1 = min(k0 + Bc, kv_end)
+                k, v = load(K[k0:k1]), load(V[k0:k1])
+                s = q @ k.mT * d**-0.5
+                if causal and k1 > q0:            # 对角 tile 逐元素 mask
+                    i = torch.arange(q0, q0 + Br)[:, None]
+                    j = torch.arange(k0, k1)[None, :]
+                    s = torch.where(j <= i, s, -torch.inf)
+                m_new = torch.maximum(m, s.amax(dim=-1))
+                alpha = torch.exp(m - m_new)      # 实际 kernel 要特判 m_new == -inf
+                p = torch.exp(s - m_new[:, None])
+                l = alpha * l + p.sum(dim=-1)
+                acc = alpha[:, None] * acc + p @ v
+                m = m_new
+
+            # 和 FA2 的区别：写回的是“这一段”的结果，不是最终结果
+            # 某些行可能在这一段里一个 key 都看不到（l == 0），要置成 O=0、LSE=-inf
+            valid = l > 0
+            O_part[sp, q0:q0+Br]   = torch.where(valid[:, None], acc / l[:, None], 0)
+            LSE_part[sp, q0:q0+Br] = torch.where(valid, m + torch.log(l), -torch.inf)
+
+    # ---------------- kernel 2: combine ----------------
+    # 总分母取 log：LSE = log Σ_sp exp(LSE_sp)，内部同样要先减 max 才安全
+    LSE = torch.logsumexp(LSE_part, dim=0)               # [S_q]
+    # 第 sp 段的权重 = 它的分母占总分母的比例
+    #   e^{LSE_sp - LSE} = e^{m_sp - m} * l_sp / l  （换 max 和归一化两个修正合成了一个）
+    w = torch.exp(LSE_part - LSE[None, :])                # [num_splits, S_q]，各段之和为 1
+    O = (w[:, :, None] * O_part).sum(dim=0)               # [S_q, d]
+    return O, LSE
+```
+
+为啥non-splitk不需要这个reduce kernel？
+1. non-splitk在循环里处理kv的全部tile，这样边循环边update o‘，最终结果就是o
+2. splitk里，kv的切片被划分到了不同的thread block里，他们之间本身要同步，唯一的办法就是barrier，这隐式通过启动一个kernel来做到
 
 PagedAttention 下 K/V 不连续，decode kernel 在 split-KV 之外还要按 block table 间接寻址，见 [KV Cache 与 PagedAttention](/inference/kv-cache-paged-attention)。
 
