@@ -444,16 +444,16 @@
     "last_review": "2026-10-25T13:47:12.486Z"
   },
   "bagu-quant-granularity": {
-    "stability": 8.2956,
-    "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "stability": 37.41972166,
+    "difficulty": 4.01060897,
+    "elapsed_days": 16,
+    "scheduled_days": 37,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-17T14:03:14.074Z",
-    "last_review": "2026-10-09T14:03:14.074Z"
+    "due": "2026-12-01T15:01:28.097Z",
+    "last_review": "2026-10-25T15:01:28.097Z"
   },
   "bagu-radix": {
     "stability": 84.0276558,
