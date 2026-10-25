@@ -516,16 +516,16 @@
     "last_review": "2026-10-09T04:20:09.724Z"
   },
   "bagu-sd-capacity": {
-    "stability": 16.17726312,
-    "difficulty": 2.11121424,
-    "elapsed_days": 4,
-    "scheduled_days": 16,
-    "reps": 2,
+    "stability": 64.51856662,
+    "difficulty": 2.1043314,
+    "elapsed_days": 16,
+    "scheduled_days": 65,
+    "reps": 3,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-25T03:42:28.278Z",
-    "last_review": "2026-10-09T03:42:28.278Z"
+    "due": "2026-12-29T15:07:27.374Z",
+    "last_review": "2026-10-25T15:07:27.374Z"
   },
   "bagu-smoothquant": {
     "stability": 56.72280595,
