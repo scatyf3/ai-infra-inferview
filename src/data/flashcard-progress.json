@@ -612,16 +612,16 @@
     "last_review": "2026-10-09T16:23:19.334Z"
   },
   "bagu-w4a16-vs-w8a8": {
-    "stability": 6.14141419,
-    "difficulty": 6.72239265,
-    "elapsed_days": 0,
-    "scheduled_days": 6,
-    "reps": 4,
+    "stability": 42.04884416,
+    "difficulty": 5.61239738,
+    "elapsed_days": 16,
+    "scheduled_days": 42,
+    "reps": 5,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-15T04:25:00.347Z",
-    "last_review": "2026-10-09T04:25:00.347Z"
+    "due": "2026-12-06T14:56:03.092Z",
+    "last_review": "2026-10-25T14:56:03.092Z"
   },
   "bagu-weight-rule": {
     "stability": 24.3227276,
