@@ -408,16 +408,16 @@
     "last_review": "2026-10-16T04:47:55.240Z"
   },
   "bagu-prefill-ai": {
-    "stability": 16.08387556,
-    "difficulty": 3.4641143,
-    "elapsed_days": 4,
-    "scheduled_days": 16,
-    "reps": 2,
+    "stability": 92.78995445,
+    "difficulty": 1.26535424,
+    "elapsed_days": 16,
+    "scheduled_days": 93,
+    "reps": 3,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-25T03:36:43.139Z",
-    "last_review": "2026-10-09T03:36:43.139Z"
+    "due": "2027-01-26T15:04:36.550Z",
+    "last_review": "2026-10-25T15:04:36.550Z"
   },
   "bagu-prefix-cache": {
     "stability": 98.99491403,
