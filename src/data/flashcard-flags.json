@@ -143,6 +143,42 @@
     "suspended": true,
     "at": 1791587975115
   },
+  "bagu-fp8-training-amdahl": {
+    "suspended": true,
+    "at": 1792941542750
+  },
+  "bagu-fp8-training-delayed-overflow": {
+    "suspended": true,
+    "at": 1792941543451
+  },
+  "bagu-fp8-training-dsv3-scales": {
+    "suspended": true,
+    "at": 1792941544217
+  },
+  "bagu-fp8-training-memory": {
+    "suspended": true,
+    "at": 1792941545401
+  },
+  "bagu-fp8-training-mx-scale": {
+    "suspended": true,
+    "at": 1792941545084
+  },
+  "bagu-fp8-training-per-tensor-range": {
+    "suspended": true,
+    "at": 1792941543851
+  },
+  "bagu-fp8-training-promotion": {
+    "suspended": true,
+    "at": 1792941544717
+  },
+  "bagu-fp8-training-scale": {
+    "suspended": true,
+    "at": 1792941543168
+  },
+  "bagu-fp8-training-three-gemms": {
+    "suspended": true,
+    "at": 1792941542150
+  },
   "bagu-gemv": {
     "suspended": true,
     "at": 1792940917417
@@ -194,6 +230,18 @@
   "bagu-layer-params-2": {
     "suspended": true,
     "at": 1791649532032
+  },
+  "bagu-lc-act-mem": {
+    "suspended": true,
+    "at": 1792941547691
+  },
+  "bagu-lc-attn-ratio": {
+    "suspended": true,
+    "at": 1792941545765
+  },
+  "bagu-lc-zigzag": {
+    "suspended": true,
+    "at": 1792941549963
   },
   "bagu-long-context-prefill": {
     "suspended": true,
@@ -290,6 +338,38 @@
   "bagu-parallel-choice": {
     "suspended": true,
     "at": 1791650882956
+  },
+  "bagu-parallel-config-batch": {
+    "suspended": true,
+    "at": 1792941539258
+  },
+  "bagu-parallel-config-dp-comm": {
+    "suspended": true,
+    "at": 1792941541095
+  },
+  "bagu-parallel-config-mesh": {
+    "suspended": true,
+    "at": 1792941539791
+  },
+  "bagu-parallel-config-mfu-first": {
+    "suspended": true,
+    "at": 1792941541759
+  },
+  "bagu-parallel-config-pp-act": {
+    "suspended": true,
+    "at": 1792941538370
+  },
+  "bagu-parallel-config-states": {
+    "suspended": true,
+    "at": 1792941537654
+  },
+  "bagu-parallel-config-tp-cap": {
+    "suspended": true,
+    "at": 1792941541349
+  },
+  "bagu-parallel-config-zero1-pp": {
+    "suspended": true,
+    "at": 1792941540516
   },
   "bagu-pp-1f1b-memory": {
     "suspended": true,
