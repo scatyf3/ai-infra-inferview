@@ -1464,16 +1464,16 @@
     "last_review": "2026-10-16T05:24:55.165Z"
   },
   "triton-load-other": {
-    "stability": 15.74349117,
-    "difficulty": 3.45587856,
-    "elapsed_days": 5,
-    "scheduled_days": 16,
-    "reps": 3,
+    "stability": 92.33721994,
+    "difficulty": 1.2543665,
+    "elapsed_days": 16,
+    "scheduled_days": 92,
+    "reps": 4,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-25T12:52:26.607Z",
-    "last_review": "2026-10-09T12:52:26.607Z"
+    "due": "2027-01-25T14:53:43.304Z",
+    "last_review": "2026-10-25T14:53:43.304Z"
   },
   "triton-load-scalar": {
     "stability": 32.61364066,
