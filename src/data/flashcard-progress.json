@@ -588,16 +588,16 @@
     "last_review": "2026-10-09T23:16:01.960Z"
   },
   "bagu-ttft-parts": {
-    "stability": 10.65484778,
-    "difficulty": 4.74828477,
-    "elapsed_days": 4,
-    "scheduled_days": 11,
-    "reps": 3,
+    "stability": 29.84382939,
+    "difficulty": 6.49889507,
+    "elapsed_days": 16,
+    "scheduled_days": 30,
+    "reps": 4,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-20T04:22:01.546Z",
-    "last_review": "2026-10-09T04:22:01.546Z"
+    "due": "2026-11-24T15:04:24.895Z",
+    "last_review": "2026-10-25T15:04:24.895Z"
   },
   "bagu-vllm-v1": {
     "stability": 8.2956,
