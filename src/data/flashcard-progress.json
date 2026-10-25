@@ -1164,16 +1164,16 @@
     "last_review": "2026-10-16T04:53:35.221Z"
   },
   "torch-write-cat": {
-    "stability": 16.17726312,
-    "difficulty": 2.11121424,
-    "elapsed_days": 4,
-    "scheduled_days": 16,
-    "reps": 2,
+    "stability": 45.24972304,
+    "difficulty": 4.74828477,
+    "elapsed_days": 16,
+    "scheduled_days": 45,
+    "reps": 3,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-25T03:43:59.041Z",
-    "last_review": "2026-10-09T03:43:59.041Z"
+    "due": "2026-12-09T14:40:11.125Z",
+    "last_review": "2026-10-25T14:40:11.125Z"
   },
   "torch-write-clone": {
     "stability": 28.72195153,
