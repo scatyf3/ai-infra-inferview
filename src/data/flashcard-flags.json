@@ -1,7 +1,27 @@
 {
+  "bagu-agentic-concurrency": {
+    "suspended": true,
+    "at": 1792941180715
+  },
+  "bagu-agentic-mask": {
+    "suspended": true,
+    "at": 1792941177808
+  },
+  "bagu-agentic-prefix": {
+    "suspended": true,
+    "at": 1792941178932
+  },
   "bagu-areal-staleness": {
     "suspended": true,
     "at": 1792941148891
+  },
+  "bagu-audio-tokens": {
+    "suspended": true,
+    "at": 1792941189183
+  },
+  "bagu-barge-in-truncate": {
+    "suspended": true,
+    "at": 1792941195897
   },
   "bagu-bf16-fp16": {
     "suspended": false,
@@ -14,6 +34,18 @@
   "bagu-cispo": {
     "suspended": true,
     "at": 1792941131358
+  },
+  "bagu-codec-bitrate": {
+    "suspended": true,
+    "at": 1792941192434
+  },
+  "bagu-codec-steps": {
+    "suspended": true,
+    "at": 1792941194299
+  },
+  "bagu-collapse-order": {
+    "suspended": true,
+    "at": 1792941185599
   },
   "bagu-dapo-clip-higher": {
     "suspended": true,
@@ -31,9 +63,25 @@
     "suspended": true,
     "at": 1792941002777
   },
+  "bagu-duplex-tick": {
+    "suspended": true,
+    "at": 1792941196318
+  },
   "bagu-dynamic-sampling": {
     "suspended": true,
     "at": 1792941127475
+  },
+  "bagu-encoder-no-chunk": {
+    "suspended": true,
+    "at": 1792941190550
+  },
+  "bagu-entropy-cov": {
+    "suspended": true,
+    "at": 1792941181585
+  },
+  "bagu-ess": {
+    "suspended": true,
+    "at": 1792941184832
   },
   "bagu-fa-v2-v3": {
     "suspended": true,
@@ -95,6 +143,10 @@
     "suspended": true,
     "at": 1791519772789
   },
+  "bagu-image-tokens": {
+    "suspended": true,
+    "at": 1792941186283
+  },
   "bagu-layer-params": {
     "suspended": true,
     "at": 1791587945376
@@ -106,6 +158,10 @@
   "bagu-long-context-prefill": {
     "suspended": true,
     "at": 1792940434331
+  },
+  "bagu-megatron-qkv": {
+    "suspended": true,
+    "at": 1792941175159
   },
   "bagu-megatron-tp": {
     "suspended": true,
@@ -139,9 +195,21 @@
     "suspended": true,
     "at": 1791650888456
   },
+  "bagu-mrope": {
+    "suspended": true,
+    "at": 1792941190066
+  },
   "bagu-multi-lora": {
     "suspended": true,
     "at": 1792940996560
+  },
+  "bagu-omni-first-packet": {
+    "suspended": true,
+    "at": 1792941195459
+  },
+  "bagu-omni-rtf": {
+    "suspended": true,
+    "at": 1792941194921
   },
   "bagu-parallel-choice": {
     "suspended": true,
@@ -159,6 +227,14 @@
     "suspended": true,
     "at": 1792940999690
   },
+  "bagu-ppo-kl-vs-kl-loss": {
+    "suspended": true,
+    "at": 1792941183528
+  },
+  "bagu-r3": {
+    "suspended": true,
+    "at": 1792941172098
+  },
   "bagu-ring-allreduce": {
     "suspended": true,
     "at": 1791650869557
@@ -166,6 +242,10 @@
   "bagu-rollout-tail": {
     "suspended": true,
     "at": 1792941147145
+  },
+  "bagu-rvq": {
+    "suspended": true,
+    "at": 1792941193401
   },
   "bagu-sd-order": {
     "suspended": false,
@@ -191,6 +271,14 @@
     "suspended": true,
     "at": 1791649819246
   },
+  "bagu-tis": {
+    "suspended": true,
+    "at": 1792941170754
+  },
+  "bagu-tito": {
+    "suspended": true,
+    "at": 1792941176355
+  },
   "bagu-tokenize-event-loop": {
     "suspended": true,
     "at": 1792940897454
@@ -211,6 +299,14 @@
     "suspended": true,
     "at": 1792940923058
   },
+  "bagu-video-tokens": {
+    "suspended": true,
+    "at": 1792941188283
+  },
+  "bagu-vit-flops": {
+    "suspended": true,
+    "at": 1792941189617
+  },
   "bagu-vllm-v1": {
     "suspended": true,
     "at": 1792940531821
@@ -218,6 +314,10 @@
   "bagu-warp-divergence": {
     "suspended": true,
     "at": 1792940900101
+  },
+  "bagu-weight-sync-time": {
+    "suspended": true,
+    "at": 1792941173575
   },
   "bagu-zero": {
     "suspended": true,
