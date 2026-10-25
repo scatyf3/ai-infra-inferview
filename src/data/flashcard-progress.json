@@ -371,6 +371,18 @@
     "due": "2026-10-09T04:30:12.199Z",
     "last_review": "2026-10-09T04:29:12.199Z"
   },
+  "bagu-lc-pi": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-11-02T19:53:24.554Z",
+    "last_review": "2026-10-25T19:53:24.554Z"
+  },
   "bagu-long-context-prefill": {
     "stability": 1.45846674,
     "difficulty": 7.02698957,
