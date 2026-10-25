@@ -972,16 +972,16 @@
     "last_review": "2026-10-16T05:03:30.247Z"
   },
   "torch-read-repeat": {
-    "stability": 0.61490478,
-    "difficulty": 8.66317898,
-    "elapsed_days": 0,
-    "scheduled_days": 1,
-    "reps": 6,
+    "stability": 3.80311798,
+    "difficulty": 8.64974417,
+    "elapsed_days": 9,
+    "scheduled_days": 4,
+    "reps": 7,
     "lapses": 2,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-17T05:10:48.048Z",
-    "last_review": "2026-10-16T05:10:48.048Z"
+    "due": "2026-10-29T13:51:19.236Z",
+    "last_review": "2026-10-25T13:51:19.236Z"
   },
   "torch-read-repeat-interleave": {
     "stability": 1.08285223,
