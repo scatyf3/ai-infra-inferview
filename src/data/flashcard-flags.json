@@ -12,8 +12,12 @@
     "at": 1791587995236
   },
   "bagu-dpo": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1792941001606
+  },
+  "bagu-dpo-2": {
+    "suspended": true,
+    "at": 1792941002777
   },
   "bagu-fa-v2-v3": {
     "suspended": true,
@@ -56,8 +60,8 @@
     "at": 1791555560695
   },
   "bagu-grpo": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1792941004265
   },
   "bagu-how-many-gpus": {
     "suspended": true,
@@ -122,6 +126,10 @@
   "bagu-ppo-four-models": {
     "suspended": true,
     "at": 1792940998739
+  },
+  "bagu-ppo-four-models-2": {
+    "suspended": true,
+    "at": 1792940999690
   },
   "bagu-ring-allreduce": {
     "suspended": true,
