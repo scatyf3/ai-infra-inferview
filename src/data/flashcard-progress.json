@@ -1596,16 +1596,16 @@
     "last_review": "2026-10-16T05:21:34.019Z"
   },
   "triton-store-shape": {
-    "stability": 1.45846674,
-    "difficulty": 7.02698957,
-    "elapsed_days": 12,
+    "stability": 6.35198315,
+    "difficulty": 8.01160551,
+    "elapsed_days": 9,
     "scheduled_days": 0,
-    "reps": 2,
+    "reps": 3,
     "lapses": 1,
     "learning_steps": 0,
     "state": 3,
-    "due": "2026-10-16T05:30:18.410Z",
-    "last_review": "2026-10-16T05:20:18.410Z"
+    "due": "2026-10-25T14:58:30.088Z",
+    "last_review": "2026-10-25T14:43:30.088Z"
   },
   "triton-stream-order": {
     "stability": 66.87581683,
