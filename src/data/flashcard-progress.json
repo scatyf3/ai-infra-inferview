@@ -589,15 +589,15 @@
   },
   "bagu-sd-routing": {
     "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "difficulty": 2.11121424,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 2,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-25T15:27:58.107Z",
-    "last_review": "2026-10-25T15:17:58.107Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-27T19:37:33.191Z",
+    "last_review": "2026-10-25T19:37:33.191Z"
   },
   "bagu-sft-packing": {
     "stability": 3.94605407,
