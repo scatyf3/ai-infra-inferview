@@ -936,16 +936,16 @@
     "last_review": "2026-10-09T12:37:44.022Z"
   },
   "torch-read-matmul": {
-    "stability": 8.2956,
-    "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "stability": 37.41972166,
+    "difficulty": 4.01060897,
+    "elapsed_days": 16,
+    "scheduled_days": 37,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-17T12:28:58.407Z",
-    "last_review": "2026-10-09T12:28:58.407Z"
+    "due": "2026-12-01T13:51:48.894Z",
+    "last_review": "2026-10-25T13:51:48.894Z"
   },
   "torch-read-permute": {
     "stability": 35.93233085,
