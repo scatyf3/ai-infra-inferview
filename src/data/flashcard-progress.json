@@ -1512,16 +1512,16 @@
     "last_review": "2026-10-16T05:24:39.992Z"
   },
   "triton-num-warps": {
-    "stability": 1.2931,
-    "difficulty": 5.11217071,
-    "elapsed_days": 0,
+    "stability": 0.51217334,
+    "difficulty": 8.37863212,
+    "elapsed_days": 9,
     "scheduled_days": 0,
-    "reps": 1,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 1,
-    "due": "2026-10-16T05:30:29.100Z",
-    "last_review": "2026-10-16T05:24:29.100Z"
+    "due": "2026-10-25T14:51:16.339Z",
+    "last_review": "2026-10-25T14:50:16.339Z"
   },
   "triton-offs-mask": {
     "stability": 1.49485577,
