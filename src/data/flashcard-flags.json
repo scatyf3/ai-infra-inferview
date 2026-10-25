@@ -87,6 +87,10 @@
     "suspended": true,
     "at": 1792958834206
   },
+  "bagu-data-pipeline-doc-mask-flops": {
+    "suspended": true,
+    "at": 1792958835365
+  },
   "bagu-data-pipeline-dp-slice": {
     "suspended": true,
     "at": 1792958834528
@@ -98,6 +102,10 @@
   "bagu-data-pipeline-sample-slice": {
     "suspended": true,
     "at": 1792958833340
+  },
+  "bagu-data-pipeline-skip-batches": {
+    "suspended": true,
+    "at": 1792958835711
   },
   "bagu-data-pipeline-token-dtype": {
     "suspended": true,
@@ -138,6 +146,38 @@
   "bagu-dynamic-sampling": {
     "suspended": true,
     "at": 1792941127475
+  },
+  "bagu-efficient-sft-ce-grad": {
+    "suspended": true,
+    "at": 1792958838670
+  },
+  "bagu-efficient-sft-chunk-size": {
+    "suspended": true,
+    "at": 1792958838471
+  },
+  "bagu-efficient-sft-eta": {
+    "suspended": true,
+    "at": 1792958837366
+  },
+  "bagu-efficient-sft-gemm-ai": {
+    "suspended": true,
+    "at": 1792958838852
+  },
+  "bagu-efficient-sft-logits-mem": {
+    "suspended": true,
+    "at": 1792958838035
+  },
+  "bagu-efficient-sft-recompute-layer": {
+    "suspended": true,
+    "at": 1792958839066
+  },
+  "bagu-efficient-sft-throughput": {
+    "suspended": true,
+    "at": 1792958836291
+  },
+  "bagu-efficient-sft-zero2-vs-fsdp": {
+    "suspended": true,
+    "at": 1792958839395
   },
   "bagu-encoder-no-chunk": {
     "suspended": true,
