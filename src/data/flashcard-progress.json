@@ -1693,15 +1693,15 @@
   },
   "triton-store-shape": {
     "stability": 6.35198315,
-    "difficulty": 8.01160551,
-    "elapsed_days": 9,
-    "scheduled_days": 0,
-    "reps": 3,
+    "difficulty": 7.99882227,
+    "elapsed_days": 0,
+    "scheduled_days": 6,
+    "reps": 4,
     "lapses": 1,
     "learning_steps": 0,
-    "state": 3,
-    "due": "2026-10-25T14:58:30.088Z",
-    "last_review": "2026-10-25T14:43:30.088Z"
+    "state": 2,
+    "due": "2026-10-31T19:03:43.515Z",
+    "last_review": "2026-10-25T19:03:43.515Z"
   },
   "triton-stream-order": {
     "stability": 66.87581683,
