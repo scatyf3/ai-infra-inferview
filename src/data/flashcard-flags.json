@@ -235,6 +235,10 @@
     "suspended": true,
     "at": 1792941547691
   },
+  "bagu-lc-allgather-kv": {
+    "suspended": true,
+    "at": 1792957987412
+  },
   "bagu-lc-attn-ratio": {
     "suspended": true,
     "at": 1792941545765
@@ -242,6 +246,14 @@
   "bagu-lc-ring-hide": {
     "suspended": true,
     "at": 1792957983907
+  },
+  "bagu-lc-rope-wavelength": {
+    "suspended": true,
+    "at": 1792957990375
+  },
+  "bagu-lc-ulysses": {
+    "suspended": true,
+    "at": 1792957988611
   },
   "bagu-lc-zigzag": {
     "suspended": true,
