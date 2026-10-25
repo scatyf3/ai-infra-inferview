@@ -163,6 +163,10 @@
     "suspended": false,
     "at": 1791572576835
   },
+  "bagu-vllm-v1": {
+    "suspended": true,
+    "at": 1792940531821
+  },
   "bagu-warp-divergence": {
     "suspended": false,
     "at": 1791572576835
