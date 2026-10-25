@@ -228,8 +228,8 @@
     "at": 1792128134648
   },
   "triton-group-m": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1792939964328
   },
   "triton-matmul-program": {
     "suspended": false,
