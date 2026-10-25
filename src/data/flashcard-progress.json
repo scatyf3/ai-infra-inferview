@@ -132,16 +132,16 @@
     "last_review": "2026-10-10T16:27:29.879Z"
   },
   "bagu-fa-why": {
-    "stability": 11.85291529,
-    "difficulty": 4.74828477,
-    "elapsed_days": 5,
-    "scheduled_days": 12,
-    "reps": 3,
+    "stability": 72.76092451,
+    "difficulty": 2.97863464,
+    "elapsed_days": 16,
+    "scheduled_days": 73,
+    "reps": 4,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-21T03:49:51.545Z",
-    "last_review": "2026-10-09T03:49:51.545Z"
+    "due": "2027-01-06T15:04:30.104Z",
+    "last_review": "2026-10-25T15:04:30.104Z"
   },
   "bagu-flash-decoding": {
     "stability": 15.74349117,
