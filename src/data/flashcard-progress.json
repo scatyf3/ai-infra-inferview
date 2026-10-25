@@ -228,16 +228,16 @@
     "last_review": "2026-10-16T05:28:49.253Z"
   },
   "bagu-gqa-kernel": {
-    "stability": 8.2956,
+    "stability": 114.44341747,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 21,
+    "scheduled_days": 114,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-12T23:37:53.058Z",
-    "last_review": "2026-10-04T23:37:53.058Z"
+    "due": "2027-02-16T13:44:08.112Z",
+    "last_review": "2026-10-25T13:44:08.112Z"
   },
   "bagu-gqa-tp": {
     "stability": 32.03626588,
