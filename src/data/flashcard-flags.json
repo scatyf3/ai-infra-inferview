@@ -487,6 +487,18 @@
     "suspended": true,
     "at": 1791649819246
   },
+  "bagu-stability-qk-norm-bound": {
+    "suspended": true,
+    "at": 1792958738276
+  },
+  "bagu-stability-softcap": {
+    "suspended": true,
+    "at": 1792958734118
+  },
+  "bagu-stability-softmax-collapse": {
+    "suspended": true,
+    "at": 1792958735650
+  },
   "bagu-stability-z-loss": {
     "suspended": true,
     "at": 1792958731064
