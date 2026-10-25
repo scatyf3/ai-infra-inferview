@@ -299,6 +299,10 @@
     "suspended": true,
     "at": 1791650871524
   },
+  "bagu-pp-dualpipe": {
+    "suspended": true,
+    "at": 1792941531294
+  },
   "bagu-pp-first-stage": {
     "suspended": true,
     "at": 1792941525834
@@ -310,6 +314,14 @@
   "bagu-pp-interleaved": {
     "suspended": true,
     "at": 1792941528660
+  },
+  "bagu-pp-lm-head": {
+    "suspended": true,
+    "at": 1792941536112
+  },
+  "bagu-pp-p2p-bytes": {
+    "suspended": true,
+    "at": 1792941534015
   },
   "bagu-pp-zero-bubble": {
     "suspended": true,
