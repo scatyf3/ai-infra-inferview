@@ -1368,16 +1368,16 @@
     "last_review": "2026-10-16T04:56:39.346Z"
   },
   "torch-write-where": {
-    "stability": 8.2956,
-    "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
-    "lapses": 0,
+    "stability": 1.51656932,
+    "difficulty": 7.02698957,
+    "elapsed_days": 16,
+    "scheduled_days": 0,
+    "reps": 2,
+    "lapses": 1,
     "learning_steps": 0,
-    "state": 2,
-    "due": "2026-10-17T12:47:59.711Z",
-    "last_review": "2026-10-09T12:47:59.711Z"
+    "state": 3,
+    "due": "2026-10-25T14:07:37.750Z",
+    "last_review": "2026-10-25T13:57:37.750Z"
   },
   "triton-arange-pow2": {
     "stability": 15.94072638,
