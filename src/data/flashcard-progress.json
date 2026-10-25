@@ -167,6 +167,18 @@
     "due": "2026-12-27T13:46:19.918Z",
     "last_review": "2026-10-25T13:46:19.918Z"
   },
+  "bagu-efficient-rl-prefix-share": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-11-02T20:10:53.509Z",
+    "last_review": "2026-10-25T20:10:53.509Z"
+  },
   "bagu-fa-v2-v3-3": {
     "stability": 2.3065,
     "difficulty": 2.11810397,
