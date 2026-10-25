@@ -12,16 +12,16 @@
     "last_review": "2026-10-25T15:00:48.658Z"
   },
   "bagu-benchmark-design": {
-    "stability": 1.11214607,
-    "difficulty": 7.02698957,
-    "elapsed_days": 16,
-    "scheduled_days": 0,
-    "reps": 3,
+    "stability": 1.1604102,
+    "difficulty": 7.01519095,
+    "elapsed_days": 0,
+    "scheduled_days": 1,
+    "reps": 4,
     "lapses": 1,
     "learning_steps": 0,
-    "state": 3,
-    "due": "2026-10-25T15:04:24.880Z",
-    "last_review": "2026-10-25T14:54:24.880Z"
+    "state": 2,
+    "due": "2026-10-26T15:08:12.771Z",
+    "last_review": "2026-10-25T15:08:12.771Z"
   },
   "bagu-block-size": {
     "stability": 84.0276558,
