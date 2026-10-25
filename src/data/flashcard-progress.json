@@ -1392,16 +1392,16 @@
     "last_review": "2026-10-25T14:53:51.055Z"
   },
   "triton-atomic-cost": {
-    "stability": 15.9366778,
-    "difficulty": 4.01060897,
-    "elapsed_days": 5,
-    "scheduled_days": 16,
-    "reps": 3,
+    "stability": 38.75639122,
+    "difficulty": 6.0091915,
+    "elapsed_days": 16,
+    "scheduled_days": 39,
+    "reps": 4,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-25T12:54:22.845Z",
-    "last_review": "2026-10-09T12:54:22.845Z"
+    "due": "2026-12-03T14:54:04.876Z",
+    "last_review": "2026-10-25T14:54:04.876Z"
   },
   "triton-atomic-init": {
     "stability": 69.47642525,
