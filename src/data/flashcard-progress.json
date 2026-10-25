@@ -1597,15 +1597,15 @@
   },
   "triton-no-grid-sync": {
     "stability": 15.34878648,
-    "difficulty": 4.75285849,
-    "elapsed_days": 9,
-    "scheduled_days": 0,
-    "reps": 2,
+    "difficulty": 4.743334,
+    "elapsed_days": 0,
+    "scheduled_days": 15,
+    "reps": 3,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-25T14:56:48.874Z",
-    "last_review": "2026-10-25T14:50:48.874Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-11-09T19:02:47.099Z",
+    "last_review": "2026-10-25T19:02:47.099Z"
   },
   "triton-num-warps": {
     "stability": 0.51217334,
