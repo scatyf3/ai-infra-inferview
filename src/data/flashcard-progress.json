@@ -1308,16 +1308,16 @@
     "last_review": "2026-10-09T12:17:40.499Z"
   },
   "torch-write-stack": {
-    "stability": 1.53990209,
-    "difficulty": 8.38285052,
-    "elapsed_days": 1,
-    "scheduled_days": 2,
-    "reps": 5,
+    "stability": 7.02149139,
+    "difficulty": 8.36969604,
+    "elapsed_days": 9,
+    "scheduled_days": 7,
+    "reps": 6,
     "lapses": 1,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-18T05:10:39.155Z",
-    "last_review": "2026-10-16T05:10:39.155Z"
+    "due": "2026-11-01T13:57:58.329Z",
+    "last_review": "2026-10-25T13:57:58.329Z"
   },
   "torch-write-transpose": {
     "stability": 79.80449519,
