@@ -95,6 +95,18 @@
     "due": "2026-11-05T03:49:33.701Z",
     "last_review": "2026-10-09T03:49:33.701Z"
   },
+  "bagu-compute-mfu-6n-linear": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-25T15:28:23.415Z",
+    "last_review": "2026-10-25T15:18:23.415Z"
+  },
   "bagu-continuous-batching": {
     "stability": 114.44341747,
     "difficulty": 1,
@@ -574,6 +586,18 @@
     "state": 2,
     "due": "2026-12-29T15:07:27.374Z",
     "last_review": "2026-10-25T15:07:27.374Z"
+  },
+  "bagu-sd-routing": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-25T15:27:58.107Z",
+    "last_review": "2026-10-25T15:17:58.107Z"
   },
   "bagu-sft-packing": {
     "stability": 2.3065,

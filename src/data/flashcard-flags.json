@@ -47,6 +47,38 @@
     "suspended": true,
     "at": 1792941185599
   },
+  "bagu-compute-mfu-6nd": {
+    "suspended": true,
+    "at": 1792941506182
+  },
+  "bagu-compute-mfu-attn-term": {
+    "suspended": true,
+    "at": 1792941507631
+  },
+  "bagu-compute-mfu-chinchilla": {
+    "suspended": true,
+    "at": 1792941512624
+  },
+  "bagu-compute-mfu-days": {
+    "suspended": true,
+    "at": 1792941511797
+  },
+  "bagu-compute-mfu-from-tps": {
+    "suspended": true,
+    "at": 1792941509347
+  },
+  "bagu-compute-mfu-gpu-hours": {
+    "suspended": true,
+    "at": 1792941515187
+  },
+  "bagu-compute-mfu-hfu": {
+    "suspended": true,
+    "at": 1792941510949
+  },
+  "bagu-compute-mfu-overtrain": {
+    "suspended": true,
+    "at": 1792941514178
+  },
   "bagu-dapo-clip-higher": {
     "suspended": true,
     "at": 1792941126176
@@ -219,13 +251,69 @@
     "suspended": true,
     "at": 1792941194921
   },
+  "bagu-optimizer-lr-accum-ddp": {
+    "suspended": true,
+    "at": 1792941519154
+  },
+  "bagu-optimizer-lr-adamw-decay": {
+    "suspended": true,
+    "at": 1792941518271
+  },
+  "bagu-optimizer-lr-beta2": {
+    "suspended": true,
+    "at": 1792941517649
+  },
+  "bagu-optimizer-lr-bias-correction": {
+    "suspended": true,
+    "at": 1792941516733
+  },
+  "bagu-optimizer-lr-clip-sharded": {
+    "suspended": true,
+    "at": 1792941520121
+  },
+  "bagu-optimizer-lr-critical-batch": {
+    "suspended": true,
+    "at": 1792941521605
+  },
+  "bagu-optimizer-lr-muon-rms": {
+    "suspended": true,
+    "at": 1792941523725
+  },
+  "bagu-optimizer-lr-warmup-cosine": {
+    "suspended": true,
+    "at": 1792941520922
+  },
+  "bagu-optimizer-lr-wsd": {
+    "suspended": true,
+    "at": 1792941522809
+  },
   "bagu-parallel-choice": {
     "suspended": true,
     "at": 1791650882956
   },
+  "bagu-pp-1f1b-memory": {
+    "suspended": true,
+    "at": 1792941525117
+  },
   "bagu-pp-bubble": {
     "suspended": true,
     "at": 1791650871524
+  },
+  "bagu-pp-first-stage": {
+    "suspended": true,
+    "at": 1792941525834
+  },
+  "bagu-pp-gpipe-bubble": {
+    "suspended": true,
+    "at": 1792941524482
+  },
+  "bagu-pp-interleaved": {
+    "suspended": true,
+    "at": 1792941528660
+  },
+  "bagu-pp-zero-bubble": {
+    "suspended": true,
+    "at": 1792941529675
   },
   "bagu-ppo-four-models": {
     "suspended": true,
