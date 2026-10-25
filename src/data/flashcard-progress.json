@@ -72,16 +72,16 @@
     "last_review": "2026-10-09T03:49:33.701Z"
   },
   "bagu-continuous-batching": {
-    "stability": 8.2956,
+    "stability": 114.44341747,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 21,
+    "scheduled_days": 114,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-12T23:42:22.137Z",
-    "last_review": "2026-10-04T23:42:22.137Z"
+    "due": "2027-02-16T13:44:14.883Z",
+    "last_review": "2026-10-25T13:44:14.883Z"
   },
   "bagu-cuda-graph": {
     "stability": 8.2956,
