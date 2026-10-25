@@ -48,16 +48,16 @@
     "last_review": "2026-10-16T04:49:46.150Z"
   },
   "bagu-chunked-prefill": {
-    "stability": 8.2956,
+    "stability": 64.97124604,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 21,
+    "scheduled_days": 65,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-12T23:43:38.686Z",
-    "last_review": "2026-10-04T23:43:38.686Z"
+    "due": "2026-12-29T13:44:19.614Z",
+    "last_review": "2026-10-25T13:44:19.614Z"
   },
   "bagu-chunked-vs-pd": {
     "stability": 27.4799283,
