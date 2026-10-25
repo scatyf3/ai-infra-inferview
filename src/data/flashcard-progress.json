@@ -35,6 +35,18 @@
     "due": "2026-10-25T15:19:26.665Z",
     "last_review": "2026-10-25T15:09:26.665Z"
   },
+  "bagu-bf16-sum-order": {
+    "stability": 8.2956,
+    "difficulty": 1,
+    "elapsed_days": 0,
+    "scheduled_days": 8,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-11-02T15:12:47.637Z",
+    "last_review": "2026-10-25T15:12:47.637Z"
+  },
   "bagu-block-size": {
     "stability": 84.0276558,
     "difficulty": 1,
