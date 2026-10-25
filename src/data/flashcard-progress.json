@@ -84,16 +84,16 @@
     "last_review": "2026-10-25T13:44:14.883Z"
   },
   "bagu-cuda-graph": {
-    "stability": 8.2956,
+    "stability": 111.58629425,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 20,
+    "scheduled_days": 112,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-13T00:59:46.173Z",
-    "last_review": "2026-10-05T00:59:46.173Z"
+    "due": "2027-02-14T13:47:06.980Z",
+    "last_review": "2026-10-25T13:47:06.980Z"
   },
   "bagu-decode-step-time": {
     "stability": 2.11094919,
@@ -180,28 +180,28 @@
     "last_review": "2026-10-09T17:23:03.693Z"
   },
   "bagu-goodput": {
-    "stability": 8.2956,
+    "stability": 111.58629425,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 20,
+    "scheduled_days": 112,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-13T00:51:42.879Z",
-    "last_review": "2026-10-05T00:51:42.879Z"
+    "due": "2027-02-14T13:46:56.217Z",
+    "last_review": "2026-10-25T13:46:56.217Z"
   },
   "bagu-gptq-awq": {
-    "stability": 3.91767278,
-    "difficulty": 8.37949113,
-    "elapsed_days": 3,
-    "scheduled_days": 4,
-    "reps": 4,
+    "stability": 14.08799639,
+    "difficulty": 8.36634001,
+    "elapsed_days": 16,
+    "scheduled_days": 14,
+    "reps": 5,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-13T04:22:35.458Z",
-    "last_review": "2026-10-09T04:22:35.458Z"
+    "due": "2026-11-08T13:47:23.350Z",
+    "last_review": "2026-10-25T13:47:23.350Z"
   },
   "bagu-gpu-coalescing": {
     "stability": 10.92292412,
@@ -336,28 +336,28 @@
     "last_review": "2026-10-09T03:41:10.926Z"
   },
   "bagu-metrics": {
-    "stability": 8.2956,
-    "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
-    "lapses": 0,
+    "stability": 1.5663583,
+    "difficulty": 7.02698957,
+    "elapsed_days": 20,
+    "scheduled_days": 0,
+    "reps": 2,
+    "lapses": 1,
     "learning_steps": 0,
-    "state": 2,
-    "due": "2026-10-13T00:50:47.394Z",
-    "last_review": "2026-10-05T00:50:47.394Z"
+    "state": 3,
+    "due": "2026-10-25T13:56:51.400Z",
+    "last_review": "2026-10-25T13:46:51.400Z"
   },
   "bagu-moe-ep": {
-    "stability": 8.2956,
-    "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "stability": 41.46289325,
+    "difficulty": 4.01060897,
+    "elapsed_days": 20,
+    "scheduled_days": 41,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-13T00:57:43.453Z",
-    "last_review": "2026-10-05T00:57:43.453Z"
+    "due": "2026-12-05T13:47:02.835Z",
+    "last_review": "2026-10-25T13:47:02.835Z"
   },
   "bagu-paged-why": {
     "stability": 84.0276558,
@@ -432,16 +432,16 @@
     "last_review": "2026-10-09T14:01:26.623Z"
   },
   "bagu-profiling": {
-    "stability": 8.2956,
+    "stability": 63.44573842,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 20,
+    "scheduled_days": 63,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-13T01:01:13.315Z",
-    "last_review": "2026-10-05T01:01:13.315Z"
+    "due": "2026-12-27T13:47:12.486Z",
+    "last_review": "2026-10-25T13:47:12.486Z"
   },
   "bagu-quant-granularity": {
     "stability": 8.2956,
