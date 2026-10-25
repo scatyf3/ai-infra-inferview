@@ -83,6 +83,34 @@
     "suspended": true,
     "at": 1792941126176
   },
+  "bagu-data-pipeline-blend-greedy": {
+    "suspended": true,
+    "at": 1792958834206
+  },
+  "bagu-data-pipeline-dp-slice": {
+    "suspended": true,
+    "at": 1792958834528
+  },
+  "bagu-data-pipeline-epochs": {
+    "suspended": true,
+    "at": 1792958833815
+  },
+  "bagu-data-pipeline-sample-slice": {
+    "suspended": true,
+    "at": 1792958833340
+  },
+  "bagu-data-pipeline-token-dtype": {
+    "suspended": true,
+    "at": 1792958833136
+  },
+  "bagu-data-pipeline-tokens-per-gpu": {
+    "suspended": true,
+    "at": 1792958832622
+  },
+  "bagu-data-pipeline-tp-pp-cp": {
+    "suspended": true,
+    "at": 1792958835061
+  },
   "bagu-decode-ai": {
     "suspended": true,
     "at": 1791587995236
@@ -155,9 +183,21 @@
     "suspended": true,
     "at": 1792958760693
   },
+  "bagu-fault-tolerance-gemini": {
+    "suspended": true,
+    "at": 1792958826423
+  },
   "bagu-fault-tolerance-job-mtbf": {
     "suspended": true,
     "at": 1792958749472
+  },
+  "bagu-fault-tolerance-reshard": {
+    "suspended": true,
+    "at": 1792958831277
+  },
+  "bagu-fault-tolerance-sdc": {
+    "suspended": true,
+    "at": 1792958827623
   },
   "bagu-fault-tolerance-young": {
     "suspended": true,
