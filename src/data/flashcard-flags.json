@@ -139,6 +139,14 @@
     "suspended": true,
     "at": 1791649772564
   },
+  "bagu-fault-tolerance-ckpt-size": {
+    "suspended": true,
+    "at": 1792958750645
+  },
+  "bagu-fault-tolerance-job-mtbf": {
+    "suspended": true,
+    "at": 1792958749472
+  },
   "bagu-float-formats": {
     "suspended": true,
     "at": 1791587975115
@@ -487,9 +495,29 @@
     "suspended": true,
     "at": 1791649819246
   },
+  "bagu-stability-adam-eps": {
+    "suspended": true,
+    "at": 1792958739723
+  },
+  "bagu-stability-bf16-logits": {
+    "suspended": true,
+    "at": 1792958747545
+  },
+  "bagu-stability-mup-lr": {
+    "suspended": true,
+    "at": 1792958743140
+  },
+  "bagu-stability-palm-rollback": {
+    "suspended": true,
+    "at": 1792958744163
+  },
   "bagu-stability-qk-norm-bound": {
     "suspended": true,
     "at": 1792958738276
+  },
+  "bagu-stability-residual-init": {
+    "suspended": true,
+    "at": 1792958741998
   },
   "bagu-stability-softcap": {
     "suspended": true,
@@ -498,6 +526,10 @@
   "bagu-stability-softmax-collapse": {
     "suspended": true,
     "at": 1792958735650
+  },
+  "bagu-stability-spike-detect": {
+    "suspended": true,
+    "at": 1792958745753
   },
   "bagu-stability-z-loss": {
     "suspended": true,
