@@ -25,15 +25,15 @@
   },
   "bagu-bf16-fp16": {
     "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "difficulty": 2.11121424,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 2,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-25T15:19:26.665Z",
-    "last_review": "2026-10-25T15:09:26.665Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-27T19:04:52.285Z",
+    "last_review": "2026-10-25T19:04:52.285Z"
   },
   "bagu-bf16-sum-order": {
     "stability": 8.2956,
