@@ -131,6 +131,18 @@
     "due": "2026-11-01T14:55:24.331Z",
     "last_review": "2026-10-25T14:55:24.331Z"
   },
+  "bagu-dit-no-kv": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-25T15:25:30.304Z",
+    "last_review": "2026-10-25T15:15:30.304Z"
+  },
   "bagu-eagle-medusa": {
     "stability": 63.44573842,
     "difficulty": 1,
