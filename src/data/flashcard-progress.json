@@ -1212,16 +1212,16 @@
     "last_review": "2026-10-25T13:57:28.123Z"
   },
   "torch-write-expand": {
-    "stability": 16.18802274,
-    "difficulty": 2.1043314,
-    "elapsed_days": 4,
-    "scheduled_days": 16,
-    "reps": 3,
-    "lapses": 0,
+    "stability": 1.85632491,
+    "difficulty": 7.38997579,
+    "elapsed_days": 16,
+    "scheduled_days": 0,
+    "reps": 4,
+    "lapses": 1,
     "learning_steps": 0,
-    "state": 2,
-    "due": "2026-10-25T12:17:53.524Z",
-    "last_review": "2026-10-09T12:17:53.524Z"
+    "state": 3,
+    "due": "2026-10-25T14:51:36.954Z",
+    "last_review": "2026-10-25T14:41:36.954Z"
   },
   "torch-write-masked-fill": {
     "stability": 0.212,
