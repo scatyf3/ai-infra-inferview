@@ -97,15 +97,15 @@
   },
   "bagu-compute-mfu-6n-linear": {
     "stability": 2.3065,
-    "difficulty": 2.11810397,
+    "difficulty": 2.11121424,
     "elapsed_days": 0,
-    "scheduled_days": 0,
-    "reps": 1,
+    "scheduled_days": 2,
+    "reps": 2,
     "lapses": 0,
-    "learning_steps": 1,
-    "state": 1,
-    "due": "2026-10-25T15:28:23.415Z",
-    "last_review": "2026-10-25T15:18:23.415Z"
+    "learning_steps": 0,
+    "state": 2,
+    "due": "2026-10-27T19:37:37.812Z",
+    "last_review": "2026-10-25T19:37:37.812Z"
   },
   "bagu-continuous-batching": {
     "stability": 114.44341747,
