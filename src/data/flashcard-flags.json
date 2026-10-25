@@ -7,6 +7,14 @@
     "suspended": true,
     "at": 1792940979533
   },
+  "bagu-cispo": {
+    "suspended": true,
+    "at": 1792941131358
+  },
+  "bagu-dapo-clip-higher": {
+    "suspended": true,
+    "at": 1792941126176
+  },
   "bagu-decode-ai": {
     "suspended": true,
     "at": 1791587995236
@@ -18,6 +26,10 @@
   "bagu-dpo-2": {
     "suspended": true,
     "at": 1792941002777
+  },
+  "bagu-dynamic-sampling": {
+    "suspended": true,
+    "at": 1792941127475
   },
   "bagu-fa-v2-v3": {
     "suspended": true,
@@ -62,6 +74,18 @@
   "bagu-grpo": {
     "suspended": true,
     "at": 1792941004265
+  },
+  "bagu-grpo-length-bias": {
+    "suspended": true,
+    "at": 1792941128225
+  },
+  "bagu-grpo-std-bias": {
+    "suspended": true,
+    "at": 1792941129175
+  },
+  "bagu-gspo-ratio": {
+    "suspended": true,
+    "at": 1792941130046
   },
   "bagu-how-many-gpus": {
     "suspended": true,
