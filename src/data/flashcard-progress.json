@@ -337,15 +337,15 @@
   },
   "bagu-metrics": {
     "stability": 1.5663583,
-    "difficulty": 7.02698957,
-    "elapsed_days": 20,
+    "difficulty": 8.01160551,
+    "elapsed_days": 0,
     "scheduled_days": 0,
-    "reps": 2,
+    "reps": 3,
     "lapses": 1,
     "learning_steps": 0,
     "state": 3,
-    "due": "2026-10-25T13:56:51.400Z",
-    "last_review": "2026-10-25T13:46:51.400Z"
+    "due": "2026-10-25T15:23:01.737Z",
+    "last_review": "2026-10-25T15:08:01.737Z"
   },
   "bagu-moe-ep": {
     "stability": 41.46289325,
