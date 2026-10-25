@@ -1500,16 +1500,16 @@
     "last_review": "2026-10-16T05:24:47.456Z"
   },
   "triton-no-grid-sync": {
-    "stability": 2.3065,
-    "difficulty": 2.11810397,
-    "elapsed_days": 0,
+    "stability": 15.34878648,
+    "difficulty": 4.75285849,
+    "elapsed_days": 9,
     "scheduled_days": 0,
-    "reps": 1,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 1,
     "state": 1,
-    "due": "2026-10-16T05:34:39.992Z",
-    "last_review": "2026-10-16T05:24:39.992Z"
+    "due": "2026-10-25T14:56:48.874Z",
+    "last_review": "2026-10-25T14:50:48.874Z"
   },
   "triton-num-warps": {
     "stability": 0.51217334,
