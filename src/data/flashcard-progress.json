@@ -167,6 +167,18 @@
     "due": "2026-12-27T13:46:19.918Z",
     "last_review": "2026-10-25T13:46:19.918Z"
   },
+  "bagu-efficient-rl-kv-budget": {
+    "stability": 1.2931,
+    "difficulty": 5.11217071,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 0,
+    "state": 1,
+    "due": "2026-10-25T20:28:26.282Z",
+    "last_review": "2026-10-25T20:22:26.282Z"
+  },
   "bagu-efficient-rl-prefix-share": {
     "stability": 8.2956,
     "difficulty": 1,
