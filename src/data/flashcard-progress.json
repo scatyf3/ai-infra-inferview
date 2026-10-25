@@ -551,6 +551,18 @@
     "due": "2026-12-29T15:07:27.374Z",
     "last_review": "2026-10-25T15:07:27.374Z"
   },
+  "bagu-sft-packing": {
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "elapsed_days": 0,
+    "scheduled_days": 0,
+    "reps": 1,
+    "lapses": 0,
+    "learning_steps": 1,
+    "state": 1,
+    "due": "2026-10-25T15:20:36.258Z",
+    "last_review": "2026-10-25T15:10:36.258Z"
+  },
   "bagu-smoothquant": {
     "stability": 56.72280595,
     "difficulty": 1,
