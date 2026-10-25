@@ -108,8 +108,8 @@
     "at": 1791650888456
   },
   "bagu-multi-lora": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1792940996560
   },
   "bagu-parallel-choice": {
     "suspended": true,
@@ -120,8 +120,8 @@
     "at": 1791650871524
   },
   "bagu-ppo-four-models": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1792940998739
   },
   "bagu-ring-allreduce": {
     "suspended": true,
