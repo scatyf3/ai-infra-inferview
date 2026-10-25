@@ -492,16 +492,16 @@
     "last_review": "2026-10-09T03:47:48.479Z"
   },
   "bagu-rl-infra": {
-    "stability": 9.19035856,
-    "difficulty": 5.09241299,
-    "elapsed_days": 0,
-    "scheduled_days": 9,
-    "reps": 3,
+    "stability": 38.45902423,
+    "difficulty": 5.08254895,
+    "elapsed_days": 16,
+    "scheduled_days": 38,
+    "reps": 4,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-18T04:25:04.996Z",
-    "last_review": "2026-10-09T04:25:04.996Z"
+    "due": "2026-12-02T15:04:14.268Z",
+    "last_review": "2026-10-25T15:04:14.268Z"
   },
   "bagu-sched-budgets": {
     "stability": 18.18015363,
