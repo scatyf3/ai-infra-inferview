@@ -164,8 +164,8 @@
     "at": 1791650870705
   },
   "bagu-train-memory": {
-    "suspended": false,
-    "at": 1791572576835
+    "suspended": true,
+    "at": 1792940923058
   },
   "bagu-vllm-v1": {
     "suspended": true,
