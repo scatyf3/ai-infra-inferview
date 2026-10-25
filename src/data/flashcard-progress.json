@@ -1309,15 +1309,15 @@
   },
   "torch-write-expand": {
     "stability": 1.85632491,
-    "difficulty": 7.38997579,
-    "elapsed_days": 16,
+    "difficulty": 8.25257267,
+    "elapsed_days": 0,
     "scheduled_days": 0,
-    "reps": 4,
+    "reps": 5,
     "lapses": 1,
     "learning_steps": 0,
     "state": 3,
-    "due": "2026-10-25T14:51:36.954Z",
-    "last_review": "2026-10-25T14:41:36.954Z"
+    "due": "2026-10-25T19:17:34.581Z",
+    "last_review": "2026-10-25T19:02:34.581Z"
   },
   "torch-write-masked-fill": {
     "stability": 0.212,
