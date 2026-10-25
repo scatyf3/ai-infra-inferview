@@ -108,16 +108,16 @@
     "last_review": "2026-10-10T16:25:24.588Z"
   },
   "bagu-eagle-medusa": {
-    "stability": 8.2956,
+    "stability": 63.44573842,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 20,
+    "scheduled_days": 63,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-13T00:02:13.424Z",
-    "last_review": "2026-10-05T00:02:13.424Z"
+    "due": "2026-12-27T13:46:19.918Z",
+    "last_review": "2026-10-25T13:46:19.918Z"
   },
   "bagu-fa-v2-v3-3": {
     "stability": 2.3065,
@@ -540,16 +540,16 @@
     "last_review": "2026-10-09T14:03:09.922Z"
   },
   "bagu-spec-large-batch": {
-    "stability": 8.2956,
+    "stability": 111.58629425,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 20,
+    "scheduled_days": 112,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-13T00:02:21.561Z",
-    "last_review": "2026-10-05T00:02:21.561Z"
+    "due": "2027-02-14T13:46:22.306Z",
+    "last_review": "2026-10-25T13:46:22.306Z"
   },
   "bagu-spec-why": {
     "stability": 111.58629425,
