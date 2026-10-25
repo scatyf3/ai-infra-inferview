@@ -39,6 +39,10 @@
     "suspended": true,
     "at": 1791651036279
   },
+  "bagu-gpu-coalescing": {
+    "suspended": true,
+    "at": 1792940172795
+  },
   "bagu-gpu-occupancy": {
     "suspended": true,
     "at": 1791651048643
