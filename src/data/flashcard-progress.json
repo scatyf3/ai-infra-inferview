@@ -924,16 +924,16 @@
     "last_review": "2026-10-09T12:44:28.856Z"
   },
   "torch-read-masked-fill": {
-    "stability": 8.2956,
+    "stability": 56.72280595,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 16,
+    "scheduled_days": 57,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-17T12:37:44.022Z",
-    "last_review": "2026-10-09T12:37:44.022Z"
+    "due": "2026-12-21T13:55:35.596Z",
+    "last_review": "2026-10-25T13:55:35.596Z"
   },
   "torch-read-matmul": {
     "stability": 37.41972166,
@@ -1008,16 +1008,16 @@
     "last_review": "2026-10-16T04:58:32.344Z"
   },
   "torch-read-softmax": {
-    "stability": 8.2956,
+    "stability": 56.72280595,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 16,
+    "scheduled_days": 57,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-17T12:30:06.825Z",
-    "last_review": "2026-10-09T12:30:06.825Z"
+    "due": "2026-12-21T13:55:18.097Z",
+    "last_review": "2026-10-25T13:55:18.097Z"
   },
   "torch-read-squeeze": {
     "stability": 11.26827621,
@@ -1284,16 +1284,16 @@
     "last_review": "2026-10-16T04:59:35.685Z"
   },
   "torch-write-softmax": {
-    "stability": 8.2956,
+    "stability": 56.72280595,
     "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "elapsed_days": 16,
+    "scheduled_days": 57,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-17T12:30:19.014Z",
-    "last_review": "2026-10-09T12:30:19.014Z"
+    "due": "2026-12-21T13:55:26.077Z",
+    "last_review": "2026-10-25T13:55:26.077Z"
   },
   "torch-write-squeeze": {
     "stability": 16.18802274,
