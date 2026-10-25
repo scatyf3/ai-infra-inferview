@@ -3,6 +3,10 @@
     "suspended": false,
     "at": 1791572576835
   },
+  "bagu-bf16-fp16-2": {
+    "suspended": true,
+    "at": 1792940979533
+  },
   "bagu-decode-ai": {
     "suspended": true,
     "at": 1791587995236
