@@ -264,16 +264,16 @@
     "last_review": "2026-10-04T23:34:02.185Z"
   },
   "bagu-kernel-fusion": {
-    "stability": 8.2956,
-    "difficulty": 1,
-    "elapsed_days": 0,
-    "scheduled_days": 8,
-    "reps": 1,
+    "stability": 37.41972166,
+    "difficulty": 4.01060897,
+    "elapsed_days": 16,
+    "scheduled_days": 37,
+    "reps": 2,
     "lapses": 0,
     "learning_steps": 0,
     "state": 2,
-    "due": "2026-10-17T15:43:54.135Z",
-    "last_review": "2026-10-09T15:43:54.135Z"
+    "due": "2026-12-01T15:01:55.831Z",
+    "last_review": "2026-10-25T15:01:55.831Z"
   },
   "bagu-kv-per-token": {
     "stability": 32.61364066,
