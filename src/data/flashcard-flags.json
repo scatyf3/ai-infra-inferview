@@ -1,4 +1,8 @@
 {
+  "bagu-areal-staleness": {
+    "suspended": true,
+    "at": 1792941148891
+  },
   "bagu-bf16-fp16": {
     "suspended": false,
     "at": 1791572576835
@@ -158,6 +162,10 @@
   "bagu-ring-allreduce": {
     "suspended": true,
     "at": 1791650869557
+  },
+  "bagu-rollout-tail": {
+    "suspended": true,
+    "at": 1792941147145
   },
   "bagu-sd-order": {
     "suspended": false,
