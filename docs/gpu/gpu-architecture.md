@@ -499,7 +499,7 @@ causal mask 是按 tile 判断的：设 Q tile 下标为 `qi`、K tile 下标为
 :::
 
 ::: details Q：L2 有 50 MB，decode 的权重能放进 L2 吗？
-放不进。70B 模型的 bf16 权重有 140 GB，8B 模型也有 16 GB，比 L2 大两到三个数量级，每步 decode 都要从 HBM 重新读一遍，这就是 decode 受带宽限制的原因（[roofline](/inference/prefill-decode-roofline)）。L2 有用的地方是 GEMM 里相邻 block 复用同一条 A / B 条带（见 [GEMM Tiling](/gpu/tensor-core-gemm#l2-同一波-block-共享条带)），以及小的激活、KV 的局部复用。
+放不进。70B 模型的 bf16 权重有 140 GB，8B 模型也有 16 GB，比 L2 大两到三个数量级，每步 decode 都要从 HBM 重新读一遍，这就是 decode 受带宽限制的原因（[roofline](/inference/prefill-decode-roofline)）。L2 有用的地方是 GEMM 里相邻 block 复用同一条 A / B 条带（见 [GEMM Tiling](/gpu/tensor-core-gemm#l2-让同时跑的-block-读同一份数据)），以及小的激活、KV 的局部复用。
 :::
 
 ## 参考
