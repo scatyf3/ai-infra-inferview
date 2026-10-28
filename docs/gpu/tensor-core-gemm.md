@@ -206,6 +206,8 @@ pid_n = local // group_rows                        # 走满 group_rows 行再换
 
 ## 第二级：每个线程算一小块（寄存器 tile）
 
+这一节先用 CUDA core 的写法（每个线程自己发 FMA）讲寄存器这一级的复用。换成 Tensor Core 以后，「每个线程算一小块」由 `mma` 指令的片段取代，见下面的 [三级 tiling](#三级-tiling)。
+
 数据进了 shared memory，问题挪到下一层：从 shared memory 读到寄存器也要发指令。如果 block 里每个线程只算 $C$ tile 的 1 个元素，每次 MAC 要从 shared memory 读 2 个数，load 指令比 FMA 还多。
 
 办法和上一级一样：每个线程负责 $TM \times TN$ 个输出，读进寄存器的一个数用很多次：
@@ -241,7 +243,15 @@ CUTLASS 在线程之上还有一层 warp tile：一个 warp 负责 $WM \times WN
 
 ## 三级 tiling
 
-把上面两级和最内层的矩阵乘指令串起来，就是 CUTLASS 的三级结构（[CUTLASS：Efficient GEMM in CUDA](https://github.com/NVIDIA/cutlass/blob/main/media/docs/cpp/efficient_gemm.md)）：
+把上面两级和最内层的矩阵乘指令串起来，就是 CUTLASS 的三级结构（[CUTLASS：Efficient GEMM in CUDA](https://github.com/NVIDIA/cutlass/blob/main/media/docs/cpp/efficient_gemm.md)）。第三级是什么，取决于用哪种计算单元：
+
+| | CUDA core（SIMT FMA） | Tensor Core |
+|---|---|---|
+| 第 1 级 | block tile：global → shared memory | block tile：global → shared memory |
+| 第 2 级 | warp tile：shared memory → 寄存器 | warp tile：shared memory → 寄存器 |
+| 第 3 级 | 线程 tile：每线程 $TM \times TN$（上一节） | **指令 tile**：一条 `mma` 的形状，硬件定 |
+
+上一节的线程 tile 是 CUDA core 版的第三级。下面按 Tensor Core 版写：
 
 ```python
 # block 级：一个 block 算 C[BM, BN]，A/B 的 tile 放 shared memory
@@ -266,6 +276,17 @@ store acc -> C   # epilogue
 每一级都是同一件事：一块数据搬到更近的存储里，被这一级 tile 的另一个维度复用。指令级的 tile 形状由硬件定，各代指令的形状见 [普通 SIMT 之外的指令](/gpu/special-instructions) 第 3 节。
 
 最后的 **epilogue** 是 kernel fusion 最自然的落点：$C$ 的 tile 还在寄存器里，把 bias、激活、量化做完再写回，省掉一次完整的读写（见 [CUDA Graph 与 Kernel Fusion](/gpu/cuda-graph-fusion)）。
+
+### 第三级：指令 tile
+
+最内层的 tile 是一条 Tensor Core 指令一次算的块。Ampere 上是 `mma.sync.m16n8k16`：一个 warp 一起发，算 $C[16, 8] \mathrel{+}= A[16, 16] \cdot B[16, 8]$，共 16 × 8 × 16 = 2048 次 MAC。A 片段的每个元素被 $n = 8$ 列复用，B 片段的每个元素被 $m = 16$ 行复用，道理和前两级一样。
+
+和前两级不同的有两点：
+
+1. **形状不能选**。能选的只是一个 warp tile 里排多少个指令块：64 × 64 的 warp tile 是 $(64 / 16) \times (64 / 8) = 32$ 个块，每个 $k = 16$ 的步长发 32 条 `mma`。所以 $WM$ 得是 16 的倍数，$WN$ 得是 8 的倍数。
+2. **没有「每个线程算一小块」了**。A 片段、B 片段和累加器摊在 warp 32 个线程的寄存器里，每个线程拿哪几个元素由硬件规定（fragment layout）：fp16 下每线程 A 有 8 个、B 有 4 个、累加器 4 个 fp32。从 shared memory 读片段用 `ldmatrix`，一条指令就按这个 layout 把数据分到 32 个线程。
+
+指令一代比一代大：Hopper 的 `wgmma` 由一个 warpgroup（4 个 warp）发，形状 m64nNk16，$N$ 最大 256；Blackwell 的 `tcgen05.mma` 一个线程就能发，最大 m128，两个 SM 配对能到 m256，累加器放进 TMEM。指令大到这个程度，warp tile 和指令 tile 基本重合：Hopper 上一个 warpgroup 负责的 64 × 256 往往就是一条 `wgmma`。为什么要越做越大、一条指令要跑多少个周期，见 [普通 SIMT 之外的指令](/gpu/special-instructions) 第 3 节。
 
 ### Hopper 上的变化
 
