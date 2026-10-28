@@ -61,28 +61,17 @@ export function waveFootprint(order: TileCoord[], start: number, width: number) 
   }
 }
 
-export interface L2Event extends TileCoord {
-  wave: number
-  /** 读 A 行条带 / B 列条带时是否命中 L2 */
-  aHit: boolean
-  bHit: boolean
-  /** 到这个 program 为止（含）累计从 HBM 读了多少条条带 */
-  hbm: number
-}
-
 /**
- * 按 launch 顺序逐个派发 program，模拟 A/B 条带的 L2 命中。
- * 简化：同一波读过的条带留在 L2，换波时清空（上一波的条带视为已被挤出）。
+ * 一波（pid ∈ [start, start + width)）里每条 A 行条带 / B 列条带被几个 program 读：pidM / pidN → 个数。
+ * 同一波同时在跑，每条条带只从 HBM 读一次进 L2，其余读取命中 L2。
  */
-export function l2Replay(order: TileCoord[], width: number): L2Event[] {
-  let rows = new Set<number>(), cols = new Set<number>(), hbm = 0
-  return order.map((t, i) => {
-    if (i % width === 0) { rows = new Set(); cols = new Set() }
-    const aHit = rows.has(t.pidM), bHit = cols.has(t.pidN)
-    rows.add(t.pidM); cols.add(t.pidN)
-    hbm += Number(!aHit) + Number(!bHit)
-    return { ...t, wave: Math.floor(i / width), aHit, bHit, hbm }
-  })
+export function waveUsage(order: TileCoord[], start: number, width: number) {
+  const rows = new Map<number, number>(), cols = new Map<number, number>()
+  for (const t of order.slice(start, start + width)) {
+    rows.set(t.pidM, (rows.get(t.pidM) ?? 0) + 1)
+    cols.set(t.pidN, (cols.get(t.pidN) ?? 0) + 1)
+  }
+  return { rows, cols }
 }
 
 /** 第 idx 块在长度为 size 的维度上覆盖 [start, end)，end 已按 size 截断（越界部分靠 mask） */
