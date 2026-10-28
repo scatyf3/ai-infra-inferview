@@ -73,7 +73,7 @@ hidden_states = self.mlp(hidden_states)
 
 Llama 的 MLP 是 $\text{down}(\text{SiLU}(x W_g) \odot x W_u)$。两步融合：
 
-1. **横向融合两个 GEMM**：$W_g$ 和 $W_u$ 拼成一个 $d \times 2I$ 的矩阵，一次 GEMM 出 `gate_up`（$T \times 2I$）。$x$ 只读一次、少一次 launch，而且 $N$ 翻倍，tile 更多，小 batch 时更容易把 SM 喂满（[GEMV 的并行度问题](/gpu/tensor-core-gemm#为什么-decode-的-gemv-打不满)）。vLLM 里是 `MergedColumnParallelLinear`，Q / K / V 三个投影同理合成 `QKVParallelLinear`（[vllm/model_executor/layers/linear.py](https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/linear.py)）。
+1. **横向融合两个 GEMM**：$W_g$ 和 $W_u$ 拼成一个 $d \times 2I$ 的矩阵，一次 GEMM 出 `gate_up`（$T \times 2I$）。$x$ 只读一次、少一次 launch，而且 $N$ 翻倍，tile 更多，小 batch 时更容易把 SM 喂满（[GEMV 的并行度问题](/gpu/tensor-core-gemm#面试追问)）。vLLM 里是 `MergedColumnParallelLinear`，Q / K / V 三个投影同理合成 `QKVParallelLinear`（[vllm/model_executor/layers/linear.py](https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/linear.py)）。
 2. **SiLU × up 融成一个 kernel**：
 
 ```python

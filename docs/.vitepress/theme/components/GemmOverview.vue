@@ -23,7 +23,7 @@ const A = {
   hopper: '#hopper-上的变化',
   limit: '#shared-memory-和寄存器卡住上限',
   wave: '#wave-quantization-tile-数和-sm-数对不齐',
-  gemv: '#为什么-decode-的-gemv-打不满',
+  gemv: '#面试追问',
 }
 
 const levels = [
@@ -82,6 +82,7 @@ const side = [
       { text: '上限：smem（BK × stage 数）、寄存器（BM·BN 个 fp32 累加器）', kind: 'limit', href: A.limit },
       { text: 'wave quantization：tile 数对齐 SM 数', kind: 'fill', href: A.wave },
       { text: 'Stream-K：按 K 迭代平均分给 SM', kind: 'fill', href: A.wave },
+      { text: '离最优：搬运已贴着 I/O 下界，剩下差在 epilogue、流水填充和频率', kind: 'limit', href: '#离最优还有多远' },
     ] as Chip[],
   },
   {

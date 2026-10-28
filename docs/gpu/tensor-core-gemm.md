@@ -423,8 +423,50 @@ $$
 
 另一条路是不再以 tile 为单位分活。Stream-K 把所有 tile 的 K 循环迭代排成一条长队，平均切给每个 SM，一个 SM 可能算完一个 tile 的后半段再接另一个 tile 的前半段，被切开的 tile 最后再合并部分和（[Osama et al., 2023, arXiv:2301.03598](https://arxiv.org/abs/2301.03598)）。
 
-## 为什么 decode 的 GEMV 打不满
+## 离最优还有多远
 
+「最优」分两层看：搬运的字节能不能再少，以及算的时间能不能更接近峰值。这里的最优都指经典的 $O(MNK)$ 算法；Strassen 一类算法能减少 FLOP，但数值稳定性差、访存不规则，GPU 上的 GEMM 库不用。
+
+### 搬运：tiling 贴着 I/O 下界
+
+快存储容量为 $S$ 个数时，任何经典矩阵乘法在快慢存储之间搬的数据量都有下界。Hong 和 Kung 在 1981 年证明了渐近形式 $\Omega(MNK / \sqrt{S})$，后来的工作把领头项的常数也定了下来（[Smith et al., arXiv:1702.02017](https://arxiv.org/abs/1702.02017)；[Kwasniewski et al., 2019, arXiv:1908.09606](https://arxiv.org/abs/1908.09606)）：
+
+$$
+Q \ge \frac{2MNK}{\sqrt{S}} + \text{低阶项}
+$$
+
+方块 tiling 取 $T_M = T_N = \sqrt{S}$，搬的量是 $\frac{2MNK}{T} = \frac{2MNK}{\sqrt{S}}$，正好是领头项。所以 [内积和外积](#内积和外积-tiling-在两者之间折中) 那节的「每读 1 个数最多做 $\sqrt{S}/2$ 次 MAC」不只是 tiling 这个算法的性质，而是所有经典算法的上限：**在搬运上，方块 tiling 已经是最优的**。
+
+实际 kernel 离下界还差一个常数，因为快存储不能全给累加器。拿 block 这一级算：H100 每 SM 的寄存器是 256 KB，即 $S = 65536$ 个 fp32，下界对应 256 × 256 的 tile，每读 1 个数做 128 次 MAC。但寄存器还要放地址、片段和流水用的变量，实际最大常用 128 × 256，每读 1 个数做 $\frac{128 \cdot 256}{128 + 256} \approx 85$ 次，global → smem 的流量是下界的 1.5 倍。这点差距不影响结果：有了 L2，有效 AI 早就越过了 ridge。
+
+### 计算：compute-bound 之后，最优就是峰值
+
+搬运不再是瓶颈，时间的下界就是 FLOP ÷ 峰值。4096³ 是 $1.37 \times 10^{11} / 989\ \text{TFLOP/s} \approx 0.14$ ms。到不了这个数的原因：
+
+| 损失 | 4096³、128 × 128 tile 上粗算 | 怎么补 |
+|---|---|---|
+| wave quantization | 1024 个 tile 排 8 波，最后一波空 32 个 SM：约 3% | 选 tile 大小、Stream-K |
+| epilogue 写回不重叠 | 一个 tile 主循环 $\frac{2 \cdot 128 \cdot 128 \cdot 4096}{989\ \text{TFLOP/s} / 132} \approx 18\ \mu s$；写回 32 KB 的 bf16，按每 SM 分到的 $3.35\ \text{TB/s} / 132 \approx 25\ \text{GB/s}$ 要约 1.3 μs：约 7% | persistent kernel + TMA store；CUTLASS 的 ping-pong kernel 让两个 consumer warpgroup 算不同的 tile、交替进 epilogue，一个写回时另一个在算 |
+| 流水填充和排空 | 每个 tile 开头要等前几个 stage 搬完才能算 | persistent kernel 提前搬下一个 tile 的数据 |
+| 频率 | 989 按 1.83 GHz 算；满载撞功耗墙时频率会掉，掉多少和输入数据有关 | 无法靠 kernel 补；测量时锁频并注明配置 |
+
+前三项是 kernel 设计能补的，Hopper 上的 persistent kernel、warp specialization 主要就在补这几项；最后一项是硬件的事。实测的百分比随卡型（SXM / PCIe）、频率、矩阵形状和输入分布变化很大，引用别人的数字前先看配置。作为参照，FlashAttention-3 在 H100 上做到 75%（作者自测）。
+
+## 面试追问
+
+::: details Q：block tile 的算术强度为什么和 BK 无关？
+每轮读 $(BM + BN) \cdot BK$ 个元素、做 $BM \cdot BN \cdot BK$ 次 MAC，两边都正比于 $BK$。$BK$ 决定的是每轮占多少 shared memory、K 循环转几圈：$BK$ 太小，每轮的固定开销（同步、发 load）摊不开；$BK$ 太大，shared memory 放不下几个 stage。
+:::
+
+::: details Q：tile 为什么不能一直加大？
+shared memory（每 SM 228 KB，要放多个 stage）和寄存器（累加器 $BM \times BN \times 4$ B）有上限；tile 越大 block 越少，小矩阵上 wave quantization 越严重；$M$、$N$ 不整除 tile 时 pad 的浪费也越大。cuBLAS 的 heuristic 和 Triton 的 autotune 都是在这几项之间找甜点。
+:::
+
+::: details Q：寄存器 tile 为什么常取 8 × 8？
+每个 `kk` 读 $TM + TN$ 个数、做 $TM \cdot TN$ 次 MAC。8 × 8 时 16 次 load 换 64 次 FMA，再用 `float4` 向量 load 就只剩 4 条 load 指令，FMA 占 94% 的发射槽。再加大收益很小，累加器却按 $TM \cdot TN$ 涨：16 × 16 要 256 个寄存器，超过每线程 255 的上限。
+:::
+
+::: details Q：为什么 decode 的 GEMV 打不满？
 decode 一步只处理 $B$ 个 token（每个请求 1 个），线性层的 $M = B$。tiling 靠的是「$A$ 的一个元素被 $BN$ 列复用、$B$ 的一个元素被 $BM$ 行复用」；$M = 1$ 时 $BM$ 最多是 1，权重的每个元素只被用一次，复用不存在。
 
 以 Llama-3-70B 的 `o_proj`（$K = N = 8192$）为例，bf16：
@@ -449,19 +491,6 @@ batch 1 时 AI = 1，比 ridge 低 295 倍。这和 [roofline 页](/inference/pr
 | weight-only 量化（W4A16） | 分母：权重从 2 B 变 0.5 B | 字节 ÷ 4，GEMV 时间近似 ÷ 4；FLOP 不变，还多了反量化 |
 | split-K | 并行度：把 $K$ 切 $S$ 段，每段一个 block，最后把 $S$ 个部分和加起来 | $S = 4$ 时 64 → 256 个 block，SM 都有活干；代价是多一次合并 |
 | speculative decoding | 分子：一次验证多个 token，$M$ 从 1 变 $k$ | 相当于给单请求凑 batch |
-
-## 面试追问
-
-::: details Q：block tile 的算术强度为什么和 BK 无关？
-每轮读 $(BM + BN) \cdot BK$ 个元素、做 $BM \cdot BN \cdot BK$ 次 MAC，两边都正比于 $BK$。$BK$ 决定的是每轮占多少 shared memory、K 循环转几圈：$BK$ 太小，每轮的固定开销（同步、发 load）摊不开；$BK$ 太大，shared memory 放不下几个 stage。
-:::
-
-::: details Q：tile 为什么不能一直加大？
-shared memory（每 SM 228 KB，要放多个 stage）和寄存器（累加器 $BM \times BN \times 4$ B）有上限；tile 越大 block 越少，小矩阵上 wave quantization 越严重；$M$、$N$ 不整除 tile 时 pad 的浪费也越大。cuBLAS 的 heuristic 和 Triton 的 autotune 都是在这几项之间找甜点。
-:::
-
-::: details Q：寄存器 tile 为什么常取 8 × 8？
-每个 `kk` 读 $TM + TN$ 个数、做 $TM \cdot TN$ 次 MAC。8 × 8 时 16 次 load 换 64 次 FMA，再用 `float4` 向量 load 就只剩 4 条 load 指令，FMA 占 94% 的发射槽。再加大收益很小，累加器却按 $TM \cdot TN$ 涨：16 × 16 要 256 个寄存器，超过每线程 255 的上限。
 :::
 
 ::: details Q：batch 从 1 涨到 64，decode 每步的时间涨多少？
@@ -488,3 +517,5 @@ split-K 固定把 $K$ 切成 $S$ 段，每段的部分和写到临时 buffer（�
 - [NVIDIA Hopper Tuning Guide](https://docs.nvidia.com/cuda/hopper-tuning-guide/index.html)：TMA、cluster、distributed shared memory
 - [FlashAttention-3 (arXiv:2407.08608)](https://arxiv.org/abs/2407.08608)：Hopper 上的 TMA、wgmma、warp specialization
 - [Stream-K (arXiv:2301.03598)](https://arxiv.org/abs/2301.03598)
+- [A Tight I/O Lower Bound for Matrix Multiplication (arXiv:1702.02017)](https://arxiv.org/abs/1702.02017)：经典矩阵乘法的 I/O 下界 $2MNK/\sqrt{S}$
+- [Red-blue pebbling revisited (arXiv:1908.09606)](https://arxiv.org/abs/1908.09606)：下界的低阶项和并行版本
