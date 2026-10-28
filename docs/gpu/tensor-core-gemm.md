@@ -223,6 +223,10 @@ for (int kk = 0; kk < BK; ++kk) {
 }
 ```
 
+用一个缩小的 block tile（16 × 16，$BK = 8$）看一个线程在每个 `kk` 里读什么、算什么。切换 $TM \times TN$，看 load 和 FMA 的比例怎么变：
+
+<RegTileViz />
+
 每个 `kk` 读 $TM + TN$ 个数，做 $TM \cdot TN$ 次 MAC。数一下每个 `kk` 里的指令：
 
 | 每线程输出 | shared memory load | FMA | FMA 占指令的比例 |
