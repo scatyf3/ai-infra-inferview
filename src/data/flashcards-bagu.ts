@@ -25,6 +25,9 @@ const GPU = '/gpu/gpu-architecture'
 const GEMM = '/gpu/tensor-core-gemm'
 const GRAPH = '/gpu/cuda-graph-fusion'
 const PROF = '/gpu/profiling'
+const QGEMM = '/gpu/quant-gemm'
+const MGEMM = '/gpu/moe-grouped-gemm'
+const MBK = '/gpu/memory-bound-kernels'
 const LIFE = '/framework/request-lifecycle'
 const V1 = '/framework/vllm-v1-architecture'
 const COMPILE = '/framework/torch-compile'
@@ -510,13 +513,6 @@ export const baguCards: Card[] = [
 
   // ---------------- 量化 ----------------
   b({
-    id: 'bagu-w4a16-vs-w8a8',
-    topic: '量化',
-    q: 'W4A16 和 W8A8 / FP8 各适合什么场景？',
-    a: '**W4A16**（weight-only）：权重 4 bit、计算前反量化成 bf16。decode memory-bound，读权重的字节少了四分之三，直接提速；显存紧、batch 小时首选。\n**W8A8 / FP8**：权重和激活都 8 bit，用 Tensor Core 原生低精度计算，prefill（compute-bound）约快 2 倍；吞吐优先、大 batch 时选。\nW4A16 在大 batch 下可能比 bf16 还慢：瓶颈变成计算，反量化是额外开销。',
-    ref: QUANT,
-  }),
-  b({
     id: 'bagu-gptq-awq',
     topic: '量化',
     q: 'GPTQ 和 AWQ 分别怎么降低 4 bit 权重量化的误差？',
@@ -716,13 +712,6 @@ export const baguCards: Card[] = [
     ref: MOE,
   }),
   b({
-    id: 'bagu-moe-batch',
-    topic: '并行',
-    q: 'DeepSeek-V3 有 256 个路由专家，每个 token 选 8 个。单卡 batch 64 时每个专家分到几个 token、算术强度多少？要多少 token 才到 H100 的 ridge？',
-    a: '符号：E 路由专家数（256），k 每个 token 选几个（8），T 这一步的 token 总数，N 卡数，b 每卡的 token 数。\n1. 均匀路由时每个专家分到 $m = Tk/E$ 个 token。专家的 GEMM 读一遍专家权重、只算 m 个 token，bf16 下 AI ≈ m（推法同 decode：每个权重 2m FLOP、2 字节）。\n2. T = 64：m = 64 × 8 / 256 = **2**，AI ≈ 2，比同 batch 的 dense 模型（AI = 64）低 E/k = 32 倍。\n3. 更糟的是专家几乎全被点到：某个专家一个 token 都没分到的概率是 $(1 - k/E)^T$ = 0.969⁶⁴ ≈ 13%，所以约 **87%** 的专家权重都要读一遍，只为 64 个 token。\n4. 要 m ≈ 295，T ≈ 295 × 32 ≈ **9400** 个 token。一张卡的 KV 显存撑不住这么大的 batch。\n解法是 EP：N 张卡各跑 b 个 token，专家分散到各卡，token 用 all-to-all 发到专家所在的卡：\n$$m = \\frac{N b k}{E}$$\nDeepSeek 公开的 decode 配置是 EP128、每卡 128 个请求：m = 128 × 128 × 8 / 256 = **512**，越过 ridge；同时每卡只读 1/N 的专家权重（DeepSeek-V3 技术报告 arXiv 2412.19437，配置见 https://github.com/deepseek-ai/profile-data ）。',
-    ref: MOE,
-  }),
-  b({
     id: 'bagu-moe-batch-2',
     topic: '并行',
     q: 'DeepSeek-V3 部署时 attention 用 DP、专家用 EP（DP attention）。如果 attention 改用 TP = 8，MLA 的 KV cache 会出什么问题？',
@@ -802,13 +791,245 @@ export const baguCards: Card[] = [
     `,
     ref: GPU,
   }),
+  // ---------------- GEMM ----------------
   b({
-    id: 'bagu-gemv',
-    topic: 'GPU',
-    q: 'decode 时 MLP 的 up 投影：x 是 [B, 8192]，W 是 [8192, 28672]，bf16。B = 1、16、256 时算术强度各是多少？为什么 Tensor Core 打不满？',
-    a: '符号：x 是 [B, K]，W 是 [K, N]，K = 8192，N = 28672，bf16 每个元素 2 B。B 是 batch（decode 时每个序列 1 个 token）。\n1. FLOPs：$2BKN$（每个权重对每个 token 一次乘加）。\n2. 字节：读 W 是 $2KN$，读 x 是 $2BK$，写 y 是 $2BN$。B 远小于 K、N 时几乎全是读 W。\n$$\\text{AI} = \\frac{2BKN}{2KN + 2B(K + N)} \\approx B$$\n代入：B = 1 → 1.0，B = 16 → 16.0，B = 256 → 246。\n3. 可达性能 = min(峰值, 带宽 × AI)。H100 上 B = 1 时是 3.35 TB/s × 1 = 3.35 TFLOP/s，只有峰值 989 的 **0.3%**；B 要到两三百才接近 ridge 295。\n为什么：GEMM 快，是因为每个权重从 HBM 读进来以后，在 shared memory 和寄存器里被很多行输入反复使用。B = 1 时每个权重只用一次（这就是 GEMV，矩阵乘向量），Tensor Core 算完马上就要等下一批数据。\n对策：\n1. 加大 B（continuous batching）：AI 直接跟着涨。\n2. 少读字节：W4A16 每个权重只读 0.5 B，同样的 B 下 AI 是 4 倍。\n3. 让足够多的 SM 一起读：比如 o_proj 的 W 是 [8192, 8192]，每个 block 负责 128 列输出时只有 64 个 block，H100 有 132 个 SM，一半闲着，连带宽都跑不满。**split-K** 再把 K 维切成 4 段，256 个 block 各读一段，最后把部分和加起来。',
+    id: 'bagu-gemm-inner-outer',
+    topic: 'GEMM',
+    q: '$C = AB$，$A$ 是 $M \\times K$，$B$ 是 $K \\times N$。内积写法和外积写法，$k$ 循环各在第几层？$M = N = 1024$ 时，各要同时留多少个累加器、每读 1 个数做几次乘加？',
+    a: '1. **内积**：$C_{ij} = \\sum_k A_{ik} B_{kj}$，$k$ 在**最内层**。一次只算一个输出，**1 个**累加器；每轮读 $A_{ik}$、$B_{kj}$ 2 个数做 1 次乘加，每读 1 个数做 **1/2** 次。\n2. **外积**：$C = \\sum_k A_{:,k} B_{k,:}$，$k$ 在**最外层**。每轮读 $A$ 的一列（$M$ 个）和 $B$ 的一行（$N$ 个），做 $MN$ 次乘加，整个 $C$ 的部分和一直留着：$MN$ = **1048576 个**累加器；每读 1 个数做 $\\frac{MN}{M + N}$ = **512** 次。\n内积省空间，外积省 load。tiling 就是在两者之间找折中。',
     ref: GEMM,
   }),
+  b({
+    id: 'bagu-gemm-tile-reuse',
+    topic: 'GEMM',
+    q: '把 $C$ 切成 $T_M \\times T_N$ 的块，块间按内积走、块内按外积走。每读 1 个数做几次乘加？累加器个数固定为 $S = 16384$ 时，128 × 128 和 64 × 256 哪个好？',
+    a: '块内每轮读 $A$ 的 $T_M$ 个、$B$ 的 $T_N$ 个，做 $T_M T_N$ 次乘加：\n$$\\text{每读 1 个数做的乘加} = \\frac{T_M T_N}{T_M + T_N}, \\qquad \\text{空间} = T_M T_N$$\n1. 128 × 128：$\\frac{16384}{256}$ = **64**。\n2. 64 × 256：$\\frac{16384}{320}$ = **51.2**。\n空间一样时**方块最好**：$T_M = T_N = \\sqrt{S}$，复用是 $\\sqrt{S} / 2$，只随空间的平方根涨。$T_M = T_N = 1$ 就是内积，$T_M = M$、$T_N = N$ 就是外积。',
+    ref: GEMM,
+  }),
+  b({
+    id: 'bagu-gemm-io-lower-bound',
+    topic: 'GEMM',
+    q: '快存储能放 $S$ 个数时，经典矩阵乘法在快慢存储之间至少要搬多少个数？$M = N = K = 4096$、$S = 65536$ 时是多少？方块 tiling 能达到吗？',
+    a: '下界的领头项：\n$$Q \\ge \\frac{2MNK}{\\sqrt{S}}$$\n渐近形式是 Hong 和 Kung 1981 年证的，常数 2 见 Smith et al.（arXiv:1702.02017）。\n代入：$\\frac{2 \\times 4096^3}{256} \\approx 5.4 \\times 10^8$ 个数。\n**能达到**：块取 $T = \\sqrt{S}$，一共 $\\frac{MN}{T^2}$ 个块，每块沿 $K$ 读 $2TK$ 个数，总共 $\\frac{2MNK}{T} = \\frac{2MNK}{\\sqrt{S}}$，正好是领头项。所以搬运上方块 tiling 已经最优，离峰值的差距在计算侧。',
+    ref: GEMM,
+  }),
+  b({
+    id: 'bagu-gemm-three-levels',
+    topic: 'GEMM',
+    q: 'Tensor Core 版 GEMM 的三级 tile 分别是什么？每一级把数据从哪搬到哪？',
+    a: '1. **block tile**（如 128 × 128 × 64）：global → shared memory。一个 block 算 $C$ 的一块，沿 $K$ 每次搬 $BK$ 一段。\n2. **warp tile**（如 64 × 64）：shared memory → 寄存器。一个 warp 算 block tile 里的一小块。\n3. **指令 tile**（如 `mma.m16n8k16`）：寄存器 → Tensor Core。形状由硬件定，只能选一个 warp tile 里排多少个。\n每一级都是同一件事：一块数据搬到更近的存储，被这一级 tile 的另一个维度复用。CUDA core 版的第三级是每个线程算 $TM \\times TN$ 的线程 tile。',
+    ref: GEMM,
+  }),
+  b({
+    id: 'bagu-gemm-reg-tile',
+    topic: 'GEMM',
+    q: 'CUDA core 版 GEMM，每个线程算 $TM \\times TN$ 个输出。每个 `kk` 要发几条 shared memory load、几条 FMA？8 × 8 时用标量 load 和 `float4` load，FMA 各占这两类指令的百分之多少？',
+    a: '每个 `kk` 读 `a[TM]`、`b[TN]`，做外积 `acc[i][j] += a[i] * b[j]`：\n1. load：标量 $TM + TN$ 条；`float4` 一条读 4 个，$\\frac{TM + TN}{4}$ 条。\n2. FMA：$TM \\cdot TN$ 条。\n8 × 8：\n1. 标量：16 条 load、64 条 FMA，FMA 占 $\\frac{64}{80}$ = **80%**。\n2. `float4`：4 条 load、64 条 FMA，FMA 占 $\\frac{64}{68}$ ≈ **94%**。\nwarp 调度器每周期只发 1 条指令，load 占的发射槽 FMA 用不上，所以要让一次 load 换很多次 FMA。`a` 要连续才能 `float4`，所以 `As` 在 shared memory 里要转置存。',
+    ref: GEMM,
+  }),
+  b({
+    id: 'bagu-gemm-reg-limit',
+    topic: 'GEMM',
+    q: '每个线程最多 255 个寄存器。寄存器 tile 取 8 × 8 和 16 × 16 时，累加器加 `a`、`b` 各要多少个寄存器？',
+    a: '寄存器数 = $TM \\cdot TN$（累加器）+ $TM$（a）+ $TN$（b）：\n1. 8 × 8：64 + 8 + 8 = **80**，加上地址、循环变量还放得下。\n2. 16 × 16：256 + 16 + 16 = **288** > 255，会溢出到 local memory，性能大跌。\n8 × 8 用 `float4` 时 FMA 已经占 94% 的发射槽，再加大收益很小，所以常取 8 × 8。',
+    ref: GEMM,
+  }),
+  b({
+    id: 'bagu-gemm-block-regs',
+    topic: 'GEMM',
+    q: 'H100 每个 SM 有 65536 个 32 位寄存器（256 KB），Hopper 上 `wgmma` 的累加器放在寄存器里。block tile 取 256 × 256 时，fp32 累加器要多大？128 × 256 呢？',
+    a: '累加器 = $BM \\times BN \\times 4$ B：\n1. 256 × 256：262144 B = **256 KB**，等于整个 SM 的寄存器文件，还没算地址和片段，放不下。\n2. 128 × 256：**128 KB**，由 2 个 consumer warpgroup（256 个线程）分，每线程 128 个，放得下。\n所以 block tile 的 $BM \\times BN$ 被**寄存器**卡住，shared memory 卡的是 $BK$ 和流水的 stage 数。Blackwell 把累加器挪进 TMEM，两个 SM 配对才能算 256 × 256。',
+    ref: GEMM,
+  }),
+  b({
+    id: 'bagu-gemm-l2-wave',
+    topic: 'GEMM',
+    q: 'H100 有 132 个 SM，每个 SM 跑 1 个 block，一波 132 个 tile。$C$ 切成 32 × 32 个 tile。按行优先编号和按 `GROUP_SIZE_M = 8` 分组编号，第一波各碰到多少条 $A$ 行条带、$B$ 列条带？',
+    a: 'tile $(m, n)$ 读 $A$ 的第 $m$ 条行条带和 $B$ 的第 $n$ 条列条带。同一波碰到的每条条带只从 HBM 读一次，其余命中 L2。\n1. 行优先：132 = 4 × 32 + 4，占满前 4 行、再占第 5 行 4 格，**5 条 A + 32 条 B = 37 条**。\n2. 分组：每 8 行一组，组内按列走，132 = 16 × 8 + 4，8 行 × 17 列，**8 + 17 = 25 条**。\n一条条带 128 × 4096 × 2 B = 1 MiB（$BM = 128$、$K = 4096$、bf16），37 MiB 对 25 MiB。一波的 tile 数固定，条带数 = 行数 + 列数，铺成方块最省。',
+    ref: GEMM,
+  }),
+  b({
+    id: 'bagu-gemm-wave-quant',
+    topic: 'GEMM',
+    q: 'H100 132 个 SM，每个 SM 同时跑 1 个 tile。$M = N = 1536$ 用 128 × 128 的 tile，要跑几波、SM 利用率多少？换成 64 × 64 呢？',
+    a: '利用率 = tile 数 ÷（波数 × 132）：\n1. 128 × 128：12 × 12 = 144 个 tile，2 波，$\\frac{144}{264}$ ≈ **55%**。第二波只有 12 个 tile，120 个 SM 闲着。\n2. 64 × 64：24 × 24 = 576 个，5 波，$\\frac{576}{660}$ ≈ **87%**。但每个 tile 的复用 $\\frac{BM \\cdot BN}{BM + BN}$ 从 64 降到 32。\n这叫 wave quantization。cuBLAS 的 heuristic、Triton 的 autotune 在这些变体里挑；Stream-K 干脆按 K 迭代平均分给每个 SM。',
+    ref: GEMM,
+  }),
+  b({
+    id: 'bagu-gemm-epilogue',
+    topic: 'GEMM',
+    q: 'H100 上 4096³ 的 bf16 GEMM，128 × 128 tile。一个 tile 的主循环按峰值算要多久？写回 32 KB 的 $C$ tile，按每个 SM 平均分到的 HBM 带宽要多久？两者不重叠的话损失多少？（989 TFLOP/s，3.35 TB/s，132 个 SM）',
+    a: '1. 主循环：每个 tile $2 \\times 128 \\times 128 \\times 4096 \\approx 1.34 \\times 10^8$ FLOP；每个 SM 的峰值 989 ÷ 132 ≈ 7.5 TFLOP/s，约 **18 μs**。\n2. 写回：每个 SM 分到 3.35 TB/s ÷ 132 ≈ 25 GB/s，32 KB 约 **1.3 μs**。\n3. 不重叠损失约 1.3 / 18 ≈ **7%**。\n补法：persistent kernel 加 TMA store，让写回和下一个 tile 的计算重叠；CUTLASS 的 ping-pong kernel 让两个 consumer warpgroup 算不同的 tile、轮流进 epilogue。',
+    ref: GEMM,
+  }),
+  b({
+    id: 'bagu-gemv',
+    topic: 'GEMM',
+    q: 'decode 时 MLP 的 up 投影：$x$ 是 $[B, 8192]$，$W$ 是 $[8192, 28672]$，bf16。$B$ = 1、16、256 时算术强度各是多少？',
+    a: '符号：$K = 8192$，$N = 28672$，bf16 每个元素 2 B，$B$ 是 batch（decode 时每个序列 1 个 token）。\n1. FLOP：$2BKN$，每个权重对每个 token 一次乘加。\n2. 字节：读 $W$ 是 $2KN$，读 $x$ 是 $2BK$，写 $y$ 是 $2BN$。\n$$\\text{AI} = \\frac{2BKN}{2KN + 2B(K + N)} \\approx B$$\n代入：$B$ = 1 → **1.0**，16 → **16.0**，256 → **246**。\nH100 的 ridge 是 295，$B$ 到两三百才不再 memory-bound。GEMM 快靠的是一个权重被很多行复用，$B = 1$ 时每个权重只用一次，这就是 GEMV。',
+    ref: GEMM,
+  }),
+  b({
+    id: 'bagu-gemv-splitk',
+    topic: 'GEMM',
+    q: 'decode $B = 1$，o_proj 的 $W$ 是 8192 × 8192。每个 block 负责 $BN = 128$ 列输出，一共几个 block？H100 有 132 个 SM。split-K 把 $K$ 切成 4 段以后呢？',
+    a: '1. 不切 $K$：8192 / 128 = **64** 个 block，132 个 SM 一半没活干，连带宽都跑不满（每个 SM 要扛的在途字节翻倍）。\n2. split-K，切 4 段：每个 block 只读 $K$ 的四分之一，64 × 4 = **256** 个 block，SM 都有活。\n代价：每段算出一份部分和，最后要把 4 份加起来（atomic 加进 $C$，或写临时数组再起一个 kernel 求和）。',
+    ref: GEMM,
+  }),
+
+  // ---------------- 量化 kernel ----------------
+  b({
+    id: 'bagu-w4a16-vs-w8a8',
+    topic: '量化 kernel',
+    q: 'GEMM 的权重是 $K \\times N$，一步 $B$ 个 token，激活的字节忽略。bf16、W4A16（int4 权重，算还用 bf16 Tensor Core）、FP8 W8A8 的算术强度各是多少？各在 $B$ 多大时变成 compute-bound？（H100：bf16 989、FP8 1979 TFLOP/s，HBM 3.35 TB/s）',
+    a: 'FLOP 都是 $2BKN$，只差权重每个元素几个字节、Tensor Core 多快：\n1. bf16：字节 $2KN$，AI = $B$。ridge = 989 / 3.35 ≈ 295，**$B$ ≈ 295**。\n2. W4A16：字节 $0.5KN$，AI = $4B$。还用 bf16 Tensor Core，ridge 仍是 295，$4B = 295$，**$B$ ≈ 74**。\n3. FP8：字节 $KN$，AI = $2B$。ridge = 1979 / 3.35 ≈ 591，$2B = 591$，**$B$ ≈ 295**。\nW4A16 只在 $B$ 小时有用，过了 74 加速就开始掉；FP8 的拐点和 bf16 重合，任何 $B$ 下都约 2 倍。',
+    ref: QGEMM,
+  }),
+  b({
+    id: 'bagu-quant-speedup',
+    topic: '量化 kernel',
+    q: 'Llama-3-70B 的 o_proj，$K = N = 8192$，$B = 256$。bf16、W4A16、FP8 各要多久？W4A16、FP8 比 bf16 快几倍？（H100：bf16 989、FP8 1979 TFLOP/s，HBM 3.35 TB/s）',
+    a: '时间 = max(读权重, 计算)。权重 $8192^2 \\approx 6.7 \\times 10^7$ 个，FLOP $= 2 \\times 256 \\times 8192^2 \\approx 3.4 \\times 10^{10}$：\n1. bf16：读 134 MB 要 40 μs，算要 35 μs，取 **40 μs**。\n2. W4A16：读 34 MB 要 10 μs，算还是 bf16 要 35 μs，取 **35 μs**，只快 **1.15 倍**。\n3. FP8：读 67 MB 要 20 μs，算要 17 μs，取 **20 μs**，快 **2 倍**。\nW4A16 过了拐点就被计算卡住，转换格式还要额外占发射槽；FP8 字节和算力都折半。',
+    ref: QGEMM,
+  }),
+  b({
+    id: 'bagu-quant-dequant-where',
+    topic: '量化 kernel',
+    q: 'W4A16 为什么不先用一个 kernel 把 int4 反量化成 bf16 写回 HBM，再直接调 cuBLAS？三种做法下每个权重各要搬多少字节？',
+    a: '1. 先反量化再调 cuBLAS：反量化读 0.5 B、写 2 B，GEMM 再读 2 B，共 **4.5 B**。\n2. 直接存 bf16：**2 B**。\n3. 转换融合进 GEMM：int4 一路搬到寄存器，**0.5 B**。\n第 1 种比不量化还多。所以转换放在 GEMM 主循环的最后一步：smem → 寄存器之后、`mma` 之前，前面每一级搬的都是 int4。`cp.async` 和 TMA 只能原样搬字节，转换反正得在寄存器里做。',
+    ref: QGEMM,
+  }),
+  b({
+    id: 'bagu-quant-convert-rate',
+    topic: '量化 kernel',
+    q: 'decode 时 W4A16 kernel 要跟上 HBM。H100 HBM 3.35 TB/s，132 个 SM，1.83 GHz，每个 int4 权重 0.5 B。每个 SM 每周期要转换多少个权重？朴素的 float → half 转换每 SM 每周期只能做 16 个，够吗？',
+    a: '$$\\frac{3.35 \\times 10^{12} \\times 2}{132 \\times 1.83 \\times 10^9} \\approx 28\\ \\text{个 / 周期 / SM}$$\n16 < 28，**不够**，kernel 会卡在转换指令上，跑不满带宽。\n绕法：fp16 里 1024 到 2048 之间的数，尾数就是整数偏移。把 4 bit 整数塞进 `1024.0` 的尾数（一条 LOP3），再减 1024（一条 HSUB2），每条指令处理 2 个权重，吞吐是每 SM 每周期 128 到 256 个。',
+    ref: QGEMM,
+  }),
+  b({
+    id: 'bagu-quant-scale-epilogue',
+    topic: '量化 kernel',
+    q: 'W4A16 的 scale：per-channel（每个输出列一个 $s_j$）可以放到 epilogue 里乘一次，per-group（沿 $K$ 每 $g$ 个一个）为什么不行？',
+    a: '看 scale 能不能提到 $\\sum_k$ 外面：\n1. per-channel：$y_j = \\sum_k x_k \\, s_j \\, q_{kj} = s_j \\sum_k x_k q_{kj}$，$s_j$ 不随 $k$ 变，累加完乘一次。\n2. per-group：$y_j = \\sum_k x_k \\, s_{\\lfloor k/g \\rfloor, j} \\, q_{kj}$，scale 跟着 $k$ 变，提不出去，只能在主循环里转换权重时乘进去。\n让 $BK$ 整除 $g$（比如都取 128），一个 K-tile 只落在一组里，只读一行 scale。',
+    ref: QGEMM,
+  }),
+  b({
+    id: 'bagu-fp8-promotion',
+    topic: '量化 kernel',
+    q: 'DeepSeek-V3 的 FP8 GEMM 每 128 个 $K$，把 Tensor Core 的部分和乘上 scale、加进 CUDA core 上的 FP32 累加器，每个输出元素 1 次 FMA。H100 的 FP8 Tensor Core 1979 TFLOP/s，FP32 CUDA core 67 TFLOP/s。这一步不和 `wgmma` 重叠的话，要多花多少时间？',
+    a: '1. 每 128 个 $K$、每个输出元素：Tensor Core 做 128 次乘加，CUDA core 做 1 次 FMA，活是 $\\frac{1}{128}$。\n2. 但 CUDA core 慢 $\\frac{1979}{67}$ ≈ 30 倍。\n3. 时间比 ≈ $\\frac{30}{128}$ ≈ **23%**。\n所以要两个 warpgroup 交替：一个做这一步时，另一个发 `wgmma`。这一步同时解决两件事：scale 沿 $K$ 每 128 个变一次（block scaling），以及 Hopper 的 FP8 `wgmma` 内部累加只有约 14 bit。',
+    ref: QGEMM,
+  }),
+
+  // ---------------- MoE kernel ----------------
+  b({
+    id: 'bagu-moe-align',
+    topic: 'MoE kernel',
+    q: 'MoE 排队：$T = 4$ 个 token，每个选 $k = 2$ 个 expert，$E = 4$，$BM = 2$。`topk_ids = [[0,2],[1,2],[0,3],[2,1]]`，slot $s = t \\cdot k + j$。补齐后的 `sorted_token_ids`、`expert_ids`、`num_tokens_post_padded` 是什么？slot 7 读 $X$ 的哪一行？',
+    a: '按 expert 收集 slot，每段补到 $BM = 2$ 的倍数（P 是补的空位）：\n1. expert 0：[0, 4]\n2. expert 1：[2, 7]\n3. expert 2：[1, 3, 6, P]\n4. expert 3：[5, P]\n`sorted_token_ids = [0, 4, 2, 7, 1, 3, 6, P, 5, P]`，每 2 个一块，`expert_ids = [0, 1, 2, 2, 3]`，`num_tokens_post_padded = 10`。\nslot 7 读 $X[7 // 2] = X[3]$。补齐保证一个 tile 只属于一个 expert。',
+    ref: MGEMM,
+  }),
+  b({
+    id: 'bagu-moe-padding',
+    topic: 'MoE kernel',
+    q: 'grouped GEMM 把每个 expert 的行数补到 $BM$ 的倍数，平均每个 expert 补约 $BM / 2$ 行。prefill $T = 4096$，DeepSeek-V3（$E = 256$、$k = 8$），$BM$ = 128 和 64 时大约多算百分之几？',
+    a: '总行数 $Tk = 32768$，256 个 expert 都会分到 token：\n1. $BM = 128$：补 $256 \\times 64 = 16384$ 行，多算约 **50%**。\n2. $BM = 64$：补 $256 \\times 32 = 8192$ 行，约 **25%**。\n$BM$ 小浪费少，但 tile 的复用 $\\frac{BM \\cdot BN}{BM + BN}$ 也小（$BN = 128$ 时从 64 降到 43）。所以 MoE 的 $BM$ 一般比普通 GEMM 小，按每个 expert 平均的行数 $Tk / E$ 来选。',
+    ref: MGEMM,
+  }),
+  b({
+    id: 'bagu-moe-batch',
+    topic: 'MoE kernel',
+    q: 'DeepSeek-V3（$E = 256$ 个 expert、每个 token 选 $k = 8$ 个），一步 $T$ 个 token。均匀路由时每个 expert 平均分到几个 token？bf16 下 expert GEMM 的算术强度约多少？$T = 64$ 时是多少？',
+    a: '1. 一共 $Tk$ 个 slot 分给 $E$ 个 expert，每个平均 $m = Tk / E$。\n2. expert 的 GEMM 读一遍权重、算 $m$ 行，每个权重 $2m$ FLOP、2 B，AI ≈ $m$。\n3. $T = 64$：$m = 64 \\times 8 / 256$ = **2**，AI ≈ 2，比同 batch 的 dense 模型（AI ≈ 64）低 $E / k = 32$ 倍。\n这时每个 expert 的 GEMM 就是 GEMV。',
+    ref: MGEMM,
+  }),
+  b({
+    id: 'bagu-moe-coverage',
+    topic: 'MoE kernel',
+    q: 'DeepSeek-V3：$E = 256$ 个 expert，每个 token 选 $k = 8$ 个。decode 一步 $T = 64$ 个 token，假设路由均匀且独立，期望有多少个 expert 至少被一个 token 选中？',
+    a: '一个 expert 不被某个 token 选中的概率是 $1 - k / E = 31 / 32$，64 个 token 都不选它是 $(31/32)^{64} \\approx 0.13$：\n$$E\\left[1 - \\left(1 - \\frac{k}{E}\\right)^T\\right] = 256 \\times 0.87 \\approx 222$$\n**87%** 的 expert 权重都要读一遍。单个 token 只用 3% 的 expert，batch 一并起来就接近整层。decode 是 memory-bound，时间由读了多少个 expert 决定，不是由每个 token 激活了多少参数决定。',
+    ref: MGEMM,
+  }),
+  b({
+    id: 'bagu-moe-ep-rows',
+    topic: 'MoE kernel',
+    q: 'EP 把 $E$ 个 expert 分到 $N$ 张卡，每张卡一步处理 $b$ 个 token，token 用 all-to-all 发到 expert 所在的卡。每个 expert 平均分到多少行？DeepSeek-V3（$E = 256$、$k = 8$）decode 用 EP128、每卡 128 个请求时是多少？',
+    a: '整个 EP 组一步有 $Nb$ 个 token，每个 expert 分到\n$$m = \\frac{N b k}{E}$$\n代入：$m = 128 \\times 128 \\times 8 / 256$ = **512**，超过 H100 的 ridge 295。\n单卡要到 295 得一步 $T \\approx 295 \\times 32 \\approx 9400$ 个 token，KV 显存撑不住；EP 把整个集群的 token 汇到每个 expert 上，同时每张卡只读 $1/N$ 的 expert 权重。配置见 DeepSeek-V3 技术报告（arXiv:2412.19437）和 https://github.com/deepseek-ai/profile-data 。',
+    ref: MOE,
+  }),
+  b({
+    id: 'bagu-moe-swapab',
+    topic: 'MoE kernel',
+    q: 'Hopper 的 `wgmma` 一条指令 $M$ 固定是 64，$N$ 最小可以是 8。decode 时一个 expert 只分到 2 个 token。token 放在 $M$ 维时，有效乘加占多少？swap AB（算 $Y^\\top = W^\\top X^\\top$，token 放到 $N$ 维）以后呢？',
+    a: '1. token 在 $M$ 维：$\\frac{2}{64}$ ≈ **3%**，97% 的乘加在算补的 0。\n2. swap AB：权重的输出维（几千）当 $M$，填满；token 当 $N$，$\\frac{2}{8}$ = **25%**。\nvLLM 的 `fused_moe` 里有对应的 `SWAP_AB` 开关。',
+    ref: MGEMM,
+  }),
+  b({
+    id: 'bagu-moe-grid',
+    topic: 'MoE kernel',
+    q: 'vLLM 的 `fused_moe` 要在 CPU 不知道每个 expert 分到几个 token 的情况下 launch。补齐后的总行数上界是多少？$T = 64$、$k = 8$、$E = 256$、$BM = 16$ 时，$M$ 方向开几个块？',
+    a: '每个 expert 最多补 $BM - 1$ 行，所以补齐后不超过 $Tk + E(BM - 1)$。\n代入：$512 + 256 \\times 15 = 4352$ 行，$4352 / 16$ = **272** 个块。\n每个块先看自己的起始行是否超过 `num_tokens_post_padded`（GPU 上算出的实际长度），超过就直接返回。CPU 不需要任何运行时信息，所以能录进 CUDA graph。',
+    ref: MGEMM,
+  }),
+
+  // ---------------- memory-bound kernel ----------------
+  b({
+    id: 'bagu-mb-rmsnorm-bound',
+    topic: 'memory-bound',
+    q: 'RMSNorm，$X$ 是 $[4096, 8192]$ 的 bf16，读 $X$、写 $Y$（$\\gamma$ 忽略）。每个元素约 4 FLOP。H100 HBM 3.35 TB/s，FP32 CUDA core 67 TFLOP/s。读写要多久？计算要多久？',
+    a: '1. 字节：读 64 MiB + 写 64 MiB = 128 MiB ≈ $1.34 \\times 10^8$ B，÷ 3.35 TB/s ≈ **40 μs**。\n2. FLOP：$4096 \\times 8192 \\times 4 \\approx 1.3 \\times 10^8$，÷ 67 TFLOP/s ≈ **2 μs**。\n算术强度约 1 FLOP/B，时间完全由字节决定：计算再快一倍耗时不变，少读写一份 $X$ 就少四分之一。',
+    ref: MBK,
+  }),
+  b({
+    id: 'bagu-mb-decode-small',
+    topic: 'memory-bound',
+    q: '同一个 RMSNorm，decode 时 $T = 64$、$d = 8192$、bf16。要读写多少字节、按 3.35 TB/s 要多久？这时瓶颈是什么？',
+    a: '读、写各 $64 \\times 8192 \\times 2$ B = 1 MiB，共 2 MiB ≈ $2.1 \\times 10^6$ B，÷ 3.35 TB/s ≈ **0.6 μs**。\n这比一次 kernel launch 的开销还小，GPU 大部分时间在等下一个 kernel 发过来。瓶颈是 **kernel 的个数**：靠融合减少 kernel 数，靠 CUDA Graph 减少 launch 次数。',
+    ref: MBK,
+  }),
+  b({
+    id: 'bagu-mb-norm-quant-fusion',
+    topic: 'memory-bound',
+    q: 'RMSNorm 后面接 per-token FP8 量化。不融合时 norm 读 bf16 写 bf16，量化再读 bf16 写 FP8；融合后读 bf16 直接写 FP8。每个元素各读写多少字节？为什么这两步能融？',
+    a: '1. 不融合：norm 读 2 写 2，量化读 2 写 1，共 **7 B**。\n2. 融合：读 2 写 1，共 **3 B**，省 57%，还少一次 launch。\n能融是因为 per-token 量化要的 amax 也是**按行**算的，和 RMSNorm 的行归约在同一个 block 里：一行读进寄存器，平方和、归一化、amax、量化一起做完。',
+    ref: MBK,
+  }),
+  b({
+    id: 'bagu-mb-norm-epilogue',
+    topic: 'memory-bound',
+    q: 'RMSNorm 能融进前一个 GEMM（比如 o_proj）的 epilogue 吗？',
+    a: '一般不能。RMSNorm 要整行的平方和，GEMM 的一个 tile 只有这一行里的 $BN$ 列，算不出整行，除非一个 block 负责整行的所有列。\n融合的边界是**归约的范围**：后一步要的东西，必须是同一个 block 自己能算出来的。所以 RMSNorm 和同样按行处理的残差加、per-token 量化融在一起，不和 GEMM 融。',
+    ref: MBK,
+  }),
+  b({
+    id: 'bagu-mb-vectorize',
+    topic: 'memory-bound',
+    q: 'memory-bound kernel 里，每个线程一次读 16 B（`uint4`，8 个 bf16）比一次读 2 B 快。带宽是固定的，快在哪？',
+    a: '同样的字节，load 指令少 **8 倍**：\n1. 发射槽：这类 kernel 每条 load 之后只有几条计算，load 指令本身占了大部分发射槽，指令少了就不再卡在发射上。\n2. 在途字节：每条 load 带 16 B，同样多的 warp，路上的字节多 8 倍，更容易满足 Little 定律。\n前提：地址 16 B 对齐，行长是 8 的倍数（bf16），不对齐的尾巴用标量处理。',
+    ref: MBK,
+  }),
+  b({
+    id: 'bagu-mb-little',
+    topic: 'memory-bound',
+    q: '按 Little 定律，H100 每个 SM 要有约 13 KB 的读请求在路上才能跑满带宽（每 SM 分到 25 B/ns × 满载时约 500 ns 的延迟）。每个线程同时只有 1 条 16 B 的 load 在等，要驻留多少个 warp？每个线程连发 4 条互不依赖的 16 B load 呢？',
+    a: '在途字节 = 驻留 warp 数 × 每个 warp 在等的字节。\n1. 每线程 1 条：每个 warp $32 \\times 16 = 512$ B，要 $13312 / 512$ ≈ **26 个** warp，occupancy 约 40%。\n2. 每线程 4 条（ILP）：每个 warp 2 KB，约 **7 个** warp 就够。\n所以 occupancy 不高也能跑满，只要每个线程同时在等的字节够多。',
+    ref: MBK,
+  }),
+  b({
+    id: 'bagu-mb-row-mapping',
+    topic: 'memory-bound',
+    q: 'RMSNorm，$d = 8192$ 的 bf16，一个 block 256 个线程处理一行。每个线程拿几个元素、发几条 16 B 的 load？平方和怎么归约？',
+    a: '1. 一行 8192 个，256 个线程，每个 **32 个**，32 × 2 B = 64 B，就是 **4 条** 16 B 的 load。整行留在寄存器里，只读一遍。\n2. 归约两层：warp 内用 shuffle 做 $\\log_2 32 = 5$ 步；8 个 warp 的结果写进 shared memory，再归约一次。\n3. 把 rsqrt 广播给所有线程，从寄存器里算输出、写回。\n一行大到放不进一个 block（比如对 128K 词表做 softmax）时，才需要读两遍或拆给多个 block。',
+    ref: MBK,
+  }),
+  b({
+    id: 'bagu-mb-gather',
+    topic: 'memory-bound',
+    q: 'embedding 查表 `out[t] = table[ids[t]]`，每行 $d$ 个元素。线程该怎么对应到数据，访存才能合并？',
+    a: '**一个 warp（或一个 block）负责一整行**，线程在行内按列分。索引只决定去哪一行，行内的 $d$ 个元素连续，照样能合并、能用 16 B 向量化。\n反过来，如果相邻线程负责不同的行，每个线程的地址都跳到别处，一个 warp 的 32 次访问落在 32 个不同的 sector 里。写 paged KV cache、MoE 按 expert 排队也是同一个做法。',
+    ref: MBK,
+  }),
+
   b({
     id: 'bagu-cuda-graph',
     topic: 'GPU',
