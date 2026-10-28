@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cdiv, launchOrder, pidToTile, tileRange, vectorPrograms, waveFootprint } from '@lib/triton'
+import { cdiv, l2Replay, launchOrder, pidToTile, tileRange, vectorPrograms, waveFootprint } from '@lib/triton'
 
 describe('triton 1D programs', () => {
   it('grid = cdiv(n, BLOCK) and only the last program is masked', () => {
@@ -38,6 +38,29 @@ describe('triton matmul launch order', () => {
   it('grouping shrinks the strips one wave has to read', () => {
     expect(waveFootprint(launchOrder(4, 4, 1), 0, 4)).toMatchObject({ rowsA: 1, colsB: 4 })
     expect(waveFootprint(launchOrder(4, 4, 2), 0, 4)).toMatchObject({ rowsA: 2, colsB: 2 })
+  })
+
+  it('l2Replay: first reader of a strip in a wave goes to HBM, the rest hit L2', () => {
+    const row = l2Replay(launchOrder(4, 4, 1), 4)
+    expect(row.slice(0, 4).map((e) => [e.aHit, e.bHit])).toEqual([[false, false], [true, false], [true, false], [true, false]])
+    expect(row[3].hbm).toBe(5)
+    // 换波清空 L2：pid 4 的两条都要重新读
+    expect(row[4]).toMatchObject({ wave: 1, aHit: false, bHit: false, hbm: 7 })
+    expect(row[15].hbm).toBe(20)
+
+    const grp = l2Replay(launchOrder(4, 4, 2), 4)
+    expect(grp[3]).toMatchObject({ aHit: true, bHit: true, hbm: 4 })
+    expect(grp[15].hbm).toBe(16)
+  })
+
+  it('l2Replay per-wave HBM strips match waveFootprint', () => {
+    const order = launchOrder(8, 8, 4)
+    const ev = l2Replay(order, 8)
+    for (let w = 0; w < 8; w++) {
+      const fp = waveFootprint(order, w * 8, 8)
+      const before = w ? ev[w * 8 - 1].hbm : 0
+      expect(ev[w * 8 + 7].hbm - before).toBe(fp.rowsA + fp.colsB)
+    }
   })
 
   it('tileRange clamps the edge tile', () => {
