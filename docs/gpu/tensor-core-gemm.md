@@ -17,6 +17,10 @@ train: [tr-k-gemm]
 
 GEMM 本身的算术强度很高（4096³ 约 1365 FLOP/B），但前提是 $A$、$B$ 只读一次，而片上放不下整个矩阵。tiling 的做法是把 $C$ 切成 $BM \times BN$ 的块，每块只需要 $A$ 的一条行条带和 $B$ 的一条列条带，沿 $K$ 一段一段搬进片上反复用，算术强度是 $\frac{BM \cdot BN}{BM + BN}$。同样的思路在 shared memory → 寄存器这一级再做一次。tile 越大复用越多，但受 shared memory 和寄存器容量限制，而且 tile 越大块数越少，SM 可能喂不满。decode 的 GEMV 的 $M$ 只有 batch 那么大，没有东西可复用，tiling 救不了。
 
+整页的手段按存储层级排开：
+
+<GemmOverview />
+
 ## 约定
 
 GEMM 写作 $C = A B$，$A$ 是 $M \times K$，$B$ 是 $K \times N$，$C$ 是 $M \times N$，全部行主序，元素 bf16（2 字节），累加用 fp32。推理里线性层 $y = xW$ 对应 $A = x$（$M$ = 这一步的 token 数），$B = W$（$K$ = 输入维，$N$ = 输出维）。
