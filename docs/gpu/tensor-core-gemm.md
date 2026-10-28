@@ -452,6 +452,109 @@ $$
 
 前三项是 kernel 设计能补的，Hopper 上的 persistent kernel、warp specialization 主要就在补这几项；最后一项是硬件的事。实测的百分比随卡型（SXM / PCIe）、频率、矩阵形状和输入分布变化很大，引用别人的数字前先看配置。作为参照，FlashAttention-3 在 H100 上做到 75%（作者自测）。
 
+## 实测：Triton 逐级优化（RTX 5070 Ti）
+
+把上面的手段用 Triton 一级一级加上去，在本地 RTX 5070 Ti 上测。代码：[bench/triton-gemm](https://github.com/scatyf3/ai-infra-inferview/tree/main/bench/triton-gemm)（`kernels.py` 是 kernel，`bench.py` 跑测试，`results/rtx5070ti.json` 是原始数据）。
+
+### 这张卡的数字
+
+| 项 | 值 |
+|---|---|
+| SM 数 | 70 |
+| bf16 Tensor Core 峰值（fp32 累加，稠密） | 规格 87.9 TFLOP/s，按 boost 2.452 GHz 算（[白皮书数字，VideoCardz 转载](https://videocardz.com/newz/nvidia-confirms-full-geforce-rtx-5070-ti-specifications-featuring-gb203-and-gb205-gpus)）；即每 SM 每周期 $87.9 \times 10^{12} / (70 \times 2.452 \times 10^9) = 512$ FLOP |
+| 实测负载频率 | 2.81 GHz（cuBLAS 跑 8192³ 时 `nvidia-smi` 采样，功耗约 240 W） |
+| 按实测频率的峰值 | $70 \times 512 \times 2.81\ \text{GHz} \approx 101$ TFLOP/s，下文的「峰值」都指这个 |
+| 显存带宽 | 896 GB/s（GDDR7，256 bit × 28 Gbps ÷ 8） |
+| ridge point | $101 / 0.896 \approx 112$ FLOP/B |
+| L2 | 48 MB |
+| 每 SM shared memory | 100 KB |
+
+消费级卡的 boost 频率比规格写的高，所以实测能超过 87.9。H100 的 ridge 是 295，这张卡只有 112，这个差别下面会用到。
+
+测法：$M = N = K = n$，bf16 输入输出，fp32 累加。每个点取 `triton.testing.do_bench` 的中位数，每次计时前清 L2；$n \le 4096$ 的结果都先和 fp32 的 `torch.matmul` 对过数。TFLOP/s = $2n^3$ / 时间。这张卡同时在驱动显示器（Windows，WDDM），频率没有锁，同一个点重复测会有 1–2% 的波动。环境：driver 610.88，torch 2.11.0+cu128，triton-windows 3.5.1。
+
+### 每一版改了什么
+
+v1–v4 是同一个 kernel `matmul_tiled`，每一版只多拧一个旋钮，前一版的设置都保留：
+
+| 版本 | 改动 | 对应本页 | n = 4096 | n = 16384 |
+|---|---|---|---|---|
+| v0 | 一个 program 算 $C$ 的一个元素，沿 $K$ 做内积 | [朴素版](#朴素版-没有复用) | 0.11（n = 2048） | — |
+| v1 | 一个 program 算 64 × 64 的 block tile，fp32 FMA 走 CUDA core | [第一级](#第一级-block-tile-放进-shared-memory) | 28.0 | 26.3（n = 8192） |
+| v2 | tile 换成 128 × 128 × 64，`tl.dot` 吃 bf16，走 Tensor Core | [指令 tile](#第三级-指令-tile) | 70.2 | 68.3 |
+| v3 | `GROUP_M = 8` 分组编号 | [L2](#l2-让同时跑的-block-读同一份数据) | 67.9 | 67.2 |
+| v4 | `num_stages = 3`，软件流水 | [三级 tiling](#三级-tiling) | 90.4 | 94.0 |
+| v5 | autotune：8 组 tile / warp / stage 配置里按形状挑 | [tile 选多大](#tile-选多大) | 95.4 | 98.1 |
+| cuBLAS | `torch.matmul` | | 90.2 | 98.8 |
+
+单位 TFLOP/s。v0 和 v1 太慢，只测到 2048 和 8192。
+
+<GemmBenchChart />
+
+逐版看：
+
+1. **v0 → v1：0.11 → 28，约 250 倍。** v0 的曲线在每个 $n$ 上都是 0.11，完全是平的：每个输出读 $2K$ 个数只做 $K$ 次 MAC，每次 MAC 的代价固定，和矩阵多大无关。v1 让一个 program 的 64 × 64 个输出共用读进来的 $A$、$B$ tile，每读 1 个数做 $\frac{64 \cdot 64}{64 + 64} = 32$ 次 MAC。28 TFLOP/s 是 CUDA core fp32 峰值（$70 \times 128 \times 2 \times 2.81\ \text{GHz} \approx 50$）的 56%。
+2. **v1 → v2：28 → 70。** 只把 FMA 换成 Tensor Core。但 70 只有峰值的 70%：v2 不开流水（`num_stages = 1`），每个 K 步都要等 load 回来才能发 `mma`，而这个配置一个 SM 只放得下 1 个 CTA，没有别的 CTA 能在等待时顶上（见下面「流水级数」）。
+3. **v2 → v3：没变化。** 分组只在缺带宽时才有用，128 × 128 的 tile 在这张卡上不缺。见下面「分组顺序」，那里换成 64 × 64 的 tile，差别就出来了。
+4. **v3 → v4：68 → 94。** 开 3 级流水，搬第 $k+1$ 段的同时算第 $k$ 段，Tensor Core 不再干等。这是 v2 之后最大的一步。
+5. **v4 → v5：小矩阵上差得最多。** $n = 512$ 时从 15 到 34，$n = 1536$ 时从 61 到 81。autotune 在这两个尺寸都挑了 64 × 64 的 tile：$n = 1536$ 用 128 × 128 只有 $12 \times 12 = 144$ 个 tile，一个 SM 放 1 个，70 个 SM 要跑 3 波，最后一波只有 4 个 tile，效率 $144 / 210 = 69\%$，正是 [wave quantization](#wave-quantization-tile-数和-sm-数对不齐)。大矩阵上 autotune 挑了 128 × 128 × 32、4 warp、4 级流水，到 98，峰值的 97%，和 cuBLAS 持平。
+6. **cuBLAS 在 768、1536 上反而掉坑**（25、63），v5 在这两个尺寸上更快。cuBLAS 是按启发式挑 kernel，不是逐个形状实测，非整齐的小尺寸上会挑错。
+
+### tile 大小
+
+固定 $n = 4096$，用 v4 的 kernel（分组 + 3 级流水），只换 $BM \times BN$：
+
+| BM × BN | 每读 1 个数做的 MAC $\frac{BM \cdot BN}{BM + BN}$ | TFLOP/s | 折算 smem 从 L2 读的速度 |
+|---|---|---|---|
+| 16 × 16 | 8 | 19.0 | 2.4 TB/s |
+| 32 × 32 | 16 | 56.7 | 3.5 TB/s |
+| 64 × 64 | 32 | **95.3** | 3.0 TB/s |
+| 128 × 128 | 64 | 92.1 | 1.4 TB/s |
+| 128 × 256 | 85 | 85.1 | 1.0 TB/s |
+
+最后一列 = TFLOP/s ÷ 每字节 FLOP（MAC 数 × 2 FLOP ÷ 2 B），也就是喂饱这个吞吐要从 L2 往 shared memory 搬多快。
+
+1. **小 tile 喂不饱。** 4096 的 $A$、$B$ 共 64 MB，大部分读都命中 L2，所以这里看的是 L2 → SM 的流量。32 × 32 已经要 3.5 TB/s，是显存带宽的 4 倍，才换来 57 TFLOP/s。16 × 16 更差：一个 program 只有 1 个 warp，每个 K 步只发几条 `mma`，固定开销也摊不开。
+2. **64 × 64 就够了，比 128 × 128 还快一点。** 64 × 64 一个 SM 能放 4 个 CTA，128 × 128 只放 2 个，CTA 多，互相藏延迟更容易。
+3. **128 × 256 变慢**：$32 \times 16 = 512$ 个 tile，一个 SM 只放 1 个，要跑 $\lceil 512 / 70 \rceil = 8$ 波，最后一波只有 22 个 tile，效率 $512 / 560 = 91\%$。$85.1 / 92.1 = 0.92$，差不多就是这个比例。
+
+### 流水级数
+
+同样 $n = 4096$，两个配置各扫 `num_stages`：
+
+| 配置 | 每 SM 能放几个 CTA | 1 级 | 2 级 | 3 级 | 4 级 |
+|---|---|---|---|---|---|
+| 128 × 128 × 32，4 warp | 2（寄存器卡住：每线程约 220 个） | 91.0 | 93.6 | 92.5 | 95.5 |
+| 128 × 128 × 64，8 warp | 1（寄存器卡住：每线程约 165 个 × 256 线程） | 67.3 | 87.8 | 90.4 | 91.4 |
+
+藏住 load 的延迟有两条路：同一个 CTA 内部提前搬下一段（流水），或者同一个 SM 上放几个 CTA，一个等数据时另一个在算（occupancy）。4 warp 的配置一个 SM 放得下 2 个 CTA，不开流水也有 91；8 warp 的配置只放得下 1 个，不开流水就只有 67。ladder 里 v2、v3 用的就是后者，所以 v4 那一步才跳了这么多。
+
+### 分组顺序什么时候有用
+
+ladder 里分组没起作用。换成 64 × 64 的 tile，同一个 v4 kernel 只改 `GROUP_M`，扫 $n$：
+
+<GemmBenchChart which="group" />
+
+| n | B 的大小 | 64 × 64，行优先 | 64 × 64，分组 | 128 × 128，行优先 | 128 × 128，分组 |
+|---|---|---|---|---|---|
+| 4096 | 32 MB | 96.6 | 96.7 | 90.5 | 90.4 |
+| 8192 | 128 MB | 78.1 | 93.7 | 93.0 | 93.2 |
+| 16384 | 512 MB | **53.6** | 93.2 | 93.1 | 94.0 |
+
+用 [L2 那节](#l2-让同时跑的-block-读同一份数据) 的条带来算：
+
+1. **B 放得进 L2 时，顺序无所谓。** $n = 4096$ 时整个 $B$ 只有 32 MB，比 L2 的 48 MB 小，读一次之后一直留在 L2 里，不管谁先算都命中。
+2. **B 放不进 L2 时，行优先的有效 AI ≈ $BM$。** $n = 16384$、64 × 64 的 tile，$C$ 的一行有 256 个 tile，一个 SM 放 4 个 CTA，同时在跑的约 280 个，差不多就是一行。每条 $B$ 列条带只被这一行里的一个 tile 用，等下一行再用到它时，早被挤出 L2 了。一个 tile 算 $2 \cdot BM \cdot BN \cdot K$ FLOP，从显存读一条 $B$ 条带 $2 \cdot K \cdot BN$ 字节（$A$ 条带被整行共享，可以忽略）：
+
+$$
+\text{AI}_{\text{行优先}} \approx \frac{2 \cdot BM \cdot BN \cdot K}{2 \cdot K \cdot BN} = BM\ \text{FLOP/B}
+$$
+
+3. **拿 $BM$ 和 ridge 112 比。** $BM = 64 < 112$，memory-bound，上限是 $64 \times 0.896 \approx 57$ TFLOP/s，实测 53.6。$BM = 128 > 112$，即使行优先也是 compute-bound，所以 ladder 里分组看不出差别。$n = 8192$ 时 $B$ 是 128 MB，L2 能留住一部分，所以落在两者之间（78）。
+4. **分组让一条 $B$ 条带被 `GROUP_M` 行 tile 共用**，AI 变成约 $8 \times 64 = 512$，回到 compute-bound。
+
+换到 H100，ridge 是 295，比 128 还大，128 × 128 的 tile 也必须靠分组（或者 B 恰好放进 L2）才能越过 ridge，这就是 L2 那节算出来的情况。**ridge 越高的卡越依赖 L2 复用。**
+
 ## 面试追问
 
 ::: details Q：block tile 的算术强度为什么和 BK 无关？
@@ -507,12 +610,13 @@ split-K 固定把 $K$ 切成 $S$ 段，每段的部分和写到临时 buffer（�
 
 ## 手撕
 
-常见题：手写 shared memory tiled matmul，并解释每级 tile 的复用。从朴素版到 block tile 再到寄存器 tile 的完整代码见 [CUDA Tiled Matmul](/handson/cuda-tiled-matmul)。Simon Boehm 的 worklog 把这条路一路做到接近 cuBLAS，每一步都有实测（[How to Optimize a CUDA Matmul Kernel](https://siboehm.com/articles/22/CUDA-MMM)）。
+常见题：手写 shared memory tiled matmul，并解释每级 tile 的复用。从朴素版到 block tile 再到寄存器 tile 的完整代码见 [CUDA Tiled Matmul](/handson/cuda-tiled-matmul)。Simon Boehm 的 worklog 把这条路一路做到接近 cuBLAS，每一步都有实测（[How to Optimize a CUDA Matmul Kernel](https://siboehm.com/articles/22/CUDA-MMM)）。Triton 版的逐级实现和实测见上面 [实测](#实测-triton-逐级优化-rtx-5070-ti)，代码在 [bench/triton-gemm](https://github.com/scatyf3/ai-infra-inferview/tree/main/bench/triton-gemm)。
 
 ## 参考
 
 - [CUTLASS：Efficient GEMM in CUDA](https://github.com/NVIDIA/cutlass/blob/main/media/docs/cpp/efficient_gemm.md)：三级 tiling、流水、epilogue
 - [How to Optimize a CUDA Matmul Kernel for cuBLAS-like Performance](https://siboehm.com/articles/22/CUDA-MMM)
+- [bench/triton-gemm](https://github.com/scatyf3/ai-infra-inferview/tree/main/bench/triton-gemm)：本页实测用的 Triton kernel、benchmark 脚本和原始数据
 - [Triton 教程：Matrix Multiplication](https://triton-lang.org/main/getting-started/tutorials/03-matrix-multiplication.html)：`GROUP_SIZE_M` 和 L2 命中
 - [NVIDIA Hopper Tuning Guide](https://docs.nvidia.com/cuda/hopper-tuning-guide/index.html)：TMA、cluster、distributed shared memory
 - [FlashAttention-3 (arXiv:2407.08608)](https://arxiv.org/abs/2407.08608)：Hopper 上的 TMA、wgmma、warp specialization

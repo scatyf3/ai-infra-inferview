@@ -18,6 +18,7 @@ import BankConflictViz from './components/BankConflictViz.vue'
 import L2WaveViz from './components/L2WaveViz.vue'
 import RegTileViz from './components/RegTileViz.vue'
 import GemmOverview from './components/GemmOverview.vue'
+import GemmBenchChart from './components/GemmBenchChart.vue'
 import InnerOuterViz from './components/InnerOuterViz.vue'
 import Flashcards from './components/Flashcards.vue'
 import QuantGranularity from './components/QuantGranularity.vue'
@@ -59,6 +60,7 @@ export default {
     app.component('L2WaveViz', L2WaveViz)
     app.component('RegTileViz', RegTileViz)
     app.component('GemmOverview', GemmOverview)
+    app.component('GemmBenchChart', GemmBenchChart)
     app.component('InnerOuterViz', InnerOuterViz)
     app.component('Flashcards', Flashcards)
     app.component('PrivateNotes', PrivateNotes)
