@@ -16,6 +16,9 @@ title: GPU / 算子
 - [SM 里的计算单元：CUDA Core / Tensor Core / SFU](./compute-units) — 每种单元一个周期做多少、为什么算力都在 Tensor Core
 - [普通 SIMT 之外的指令](./special-instructions) — shuffle、TMA、wgmma、SFU、mbarrier、setmaxnreg
 - [GEMM Tiling](./tensor-core-gemm) — 切块复用，以及为什么 GEMV 打不满
+- [量化 GEMM Kernel：W4A16 / FP8](./quant-gemm) — 格式转换和 scale 放在 tiling 的哪一级
+- [MoE Grouped GEMM](./moe-grouped-gemm) — 大小不一的小 GEMM 怎么合成一个 kernel
+- [Memory-bound Kernel 总览](./memory-bound-kernels) — 时间等于字节除以带宽：少搬、搬满
 - [Triton 编程模型](./triton) — autotune；什么时候写 Triton、什么时候直接调 cuBLAS / CUTLASS
 - [CUDA Graph 与 Kernel Fusion](./cuda-graph-fusion) — 在框架侧的落地
 - [Profiling：nsys / ncu / torch profiler](./profiling) — 看哪几个指标

@@ -182,6 +182,8 @@ for k0 in range(0, K, g):                                    # 每次取一个 K
 2. **读 scale 的带宽**：粒度越细 scale 越多。per-group $g = 128$，每组一个 16 bit 的 scale，摊到每个权重上是 $16 / 128 = 0.125$ bit，int4 的实际位宽是 $4.125$ bit，多读 3.1%。$K = N = 8192$ 时权重 32 MiB、scale 1 MiB；per-channel 只有 8192 个 scale，16 KiB，可以忽略。int4 权重通常还带一个 zero point（非对称量化，$\hat{x} = s \cdot (x_q - z)$），再多一点。
 3. **和 kernel 分块对齐**：kernel 沿 $K$ 一个 tile 一个 tile 地算，$g$ 取 K-tile 的整数倍（如 128），每个 tile 只要读一行 scale。
 
+两条路线在 kernel 里具体怎么做（反量化放在 tiling 的哪一级、权重为什么要重排、FP8 block scaling 怎么在主循环里乘 scale），见 [量化 GEMM Kernel](/gpu/quant-gemm)。
+
 ## 3. 各种消除 outlier 的算法
 
 ### outlier 是什么，为什么致命

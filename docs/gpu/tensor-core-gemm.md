@@ -4,7 +4,7 @@ status: draft
 tags: [gemm, tiling]
 difficulty: 3
 order: 2
-related: [/gpu/gpu-architecture, /gpu/compute-units, /gpu/special-instructions, /inference/prefill-decode-roofline, /handson/cuda-tiled-matmul, /gpu/triton, /inference/quantization]
+related: [/gpu/gpu-architecture, /gpu/compute-units, /gpu/special-instructions, /inference/prefill-decode-roofline, /handson/cuda-tiled-matmul, /gpu/triton, /inference/quantization, /gpu/quant-gemm, /gpu/moe-grouped-gemm, /gpu/memory-bound-kernels]
 stack: [k-gemm, hw-gpu]
 train: [tr-k-gemm]
 ---

@@ -149,6 +149,8 @@ DeepSeek-V3 的推理部署（技术报告）：prefill 最小单元 4 节点 32
 | contiguous | 训练、prefill | 所有专家的 token 拼成一个张量，每段按 block 大小对齐，形状动态 |
 | masked | decode | 每专家预留固定容量，用 mask 表示有效行数，CPU 不需要知道每专家的 token 数，可以进 CUDA graph |
 
+kernel 内部怎么排队、怎么派 tile、补齐浪费多少、decode 时为什么要读的 expert 远比想象的多，见 [MoE Grouped GEMM](/gpu/moe-grouped-gemm)。
+
 ### 第 6 步：DeepEP 两类 kernel 与 two-batch overlap
 
 [DeepEP](https://github.com/deepseek-ai/DeepEP/tree/v1.2.1)（v1.2.1 README）把 dispatch/combine 分成两套：
