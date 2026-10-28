@@ -4,7 +4,7 @@ status: draft
 tags: [gemm, tiling]
 difficulty: 3
 order: 2
-related: [/gpu/gpu-architecture, /gpu/compute-units, /gpu/special-instructions, /inference/prefill-decode-roofline, /handson/cuda-tiled-matmul, /gpu/triton, /inference/quantization, /gpu/quant-gemm, /gpu/moe-grouped-gemm, /gpu/memory-bound-kernels]
+related: [/gpu/gpu-architecture, /gpu/compute-units, /gpu/special-instructions, /inference/prefill-decode-roofline, /handson/cuda-tiled-matmul, /gpu/triton, /inference/quantization, /gpu/split-k-stream-k, /gpu/quant-gemm, /gpu/moe-grouped-gemm, /gpu/memory-bound-kernels]
 stack: [k-gemm, hw-gpu]
 train: [tr-k-gemm]
 ---
@@ -421,7 +421,7 @@ $$
 
 1536 用 128 × 128 时，第二波只有 12 个 tile，120 个 SM 闲着。换成 64 × 64 填满了 SM，但复用减半。cuBLAS 的 heuristic 和 Triton 的 autotune 就是在这些 kernel 变体里挑。
 
-另一条路是不再以 tile 为单位分活。Stream-K 把所有 tile 的 K 循环迭代排成一条长队，平均切给每个 SM，一个 SM 可能算完一个 tile 的后半段再接另一个 tile 的前半段，被切开的 tile 最后再合并部分和（[Osama et al., 2023, arXiv:2301.03598](https://arxiv.org/abs/2301.03598)）。
+另一条路是不再以 tile 为单位分活。Stream-K 把所有 tile 的 K 循环迭代排成一条长队，平均切给每个 SM，一个 SM 可能算完一个 tile 的后半段再接另一个 tile 的前半段，被切开的 tile 最后再合并部分和（[Osama et al., 2023, arXiv:2301.03598](https://arxiv.org/abs/2301.03598)）。详见 [Split-K 与 Stream-K](/gpu/split-k-stream-k)。
 
 ## 离最优还有多远
 
@@ -700,7 +700,7 @@ decode 是 memory-bound，时间由读权重的字节数决定，权重从 16 bi
 :::
 
 ::: details Q：split-K 和 Stream-K 有什么区别？
-split-K 固定把 $K$ 切成 $S$ 段，每段的部分和写到临时 buffer（或 atomic 加），再合并，解决的是「tile 太少」。Stream-K 把所有 tile 的所有 K 迭代排成一条长队，平均切给每个 SM，跨 SM 的部分 tile 再做修正，解决的是「tile 数不是 SM 数的整数倍」（wave quantization）。
+split-K 固定把 $K$ 切成 $S$ 段，每段的部分和写到临时 buffer（或 atomic 加），再合并，解决的是「tile 太少」。Stream-K 把所有 tile 的所有 K 迭代排成一条长队，平均切给每个 SM，跨 SM 的部分 tile 再做修正，解决的是「tile 数不是 SM 数的整数倍」（wave quantization）。详见 [Split-K 与 Stream-K](/gpu/split-k-stream-k)。
 :::
 
 ## 手撕

@@ -70,6 +70,7 @@ export const sectionOrder: Record<string, string[]> = {
   L1: ['inference/quantization', 'inference/quantization-gptq'],
   L2: [
     'gpu/tensor-core-gemm',
+    'gpu/split-k-stream-k',
     'gpu/quant-gemm',
     'gpu/moe-grouped-gemm',
     'inference/flash-attention',

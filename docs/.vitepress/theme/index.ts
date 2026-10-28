@@ -23,6 +23,7 @@ import InnerOuterViz from './components/InnerOuterViz.vue'
 import Flashcards from './components/Flashcards.vue'
 import QuantGranularity from './components/QuantGranularity.vue'
 import RooflineChart from './components/ui/RooflineChart.vue'
+import QuantRooflineChart from './components/QuantRooflineChart.vue'
 import StackPageExtras from './components/StackPageExtras.vue'
 import ReaderNotes from './components/ReaderNotes.vue'
 import SyncControl from './components/SyncControl.vue'
@@ -66,5 +67,6 @@ export default {
     app.component('PrivateNotes', PrivateNotes)
     app.component('QuantGranularity', QuantGranularity)
     app.component('RooflineChart', RooflineChart)
+    app.component('QuantRooflineChart', QuantRooflineChart)
   },
 } satisfies Theme
