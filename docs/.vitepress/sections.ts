@@ -49,7 +49,6 @@ export const overrides: Record<string, string> = {
   'inference/speech-output': 'overview',
   'inference/omni-duplex': 'overview',
   'inference/dit-serving': 'overview',
-  'gpu/cuda-graph-fusion': 'L2', // 主体是 kernel 融合
   'framework/add-model-vllm-sglang': 'L3',
   'framework/request-lifecycle': 'overview',
   'framework/vllm-v1-architecture': 'overview',
@@ -75,7 +74,6 @@ export const sectionOrder: Record<string, string[]> = {
     'gpu/moe-grouped-gemm',
     'inference/flash-attention',
     'gpu/memory-bound-kernels',
-    'gpu/cuda-graph-fusion',
     'gpu/triton',
     'gpu/profiling',
   ],

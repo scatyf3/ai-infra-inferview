@@ -19,7 +19,6 @@ title: GPU / 算子
 - [Split-K 与 Stream-K](./split-k-stream-k) — tile 太少或和 SM 数对不齐时，沿 K 再切
 - [量化 GEMM Kernel：W4A16 / FP8](./quant-gemm) — 格式转换和 scale 放在 tiling 的哪一级
 - [MoE Grouped GEMM](./moe-grouped-gemm) — 大小不一的小 GEMM 怎么合成一个 kernel
-- [Memory-bound Kernel 总览](./memory-bound-kernels) — 时间等于字节除以带宽：少搬、搬满
+- [Memory-bound Kernel 与 Kernel Fusion](./memory-bound-kernels) — 时间等于字节除以带宽：融合少搬、访存搬满
 - [Triton 编程模型](./triton) — autotune；什么时候写 Triton、什么时候直接调 cuBLAS / CUTLASS
-- [CUDA Graph 与 Kernel Fusion](./cuda-graph-fusion) — 在框架侧的落地
 - [Profiling：nsys / ncu / torch profiler](./profiling) — 看哪几个指标

@@ -55,7 +55,7 @@
       "observation": "权重是显存大头，7B fp16 就要 14 GiB；decode 每步几百次 kernel launch，小 batch 下 CPU launch 开销与 GPU 计算同量级。",
       "scenario": "显存受限的单卡部署（消费卡、A10），以及小 batch 低延迟 decode。",
       "how": "W4A16 量化（AWQ 0.2.0、GPTQ 0.2.6）把权重压到 1/4；0.2.6 \"Fast model execution with CUDA/HIP graph\" 把 decode 整图捕获重放；0.2.1 PagedAttention V2 kernel 端到端延迟降 20%；0.2.5 Mixtral 用 expert parallelism。",
-      "related": ["/inference/quantization", "/gpu/cuda-graph-fusion"],
+      "related": ["/inference/quantization", "/framework/cuda-graph"],
       "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.2.0", "https://github.com/vllm-project/vllm/releases/tag/v0.2.6"]
     },
     {
@@ -172,7 +172,7 @@
       "observation": "DP+EP 的 MoE 部署里 DeepEP all-to-all 通信占比高，计算等通信；fine-grained MoE 的 piecewise graph 仍有大量小 kernel launch；多轮对话 KV 放不进 GPU。",
       "scenario": "DeepSeek 类 MoE 的大规模 DP+EP 部署；长多轮会话。",
       "how": "\"V1 is the only engine in the codebase now\"；CUDA graph 默认改为 FULL_AND_PIECEWISE，\"particularly fine-grained MoEs\"；Dual-Batch Overlap 把 batch 拆成两个 microbatch，一个做 expert 通信时另一个做计算；CPU KV offloading 带 LRU 管理；DeepGEMM 默认开；0.11.1 \"Robust async scheduling\"，修复与 chunked prefill、structured outputs、MTP、DeepEP/DCP 组合的正确性问题。",
-      "related": ["/framework/vllm-v1-architecture", "/gpu/cuda-graph-fusion", "/inference/kv-cache-paged-attention"],
+      "related": ["/framework/vllm-v1-architecture", "/framework/cuda-graph", "/inference/kv-cache-paged-attention"],
       "sources": ["https://github.com/vllm-project/vllm/releases/tag/v0.11.0", "https://github.com/vllm-project/vllm/releases/tag/v0.11.1"]
     },
     {

@@ -4,7 +4,7 @@ status: draft
 tags: [torch-compile, dynamo, inductor]
 difficulty: 4
 order: 2
-related: [/framework/pytorch-internals, /framework/cuda-graph, /gpu/cuda-graph-fusion, /gpu/triton, /inference/prefill-decode-roofline]
+related: [/framework/pytorch-internals, /framework/cuda-graph, /gpu/memory-bound-kernels, /gpu/triton, /inference/prefill-decode-roofline]
 stack: [f-graph]
 train: [tr-k-compile]
 ---
@@ -168,7 +168,7 @@ vLLM V1 默认开启 compile（[vLLM 文档：torch.compile integration](https:/
 ## 面试追问
 
 ::: details Q：vLLM 里 torch.compile 和 CUDA Graph 分别解决什么？能同时用吗？
-compile 负责减少 kernel 数量和 HBM 往返（融合 RMSNorm、残差、激活、量化），CUDA Graph 负责消除剩下那些 kernel 的 launch 开销。两者正交：先 compile 出融合后的 kernel，再把这组 kernel capture 成 graph。vLLM V1 默认两者都开，而且切图的位置相同（都在 attention 处），见 [CUDA Graph](/framework/cuda-graph) 和 [CUDA Graph 与 fusion](/gpu/cuda-graph-fusion)。
+compile 负责减少 kernel 数量和 HBM 往返（融合 RMSNorm、残差、激活、量化），CUDA Graph 负责消除剩下那些 kernel 的 launch 开销。两者正交：先 compile 出融合后的 kernel，再把这组 kernel capture 成 graph。vLLM V1 默认两者都开，而且切图的位置相同（都在 attention 处），见 [CUDA Graph](/framework/cuda-graph) 和 [Kernel Fusion](/gpu/memory-bound-kernels#少搬-融合)。
 :::
 
 ::: details Q：为什么 vLLM 敢把 Dynamo 的 guard 丢掉？

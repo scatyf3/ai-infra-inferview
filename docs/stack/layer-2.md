@@ -6,6 +6,8 @@ title: "第 2 层：tensor → kernel"
 
 单个算子在 GPU 上怎么跑。一层 decoder 的 forward 拆开只有三类 kernel：线性层的 GEMM、attention，以及一批逐元素或按行的小算子。这一层只问一件事：每个 kernel 离它的 roofline 上限还有多远。
 
+边界：这一层的单位是**一个 kernel**，它内部怎么切块、怎么读写 HBM。多个 kernel 怎么串成一次 forward、CPU 怎么把它们发射出去（CUDA Graph、torch.compile 抓图），属于 [第 3 层](/stack/layer-3)。
+
 ## 先分类：每个 kernel 落在 roofline 哪一边
 
 判断标准见 [roofline](/inference/prefill-decode-roofline)：算术强度 AI = FLOP ÷ 字节，和 ridge（H100 bf16 是 $989 / 3.35 \approx 295$ FLOP/B）比。AI 大于 ridge 是 compute-bound，时间下界是 FLOP ÷ 峰值；小于 ridge 是 memory-bound，时间下界是字节 ÷ 带宽。
@@ -44,15 +46,15 @@ prefill 的 GEMM 和 attention 属于这一类。手段是 [GEMM tiling](/gpu/te
 
 ## memory-bound：少搬、搬满
 
-decode 的几乎全部 kernel 和所有小算子属于这一类。时间下界是字节 ÷ 带宽，只有两个方向（[Memory-bound Kernel 总览](/gpu/memory-bound-kernels)）：
+decode 的几乎全部 kernel 和所有小算子属于这一类。时间下界是字节 ÷ 带宽，只有两个方向（[Memory-bound Kernel 与 Kernel Fusion](/gpu/memory-bound-kernels)）：
 
 1. **少搬**：
-   - **融合**：中间结果不落 HBM，见 [CUDA Graph 与 Kernel Fusion](/gpu/cuda-graph-fusion)。
+   - **融合**：几个相邻算子合成一个 kernel，中间结果留在寄存器里不落 HBM。残差加 + RMSNorm 省 20%，SiLU × up 省 40%，norm + FP8 量化省 57%；attention 融合（FlashAttention）省的是 $O(S^2)$，这是数量级。
    - **压缩权重**：[W4A16](/gpu/quant-gemm#w4a16-格式转换放到最后一步) 让 decode 的 GEMM 读的权重字节 ÷ 4，转换放在寄存器里、`mma` 之前做。
    - **压缩 KV**：GQA / MLA、KV 量化让 decode attention 读的 KV 变少。
-2. **搬满**：访存合并、向量化（每线程一次 16 B）、在途字节够多、block 够多。decode 的 GEMV 只有一行 tile，block 不够时用 split-K；decode attention 序列长、batch 小时用 split-KV（[FlashDecoding](/inference/flash-attention#decode-flashdecoding-split-kv)）。
+2. **搬满**：访存合并、向量化（每线程一次 16 B）、在途字节够多、block 够多。decode 的 GEMV 只有一行 tile，block 不够时用 [split-K](/gpu/split-k-stream-k)；decode attention 序列长、batch 小时用 split-KV（[FlashDecoding](/inference/flash-attention#decode-flashdecoding-split-kv)）。
 
-decode 时小算子只有一两 MiB，不到 1 μs 就搬完，比一次 kernel launch 还短，这时瓶颈变成 kernel 的个数，靠融合减少 kernel，再用 CUDA Graph 去掉剩下的 CPU 发射开销。
+decode 时小算子只有一两 MiB，不到 1 μs 就搬完，比一次 kernel launch 还短。这时逐元素融合省的字节可以忽略（70B、batch 64 时残差加 + RMSNorm 一共省约 50 μs，权重读取要 42 ms），收益主要是 kernel 个数减半。融合之后剩下的发射开销不是单个 kernel 能解决的，交给第 3 层的 [CUDA Graph](/framework/cuda-graph)。
 
 ## 用什么写、怎么确认
 
@@ -65,5 +67,5 @@ decode 时小算子只有一两 MiB，不到 1 μs 就搬完，比一次 kernel 
 2. [GEMM Tiling](/gpu/tensor-core-gemm)：本层的骨架，后面的页面都在它上面改。
 3. [量化 GEMM](/gpu/quant-gemm)、[MoE Grouped GEMM](/gpu/moe-grouped-gemm)：tiling 的两种变体。
 4. [FlashAttention](/inference/flash-attention)：tiling + online softmax。
-5. [Memory-bound Kernel 总览](/gpu/memory-bound-kernels)、[CUDA Graph 与 Kernel Fusion](/gpu/cuda-graph-fusion)：剩下的小算子。
+5. [Memory-bound Kernel 与 Kernel Fusion](/gpu/memory-bound-kernels)：剩下的小算子，融合、带宽、访存模式。
 6. [Triton](/gpu/triton)、[Profiling](/gpu/profiling)：写和测。

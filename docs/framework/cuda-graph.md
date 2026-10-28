@@ -4,7 +4,7 @@ status: draft
 tags: [cuda-graph, vllm, torch-compile]
 difficulty: 3
 order: 2.5
-related: [/framework/torch-compile, /gpu/cuda-graph-fusion, /framework/request-lifecycle, /inference/prefill-decode-roofline]
+related: [/framework/torch-compile, /gpu/memory-bound-kernels, /framework/request-lifecycle, /inference/prefill-decode-roofline]
 stack: [f-graph]
 ---
 

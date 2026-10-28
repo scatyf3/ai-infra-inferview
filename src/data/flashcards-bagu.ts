@@ -23,7 +23,7 @@ const MOE = '/parallel/moe-ep'
 const ZERO = '/parallel/zero-fsdp'
 const GPU = '/gpu/gpu-architecture'
 const GEMM = '/gpu/tensor-core-gemm'
-const GRAPH = '/gpu/cuda-graph-fusion'
+const GRAPH = '/framework/cuda-graph'
 const PROF = '/gpu/profiling'
 const QGEMM = '/gpu/quant-gemm'
 const MGEMM = '/gpu/moe-grouped-gemm'
@@ -1067,7 +1067,7 @@ export const baguCards: Card[] = [
       hidden_states = self.mlp(hidden_states)
       return hidden_states, residual
     `,
-    ref: GRAPH,
+    ref: MBK,
   }),
   b({
     id: 'bagu-profiling',

@@ -23,6 +23,8 @@ TLDR。
 
 最后，无论是哪个 x bar = scale times xq, scale乘在哪里？如果是per row/col（tensor-wise/channel-wise），即scale顺着求和的维度K，直接后面聚合的时候乘就行。如果per group，则在gemm的时候需要判断我们现在在哪个group，边乘scale边算。
 
+<QuantGemmOverview />
+
 ## 一句话结论
 
 tensorcore的input要求：$D = A \times B + C$。A 和 B 必须是同一类低精度格式，C/D 是更宽的累加器，其中每个硬件架构支持：

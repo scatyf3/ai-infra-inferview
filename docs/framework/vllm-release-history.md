@@ -30,7 +30,7 @@ stack: []
 - **Observation**：权重是显存大头，7B fp16 就要 14 GiB；decode 每步几百次 kernel launch，小 batch 下 CPU launch 开销和 GPU 计算同量级。
 - **场景**：显存受限的单卡部署，以及小 batch 低延迟 decode。
 - **做法**：AWQ (0.2.0) 和 GPTQ W4A16 (0.2.6) 把权重压到 1/4；0.2.6 "Fast model execution with CUDA/HIP graph" 把 decode 整图捕获重放；0.2.1 PagedAttention V2 kernel 端到端延迟降 20%；0.2.5 Mixtral 用 expert parallelism。
-- 关联：[量化](/inference/quantization)、[CUDA Graph 与算子融合](/gpu/cuda-graph-fusion)
+- 关联：[量化](/inference/quantization)、[CUDA Graph](/framework/cuda-graph)
 
 ### 2024 上半年 · 功能扩张
 
@@ -111,7 +111,7 @@ stack: []
 - **Observation**：DP+EP 的 MoE 部署里 DeepEP all-to-all 通信占比高，计算等通信；fine-grained MoE 的 piecewise graph 仍有大量小 kernel launch；多轮对话 KV 放不进 GPU。
 - **场景**：DeepSeek 类 MoE 的大规模 DP+EP 部署；长多轮会话。
 - **做法**："V1 is the only engine in the codebase now"；CUDA graph 默认改为 FULL_AND_PIECEWISE，"particularly fine-grained MoEs"；**Dual-Batch Overlap** 把 batch 拆成两个 microbatch，一个做 expert 通信时另一个做计算；CPU KV offloading 带 LRU 管理；DeepGEMM 默认开。0.11.1 "Robust async scheduling"，修复与 chunked prefill、structured outputs、MTP、DeepEP/DCP 组合时的正确性问题（0.10.2 和 0.11.0 在抢占等场景会输出乱码）。
-- 关联：[CUDA Graph 与算子融合](/gpu/cuda-graph-fusion)、[KV Cache 与 PagedAttention](/inference/kv-cache-paged-attention)
+- 关联：[CUDA Graph](/framework/cuda-graph)、[KV Cache 与 PagedAttention](/inference/kv-cache-paged-attention)
 
 ### 2026 · Model Runner V2、sparse MLA、分层 KV
 

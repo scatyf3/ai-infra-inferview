@@ -11,17 +11,21 @@ train: [tr-k-gemm]
 
 # MoE Grouped GEMM
 
-> 几十上百个大小不一、运行时才知道形状的小 GEMM，怎么合成一个 kernel
+在单卡serving的时候，几十上百个大小不一、运行时才知道形状的小 GEMM，怎么合成一个 kernel
 
 ## 一句话结论
 
-MoE 层里每个 token 选 $k$ 个 expert，每个 expert 对分给它的 token 做一个 FFN。所以一层是 $E$ 个 GEMM：形状都是 $(m_e \times K) \cdot (K \times N)$，$K$、$N$ 相同，只有行数 $m_e$ 不同，而且 $m_e$ 运行时才知道、差别大、经常很小。
+MoE 层里每个 token 选 $k$ 个 expert，每个 expert 对分给它的 token 做一个 FFN。given这个batch里每个token都选自己的expert，我们假设一层是 $E$ 个 GEMM：形状都是 $(m_e \times K) \cdot (K \times N)$，$K$、$N$ 相同，只有行数 $m_e$ 不同，而且 $m_e$ 运行时才知道、差别大、经常很小。这就会带来麻烦，如果naive的launch E个小GEMM肯定很愚蠢。
 
-grouped GEMM 的想法是：**把所有 expert 的 tile 摊平成一个列表，一个 kernel 里的 block 按编号去领 tile，每个 tile 只属于一个 expert**。tile 内部就是普通的 [GEMM tiling](/gpu/tensor-core-gemm)，难点都在 tile 外面：
+grouped GEMM 的想法是：**把所有 expert 的 tile 摊平成一个列表，一个 kernel 里的 block 按编号去领 tile，每个 tile 只属于一个 expert**。这可以类比为fuse Wqkv，当然group gemm比这个难很多，即几个没依赖关系的gemm合并在一起，tile 内部就是普通的 [GEMM tiling](/gpu/tensor-core-gemm)，难点都在 tile 外面：
 
 1. **排队**：token 按 expert 分好段，每段补齐到 $BM$ 的整数倍，保证一个 tile 不跨 expert。
 2. **派活**：tile 列表的长度取决于运行时的 $m_e$，kernel 要能在 CPU 不知道 $m_e$ 的情况下启动，才能进 CUDA graph。
 3. **代价**：补齐浪费的计算随 $BM$ 增长；decode 时每个 expert 只分到几个 token，又退化成 [GEMV](/gpu/tensor-core-gemm#面试追问)，而且要读的 expert 远比想象的多。
+
+TLDR：每个 token 复制 $k$ 份，每份排进它选中的 expert 的队里。然后一次 launch 算完所有 expert：每个 tile 只拿自己那段 token 乘自己 expert 的 $W_e$。算的是一组大小不一的对角块，不是"token × 所有 expert"的大 GEMM。
+
+![grouped GEMM 和 fuse Wqkv 的对比：Wqkv 是一个规则的 tile 网格；grouped GEMM 的每个 tile 要通过 sorted_token_ids 和 expert_ids 查自己读哪几行 X、乘哪个 W，并且有 padding 和上界多开的 block](/figures/moe-grouped-gemm-tiles.svg)
 
 一层 MoE 的完整流程：
 
@@ -171,7 +175,7 @@ kernel 层面，decode 的 grouped GEMM 还有一个形状问题：Hopper 的 `w
 
 ## 5. 两个 GEMM 之间和之后
 
-- **gate 和 up 合成一个 GEMM**：两个权重拼成 $d \times 2I$，一次 grouped GEMM 出来，和 dense 模型的 `gate_up_proj` 一样（见 [Kernel Fusion](/gpu/cuda-graph-fusion)）。
+- **gate 和 up 合成一个 GEMM**：两个权重拼成 $d \times 2I$，一次 grouped GEMM 出来，和 dense 模型的 `gate_up_proj` 一样（见 [Kernel Fusion 例 2](/gpu/memory-bound-kernels#例-2-gate-up-合并-swiglu)）。
 - **SiLU(gate) · up**：可以单独一个 elementwise kernel，也可以融合进第一个 GEMM 的 epilogue。融合的前提是同一个 tile 里同时有第 $j$ 列的 gate 和第 $j$ 列的 up，所以要把两者的列交错存放。
 - **乘路由权重**：放在 down GEMM 的 epilogue 里（上面代码的 `MUL_ROUTED_WEIGHT`），这时结果还在寄存器里，几乎免费。
 - **combine**：down 的输出按 slot 写回，每个 token 有 $k$ 行，要加成一行。可以单独一个归约 kernel；也可以在 epilogue 里直接 atomic add 到 token 的那一行，省一个 kernel，但浮点加法的顺序不再固定，结果会随调度变（见 [训推不一致](/posttrain/rl-train-infer-mismatch)）。

@@ -48,7 +48,7 @@ export const stages: Stage[] = [
       '/inference/batching-scheduling',
       '/framework/request-lifecycle',
       '/framework/vllm-v1-architecture',
-      '/gpu/cuda-graph-fusion',
+      '/framework/cuda-graph',
       '/handson/top-p-sampling',
     ],
     checks: [

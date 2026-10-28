@@ -4,7 +4,7 @@ status: draft
 tags: [triton]
 difficulty: 3
 order: 3
-related: [/handson/triton_primitives, /handson/triton-softmax, /handson/kernel-mindset, /gpu/tensor-core-gemm, /gpu/cuda-graph-fusion, /framework/torch-compile]
+related: [/handson/triton_primitives, /handson/triton-softmax, /handson/kernel-mindset, /gpu/tensor-core-gemm, /gpu/memory-bound-kernels, /framework/torch-compile]
 stack: [k-lang]
 ---
 
@@ -209,7 +209,7 @@ Triton 没有 `__launch_bounds__(256, 2)` 那种「每 SM 至少放 2 个」的�
 | 场景 | 选什么 | 原因 |
 |---|---|---|
 | 标准 dense GEMM（bf16 / fp8） | cuBLAS / cuBLASLt / CUTLASS | 针对每代硬件手调，有大量 kernel 变体和选择 heuristic；Triton 教程里 fp16 matmul 和 cuBLAS 互有胜负（4096² 时约 221 vs 222 TFLOP/s，1024² 时约 95 vs 105，文档构建时的作者自测） |
-| memory-bound 的融合算子：残差 + norm、SwiGLU、RoPE、量化 | **Triton** | 收益来自少一次 HBM 读写（见 [kernel fusion](/gpu/cuda-graph-fusion)），几十行就能写完；fused softmax 教程算过：PyTorch 逐算子的 softmax 读 $5MN + 2M$、写 $3MN + 2M$ 个元素，融合后约读写各 $MN$，理论约 4 倍 |
+| memory-bound 的融合算子：残差 + norm、SwiGLU、RoPE、量化 | **Triton** | 收益来自少一次 HBM 读写（见 [kernel fusion](/gpu/memory-bound-kernels#少搬-融合)），几十行就能写完；fused softmax 教程算过：PyTorch 逐算子的 softmax 读 $5MN + 2M$、写 $3MN + 2M$ 个元素，融合后约读写各 $MN$，理论约 4 倍 |
 | 形状特殊、库里没有：GQA / paged KV 的 attention 变体、MoE 的 grouped GEMM、自定义 mask | **Triton** | 改一改下标和 mask 就能试 |
 | 追求极限的 attention / GEMM（Hopper、Blackwell） | CUTLASS / 手写 CUDA | FlashAttention-3 依赖 TMA + wgmma 的异步和 warp specialization，用 CUTLASS 写（[arXiv:2407.08608](https://arxiv.org/abs/2407.08608)） |
 | 模型里一串逐元素 / 归约算子，不想手写 | `torch.compile` | Inductor 自动融合并**生成 Triton**（下一节） |

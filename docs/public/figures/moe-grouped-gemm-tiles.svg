@@ -1,0 +1,202 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 730" width="900" height="730" font-family="-apple-system, 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif" font-size="13" fill="#1f2328">
+  <defs>
+    <pattern id="pad" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="#f3f4f6"/>
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#b6bcc4" stroke-width="2"/>
+    </pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606a"/>
+    </marker>
+    <marker id="arr1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c8742a"/>
+    </marker>
+    <style>
+      .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; }
+      .title { font-size: 15px; font-weight: 600; }
+      .note { font-size: 12px; fill: #57606a; }
+      .e0 { fill: #dce8f5; stroke: #3b6ea5; }
+      .e1 { fill: #fbe3cc; stroke: #c8742a; }
+      .e2 { fill: #d9f0dd; stroke: #3c8d4f; }
+      .plain { fill: #eef1f4; stroke: #8c959f; }
+      .padc { fill: url(#pad); stroke: #8c959f; }
+    </style>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="899" height="729" rx="10" fill="#ffffff" stroke="#d0d7de"/>
+
+  <!-- ========== (a) fuse Wqkv ========== -->
+  <text x="24" y="34" class="title">(a) fuse Wqkv：同一个 X，沿 N 拼权重，拼完就是一个普通 GEMM</text>
+
+  <text x="80" y="64" text-anchor="middle">X</text>
+  <g stroke-width="1.2">
+    <rect x="40" y="72" width="80" height="25" class="plain"/>
+    <rect x="40" y="97" width="80" height="25" class="plain"/>
+    <rect x="40" y="122" width="80" height="25" class="plain"/>
+    <rect x="40" y="147" width="80" height="25" class="plain"/>
+  </g>
+  <g class="mono" text-anchor="middle">
+    <text x="80" y="89">t0</text><text x="80" y="114">t1</text>
+    <text x="80" y="139">t2</text><text x="80" y="164">t3</text>
+  </g>
+
+  <text x="140" y="127" text-anchor="middle" font-size="18">·</text>
+
+  <text x="295" y="64" text-anchor="middle">W_qkv = [ Wq | Wk | Wv ]</text>
+  <g stroke-width="1.2">
+    <rect x="160" y="72" width="90" height="100" class="plain"/>
+    <rect x="250" y="72" width="90" height="100" class="plain"/>
+    <rect x="340" y="72" width="90" height="100" class="plain"/>
+  </g>
+  <g text-anchor="middle"><text x="205" y="127">Wq</text><text x="295" y="127">Wk</text><text x="385" y="127">Wv</text></g>
+
+  <text x="452" y="127" text-anchor="middle" font-size="18">=</text>
+
+  <text x="610" y="64" text-anchor="middle">输出：2 × 3 个 tile</text>
+  <g stroke-width="1.2">
+    <rect x="475" y="72" width="90" height="50" class="plain"/>
+    <rect x="565" y="72" width="90" height="50" class="plain"/>
+    <rect x="655" y="72" width="90" height="50" class="plain"/>
+    <rect x="475" y="122" width="90" height="50" class="plain"/>
+    <rect x="565" y="122" width="90" height="50" class="plain"/>
+    <rect x="655" y="122" width="90" height="50" class="plain"/>
+  </g>
+  <g class="mono" text-anchor="middle">
+    <text x="520" y="101">pid 0</text><text x="610" y="101">pid 1</text><text x="700" y="101">pid 2</text>
+    <text x="520" y="151">pid 3</text><text x="610" y="151">pid 4</text><text x="700" y="151">pid 5</text>
+  </g>
+
+  <g class="note">
+    <text x="762" y="94" class="mono">pid_m = pid // 3</text>
+    <text x="762" y="114" class="mono">pid_n = pid % 3</text>
+    <text x="762" y="138">算一下就知道位置</text>
+    <text x="762" y="156">不查表、不补齐</text>
+  </g>
+
+  <line x1="24" y1="200" x2="876" y2="200" stroke="#d0d7de"/>
+
+  <!-- ========== (b) grouped GEMM ========== -->
+  <text x="24" y="234" class="title">(b) grouped GEMM：E = 3，k = 2，BM = 2。每个 tile 要查表：读 X 的哪几行、乘哪个 W</text>
+
+  <!-- router column -->
+  <text x="40" y="300">router 输出 topk_ids</text>
+  <g class="mono">
+    <text x="40" y="349">t0 →</text>
+    <text x="40" y="389">t1 →</text>
+    <text x="40" y="429">t2 →</text>
+    <text x="40" y="469">t3 →</text>
+  </g>
+  <g stroke-width="1.2">
+    <rect x="82" y="333" width="30" height="22" rx="3" class="e0"/><rect x="118" y="333" width="30" height="22" rx="3" class="e1"/>
+    <rect x="82" y="373" width="30" height="22" rx="3" class="e0"/><rect x="118" y="373" width="30" height="22" rx="3" class="e2"/>
+    <rect x="82" y="413" width="30" height="22" rx="3" class="e0"/><rect x="118" y="413" width="30" height="22" rx="3" class="e1"/>
+    <rect x="82" y="453" width="30" height="22" rx="3" class="e0"/><rect x="118" y="453" width="30" height="22" rx="3" class="e1"/>
+  </g>
+  <g class="mono" text-anchor="middle">
+    <text x="97" y="348">e0</text><text x="133" y="348">e1</text>
+    <text x="97" y="388">e0</text><text x="133" y="388">e2</text>
+    <text x="97" y="428">e0</text><text x="133" y="428">e1</text>
+    <text x="97" y="468">e0</text><text x="133" y="468">e1</text>
+  </g>
+  <g class="note">
+    <text x="40" y="510">m_e0 = 4，m_e1 = 3，m_e2 = 1</text>
+    <text x="40" y="528">Σ m_e = Tk = 8</text>
+  </g>
+
+  <!-- gather arrows for pid 4/5 -->
+  <path d="M152,344 C220,344 230,454 286,454" fill="none" stroke="#c8742a" stroke-width="1.5" marker-end="url(#arr1)"/>
+  <path d="M152,424 C220,424 230,478 286,478" fill="none" stroke="#c8742a" stroke-width="1.5" marker-end="url(#arr1)"/>
+  <text x="40" y="562" class="note" style="fill:#c8742a">gather：pid 4、5 读 X 的</text>
+  <text x="40" y="579" class="note" style="fill:#c8742a">第 0、2 行，不连续</text>
+
+  <!-- sorted_token_ids column: slot i at y = 330 + i*24 + floor(i/2)*8 -->
+  <text x="330" y="296" text-anchor="middle" class="mono">sorted_token_ids</text>
+  <g stroke-width="1.2">
+    <rect x="290" y="330" width="80" height="24" class="e0"/>
+    <rect x="290" y="354" width="80" height="24" class="e0"/>
+    <rect x="290" y="386" width="80" height="24" class="e0"/>
+    <rect x="290" y="410" width="80" height="24" class="e0"/>
+    <rect x="290" y="442" width="80" height="24" class="e1"/>
+    <rect x="290" y="466" width="80" height="24" class="e1"/>
+    <rect x="290" y="498" width="80" height="24" class="e1"/>
+    <rect x="290" y="522" width="80" height="24" class="padc"/>
+    <rect x="290" y="554" width="80" height="24" class="e2"/>
+    <rect x="290" y="578" width="80" height="24" class="padc"/>
+  </g>
+  <g class="mono" text-anchor="middle">
+    <text x="330" y="347">t0</text><text x="330" y="371">t1</text>
+    <text x="330" y="403">t2</text><text x="330" y="427">t3</text>
+    <text x="330" y="459">t0</text><text x="330" y="483">t2</text>
+    <text x="330" y="515">t3</text><text x="330" y="539">pad</text>
+    <text x="330" y="571">t1</text><text x="330" y="595">pad</text>
+  </g>
+
+  <!-- expert_ids column: tile m at y = 330 + m*56, height 48 -->
+  <text x="410" y="318" text-anchor="middle" class="mono">expert_ids</text>
+  <g stroke-width="1.2">
+    <rect x="388" y="342" width="44" height="24" rx="4" class="e0"/>
+    <rect x="388" y="398" width="44" height="24" rx="4" class="e0"/>
+    <rect x="388" y="454" width="44" height="24" rx="4" class="e1"/>
+    <rect x="388" y="510" width="44" height="24" rx="4" class="e1"/>
+    <rect x="388" y="566" width="44" height="24" rx="4" class="e2"/>
+  </g>
+  <g class="mono" text-anchor="middle">
+    <text x="410" y="359">e0</text><text x="410" y="415">e0</text>
+    <text x="410" y="471">e1</text><text x="410" y="527">e1</text>
+    <text x="410" y="583">e2</text>
+  </g>
+
+  <!-- "× W_e" arrows -->
+  <g stroke="#57606a" stroke-width="1.2" marker-end="url(#arr)">
+    <line x1="436" y1="354" x2="466" y2="354"/>
+    <line x1="436" y1="410" x2="466" y2="410"/>
+    <line x1="436" y1="466" x2="466" y2="466"/>
+    <line x1="436" y1="522" x2="466" y2="522"/>
+    <line x1="436" y1="578" x2="466" y2="578"/>
+  </g>
+  <g class="mono" text-anchor="middle" font-size="11">
+    <text x="451" y="347">·W0</text><text x="451" y="403">·W0</text>
+    <text x="451" y="459">·W1</text><text x="451" y="515">·W1</text>
+    <text x="451" y="571">·W2</text>
+  </g>
+
+  <!-- output tiles: 5 m-tiles x 2 n-tiles -->
+  <text x="590" y="300" text-anchor="middle">输出 tile（N 方向 2 块）</text>
+  <g stroke-width="1.2">
+    <rect x="470" y="330" width="120" height="48" class="e0"/><rect x="590" y="330" width="120" height="48" class="e0"/>
+    <rect x="470" y="386" width="120" height="48" class="e0"/><rect x="590" y="386" width="120" height="48" class="e0"/>
+    <rect x="470" y="442" width="120" height="48" class="e1"/><rect x="590" y="442" width="120" height="48" class="e1"/>
+    <rect x="470" y="498" width="120" height="24" class="e1"/><rect x="590" y="498" width="120" height="24" class="e1"/>
+    <rect x="470" y="522" width="120" height="24" class="padc"/><rect x="590" y="522" width="120" height="24" class="padc"/>
+    <rect x="470" y="554" width="120" height="24" class="e2"/><rect x="590" y="554" width="120" height="24" class="e2"/>
+    <rect x="470" y="578" width="120" height="24" class="padc"/><rect x="590" y="578" width="120" height="24" class="padc"/>
+  </g>
+  <g class="mono" text-anchor="middle">
+    <text x="530" y="358">pid 0</text><text x="650" y="358">pid 1</text>
+    <text x="530" y="414">pid 2</text><text x="650" y="414">pid 3</text>
+    <text x="530" y="470">pid 4</text><text x="650" y="470">pid 5</text>
+    <text x="530" y="515">pid 6</text><text x="650" y="515">pid 7</text>
+    <text x="530" y="571">pid 8</text><text x="650" y="571">pid 9</text>
+  </g>
+
+  <!-- ghost row: upper-bound grid -->
+  <g stroke="#8c959f" stroke-width="1.2" stroke-dasharray="5 4" fill="none">
+    <rect x="470" y="618" width="120" height="48"/><rect x="590" y="618" width="120" height="48"/>
+  </g>
+  <g class="mono" text-anchor="middle" fill="#8c959f">
+    <text x="530" y="646">pid 10</text><text x="650" y="646">pid 11</text>
+  </g>
+
+  <!-- right-side notes -->
+  <g class="note">
+    <text x="724" y="350">每个 m-tile 只属于</text>
+    <text x="724" y="367">一个 expert</text>
+    <text x="724" y="522">下半个 tile 是 pad，</text>
+    <text x="724" y="539">白算</text>
+    <text x="724" y="578">同上</text>
+    <text x="724" y="636">grid 按上界开，</text>
+    <text x="724" y="653">起始行 ≥ num_tokens_</text>
+    <text x="724" y="670">post_padded → return</text>
+  </g>
+
+  <text x="24" y="712" class="note">vLLM 的 sorted_token_ids 存的是 slot 编号 s = t·k + j，读 X 时取第 s // k 行；图里直接写成 token，方便看。</text>
+</svg>

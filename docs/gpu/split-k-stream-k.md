@@ -22,6 +22,8 @@ train: [tr-k-gemm]
 | **Split-K** | tile 太少，SM 喂不满 | 每个 tile 的 $K$ 固定切 $S$ 段，一段一个 block | decode 的 GEMV、输出小而 $K$ 长 |
 | **Stream-K** | tile 数不是 SM 数的整数倍（wave quantization） | 所有 tile 的 K 迭代排成一条队，平均分给每个 SM | 中等形状、tile 数落在两波之间 |
 
+![同一个例子（4 个 SM、5 个 tile、每 tile 8 轮）下三种分法的时间线：data-parallel 排 2 波共 16 轮、效率 62.5%；Split-K S=2 排 3 波共 12 轮加合并、效率 83%；Stream-K 每个 CTA 连续领 10 轮、效率 100%，被切开的 tile 由起头的 CTA 收部分和](/figures/split-k-stream-k.svg)
+
 两者都让浮点加法的顺序随形状和 SM 数变，结果不能逐位复现，见 [确定性](#确定性)。
 
 ## 约定

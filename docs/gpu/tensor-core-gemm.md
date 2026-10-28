@@ -371,7 +371,7 @@ store acc -> C   # epilogue
 
 每一级都是同一件事：一块数据搬到更近的存储里，被这一级 tile 的另一个维度复用。指令级的 tile 形状由硬件定，各代指令的形状见 [普通 SIMT 之外的指令](/gpu/special-instructions) 第 3 节。
 
-最后的 **epilogue** 是 kernel fusion 最自然的落点：$C$ 的 tile 还在寄存器里，把 bias、激活、量化做完再写回，省掉一次完整的读写（见 [CUDA Graph 与 Kernel Fusion](/gpu/cuda-graph-fusion)）。
+最后的 **epilogue** 是 kernel fusion 最自然的落点：$C$ 的 tile 还在寄存器里，把 bias、激活、量化做完再写回，省掉一次完整的读写（见 [融进 GEMM 的 epilogue](/gpu/memory-bound-kernels#例-5-融进-gemm-的-epilogue)）。
 
 ### 第三级：指令 tile
 
