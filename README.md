@@ -71,6 +71,7 @@ leetgpu: [50, 83]   # LeetGPU 题号，链接按 src/data/leetgpu-challenges.jso
 | `<ShapeFlow variant="gqa" phase="decode" />` | 一层 Transformer 的 tensor shape 流转，可切 MHA/GQA/MQA/MLA 与 prefill/decode |
 | `<ParallelismViz :tp="4" :pp="2" />` | TP/PP/DP/EP 切分示意与各项通信量 |
 | `<PagedKV :block-size="4" :num-blocks="24" />` | PagedAttention 的 block 分配、prefix 共享、swap/recompute 抢占 |
+| `<TransposeViz mode="smem" />` | 矩阵转置单步演示：直接转置 / shared memory 中转 / padding 三种写法每一步的 HBM sector 数和 bank 冲突 |
 | `<ReleaseTimeline view="table" />` | vLLM 版本时间线：按类别筛选、点开看每版的 observation / 场景 / 做法；数据在 `src/data/vllm-releases.json` |
 
 正文里可以用 `==重点==` 高亮，`==重点=={批注}` 加悬停批注（批注内支持行内 markdown）；`src/data/vllm-releases.json` 的文本字段也支持同样写法。读者在任意页面选中文字即可加自己的高亮 / 批注，右下角 ✎ 面板可导出导入。

@@ -160,7 +160,7 @@ $D_{\text{infer}}$ 是一生要服务的 token 数，往往远大于 $D$。小�
 一个 step 的时间里，下面这些都在分母里、却不产生分子：
 
 1. **非 GEMM 算子**：RMSNorm、softmax、SwiGLU 的激活、RoPE、残差加、optimizer step。它们是 memory-bound，要花时间，FLOPs 却不在 $6N$ 里。看 profiler 里非 GEMM kernel 的时间占比。
-2. **小 GEMM**：TP 把每个矩阵切成 $1/t$，micro-batch 又小，GEMM 太小喂不满 SM（见 [Tensor Core GEMM](/gpu/tensor-core-gemm)）。Llama 3 从 8K 卡（DP = 64）到 16K 卡（DP = 128）时 global batch 不变，每个 DP 组的 batch 从 32 减到 16，MFU 从 43% 掉到 41%，论文就是这么归因的。
+2. **小 GEMM**：TP 把每个矩阵切成 $1/t$，micro-batch 又小，GEMM 太小喂不满 SM（见 [GEMM Tiling](/gpu/tensor-core-gemm#wave-quantization-tile-数和-sm-数对不齐)）。Llama 3 从 8K 卡（DP = 64）到 16K 卡（DP = 128）时 global batch 不变，每个 DP 组的 batch 从 32 减到 16，MFU 从 43% 掉到 41%，论文就是这么归因的。
 3. **没藏住的通信**：TP 的 all-reduce 在关键路径上，DP 的梯度同步、PP 的 P2P、MoE 的 all-to-all 没和计算重叠的部分。看时间线上 NCCL kernel 单独跑、计算 stream 空着的时段，见 [计算通信 overlap](/parallel/comm-overlap)。
 4. **PP bubble**：interleaved 1F1B 下 bubble 占比 $\frac{p-1}{vm}$（$p$ 个 stage，每卡 $v$ 段，每步 $m$ 个 micro-batch，Llama 3 第 3.3.2 节）。$p = 8$、$m = 32$、$v = 1$ 时 22%，$v = 4$ 时 5.5%。各种调度见 [Pipeline 并行调度](/train/pipeline-schedules)。
 5. **recompute**：多算的那次 forward 不进 MFU 分子。full recompute 下每 token 做 $8N$、只记 $6N$，就算硬件 100% 忙，MFU 上限也只有 75%。

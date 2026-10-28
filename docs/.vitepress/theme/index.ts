@@ -13,6 +13,8 @@ import LeetGPURoadmap from './components/LeetGPURoadmap.vue'
 import StackFigure from './components/StackFigure.vue'
 import RoadmapFigure from './components/RoadmapFigure.vue'
 import TritonProgramViz from './components/TritonProgramViz.vue'
+import TransposeViz from './components/TransposeViz.vue'
+import BankConflictViz from './components/BankConflictViz.vue'
 import Flashcards from './components/Flashcards.vue'
 import QuantGranularity from './components/QuantGranularity.vue'
 import RooflineChart from './components/ui/RooflineChart.vue'
@@ -48,6 +50,8 @@ export default {
     app.component('StackFigure', StackFigure)
     app.component('RoadmapFigure', RoadmapFigure)
     app.component('TritonProgramViz', TritonProgramViz)
+    app.component('TransposeViz', TransposeViz)
+    app.component('BankConflictViz', BankConflictViz)
     app.component('Flashcards', Flashcards)
     app.component('PrivateNotes', PrivateNotes)
     app.component('QuantGranularity', QuantGranularity)

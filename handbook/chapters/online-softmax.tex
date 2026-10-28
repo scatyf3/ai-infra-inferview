@@ -1,0 +1,42 @@
+\section{Online Softmax}
+
+\subsection{Preliminary: Safe Softmax}
+
+对 $x \in \mathbb{R}^N$，令 $m = \max_i x_i$：
+\begin{equation}
+  s_j = \frac{e^{x_j - m}}{\sum_{i=1}^{N} e^{x_i - m}}
+\end{equation}
+减去 $m$ 是为了避免 $e^{x_i}$ 溢出。
+
+对应实现需要三个 kernel（三次读 $x$）：
+\begin{enumerate}
+  \item Kernel 1：求全局最大值 $m$；
+  \item Kernel 2：求和 $d = \sum_i e^{x_i - m}$；
+  \item Kernel 3：element-wise 计算 $s_j = e^{x_j - m} / d$。
+\end{enumerate}
+
+\subsection{Online Softmax}
+
+把 $x$ 切成若干 tile。在每个 tile $t$ 内计算局部的 $m_t$ 和 $d_t$：
+\begin{equation}
+  m_t = \max_{i \in t} x_i, \qquad
+  d_t = \sum_{i \in t} e^{x_i - m_t}
+\end{equation}
+
+\paragraph{Kernel 1：在 tile 之间更新 $m$ / $d$。}
+处理完前 $k$ 个 tile 后得到 $m^{(k)}, d^{(k)}$，遇到新 tile $t$ 时：
+\begin{equation}
+  \left\{
+  \begin{aligned}
+    m^{(k+1)} &= \max\bigl(m^{(k)},\, m_t\bigr) \\
+    d^{(k+1)} &= d^{(k)} \cdot e^{m^{(k)} - m^{(k+1)}} + \sum_{i \in t} e^{x_i - m^{(k+1)}}
+  \end{aligned}
+  \right.
+\end{equation}
+第一项把旧的和从基准 $m^{(k)}$ 换到新基准 $m^{(k+1)}$；第二项也可写成
+$d_t \cdot e^{m_t - m^{(k+1)}}$，直接复用 tile 内的局部结果。
+
+\paragraph{Kernel 2：element-wise。}
+扫完所有 tile 得到全局 $m, d$ 后，$s_j = e^{x_j - m} / d$。
+
+于是三个 kernel 合并为两个：求 max 和求和融合进同一次遍历。

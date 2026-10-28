@@ -15,7 +15,7 @@ leetgpu: [2, 22]
 
 ## 一句话结论
 
-朴素 matmul 每个线程算 C 的一个元素，要从全局内存读 2K 个数、只做 K 次乘加，算术强度 0.25 FLOP/B，被带宽卡死。tiled 版本让一个 block 负责 C 的一个 BM×BN 块，沿 K 维每次把 A 的 BM×BK 和 B 的 BK×BN 块搬进 shared memory 给 block 内所有线程复用，全局访存量除以 tile 边长；再让每个线程算 TM×TN 个元素（寄存器 tile），shared memory 读取量再除一次。下一步是 Tensor Core，见 [Tensor Core 与 GEMM tiling](/gpu/tensor-core-gemm)。
+朴素 matmul 每个线程算 C 的一个元素，要从全局内存读 2K 个数、只做 K 次乘加，算术强度 0.25 FLOP/B，被带宽卡死。tiled 版本让一个 block 负责 C 的一个 BM×BN 块，沿 K 维每次把 A 的 BM×BK 和 B 的 BK×BN 块搬进 shared memory 给 block 内所有线程复用，全局访存量除以 tile 边长；再让每个线程算 TM×TN 个元素（寄存器 tile），shared memory 读取量再除一次。下一步是 Tensor Core，见 [GEMM Tiling](/gpu/tensor-core-gemm)。
 
 ## 约定
 
@@ -236,7 +236,7 @@ extern "C" void solve(const float* A, const float* B, float* C, int M, int N, in
 
 #22 的性能测试是 M = N = K = 1024。用 128×128 的 block tile 只有 8 × 8 = 64 个 block，分到 T4 的 40 个 SM 上，24 个 SM 拿到 2 个、16 个 SM 只拿到 1 个：负载不均，而且每个 SM 只有 8–16 个 warp 可切换，藏访存延迟的余量很小。换成 BM = BN = 64（TM = TN = 4，同样 256 线程）就是 256 个 block，AI 降到 64·64/(2·128) = 16 FLOP/B，但 SM 都有活干。这正是 autotune 在选的东西。
 
-同一题的 FLOP 是 2·1024³ = 2.15 × 10⁹，T4 CUDA core fp32 下限 0.27 ms；用 Tensor Core（fp16 输入、fp32 累加，65 TFLOPS）下限 33 µs。题目允许 WMMA，想冲排名就要上 Tensor Core，见 [Tensor Core 与 GEMM tiling](/gpu/tensor-core-gemm)。
+同一题的 FLOP 是 2·1024³ = 2.15 × 10⁹，T4 CUDA core fp32 下限 0.27 ms；用 Tensor Core（fp16 输入、fp32 累加，65 TFLOPS）下限 33 µs。题目允许 WMMA，想冲排名就要上 Tensor Core，见 [GEMM Tiling](/gpu/tensor-core-gemm)。
 
 ## 版本对比
 

@@ -66,7 +66,7 @@ export const overrides: Record<string, string> = {
  */
 export const sectionOrder: Record<string, string[]> = {
   account: ['inference/prefill-decode-roofline', 'inference/memory-accounting', 'inference/metrics-benchmark'],
-  L0: ['gpu/gpu-architecture', 'stack/hw-mem'],
+  L0: ['gpu/gpu-architecture', 'gpu/compute-units', 'gpu/special-instructions', 'stack/hw-mem'],
   L1: ['inference/quantization', 'inference/quantization-gptq'],
   L2: ['gpu/tensor-core-gemm', 'inference/flash-attention', 'gpu/cuda-graph-fusion', 'gpu/triton', 'gpu/profiling'],
   L3: [

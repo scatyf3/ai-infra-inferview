@@ -316,6 +316,49 @@ export const baguCards: Card[] = [
     ref: FA,
   }),
   b({
+    id: 'bagu-fa-fwd-causal',
+    topic: 'FlashAttention',
+    q: '手撕 FlashAttention 前向（causal）：Q/K/V 是 `[S, d]`，Q 按 $B_r$ 行、K/V 按 $B_c$ 行分块。每个 Q 块维护什么状态？causal 时哪些 K/V 块跳过、哪些要逐元素 mask？最后写回什么？',
+    a: '1. 外层遍历 Q 块（GPU 上是 grid，块间并行），内层 K/V 块串行流过。每行维护 running state：最大值 $m$、分母 $\\ell$、未归一化的输出 acc（$B_r \\times d$）。\n2. 每块 K/V：score tile $s = qk^\\top / \\sqrt{d}$（$B_r \\times B_c$，不写回 HBM）；$m_{\\text{new}} = \\max(m, \\text{rowmax}(s))$，$\\alpha = e^{m - m_{\\text{new}}}$，$p = e^{s - m_{\\text{new}}}$；$\\ell \\leftarrow \\alpha \\ell + \\text{rowsum}(p)$，acc $\\leftarrow \\alpha \\cdot$ acc $+ pv$。\n3. causal（见图）：K/V 只扫到 `k_end = q0 + Br`，对角线右边的块整块跳过；只有对角块（`k0 + Bc > q0`）用 `allowed = j <= i` 逐元素 mask，左边的块整块可见、不用 mask。\n4. 写回：$O = \\text{acc} / \\ell$，循环结束只除一次；再存每行的 $\\text{LSE} = m + \\log \\ell$，反向重算 score 后 $P = e^{s - \\text{LSE}}$ 直接恢复概率。',
+    fig: lines`
+               k0  k1  k2  k3
+      q0       ◣   x   x   x    k_end=128
+      q1       ■   ◣   x   x    k_end=256
+      q2       ■   ■   ◣   x    k_end=384
+      q3       ■   ■   ■   ◣    k_end=512
+      ■ full  ◣ diag mask  x skip
+    `,
+    code: lines`
+      def flash_attn_fwd(Q, K, V, Br=128, Bc=128, causal=True):
+          S, d = Q.shape
+          O, LSE = torch.empty_like(Q), Q.new_empty(S)
+          for q0 in range(0, S, Br):                  # GPU 上是 grid，并行
+              q = load(Q[q0:q0+Br])
+              m = Q.new_full((Br,), -torch.inf)
+              l = Q.new_zeros(Br)
+              acc = Q.new_zeros(Br, d)
+              k_end = q0 + Br if causal else S        # 对角线右边的块跳过
+              for k0 in range(0, k_end, Bc):
+                  k, v = load(K[k0:k0+Bc]), load(V[k0:k0+Bc])
+                  s = q @ k.mT * d**-0.5              # [Br, Bc] tile，不写回 HBM
+                  if causal and k0 + Bc > q0:         # 只有对角 tile 需要逐元素 mask
+                      i = torch.arange(q0, q0 + Br)[:, None]
+                      j = torch.arange(k0, k0 + Bc)[None, :]
+                      allowed = j <= i
+                      s = torch.where(allowed, s, -torch.inf)
+                  m_new = torch.maximum(m, s.amax(dim=-1))
+                  alpha = torch.exp(m - m_new)
+                  p = torch.exp(s - m_new[:, None])
+                  l = alpha * l + p.sum(dim=-1)
+                  acc = alpha[:, None] * acc + p @ v
+                  m = m_new
+              O[q0:q0+Br] = acc / l[:, None]          # 最后只除一次
+              LSE[q0:q0+Br] = m + torch.log(l)        # 反向用来重算 P
+          return O, LSE
+    `,
+    ref: `${FA}#手撕`,
+  }),
+  b({
     id: 'bagu-fa-v2-v3-3',
     topic: 'FlashAttention',
     q: 'FlashAttention v1 一个 thread block 管一个 (batch, head)。batch B = 1、head 数 H = 16 时能开几个 thread block？A100 有 108 个 SM。v2 改成每个 Q 块一个 thread block，序列长 S = 16k、Q 块 $B_r$ = 128 行时是多少？',
@@ -347,6 +390,15 @@ export const baguCards: Card[] = [
             SM    SM    SM    SM   o_j m_j l_j
               \    \    /    /
              merge: rescale+sum -> o
+    `,
+    code: lines`
+      # kernel 1：grid = (Q 块) x (split)，每段写回已归一化的 O_part 和自己的 LSE_part
+      # 某段里一个 key 都看不到的行（l == 0）：O_part = 0，LSE_part = -inf
+      # kernel 2：合并
+      LSE = torch.logsumexp(LSE_part, dim=0)             # [S_q]，总分母取 log
+      # 第 sp 段的权重 e^{LSE_sp - LSE} = e^{m_sp - m} * l_sp / l，各段之和为 1
+      w = torch.exp(LSE_part - LSE[None, :])             # [num_splits, S_q]
+      O = (w[:, :, None] * O_part).sum(dim=0)            # [S_q, d]
     `,
     ref: FA,
   }),

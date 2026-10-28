@@ -134,7 +134,7 @@ $$
 
 **为什么非结构化 50% 在 GPU 上不提速**：
 
-1. **计算**：Tensor Core 按稠密 tile 做矩阵乘，tile 里散落的零照样参与乘加，见 [Tensor Core GEMM](/gpu/tensor-core-gemm)。
+1. **计算**：Tensor Core 按稠密 tile 做矩阵乘，tile 里散落的零照样参与乘加，见 [GEMM Tiling](/gpu/tensor-core-gemm)。
 2. **存储**：要省字节就得换稀疏格式，但索引本身有开销。CSR 每个非零元存 2 字节值 + 2 字节列号（int16），50% 稀疏时平均每个原元素 $0.5 \times 4 = 2$ 字节，**和稠密 bf16 一样大**。bitmask 格式（每元素 1 bit + 非零值）是 $0.5 \times 16 + 1 = 9$ bit，56%，但解码不规则。
 3. **kernel**：通用稀疏 GEMM 访存不规则、用不上 Tensor Core，稀疏度不够高时比稠密还慢。
 

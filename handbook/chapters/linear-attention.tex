@@ -1,0 +1,128 @@
+\section{Linear Attention}
+
+\subsection{RNN}
+
+\begin{equation}
+  h_t = \tanh\bigl(W_h \underbrace{h_{t-1}}_{\text{prev state}} + W_x \underbrace{x_t}_{\text{cur input}} + b\bigr)
+\end{equation}
+\begin{equation}
+  \frac{\partial h_t}{\partial h_{t-1}} = \operatorname{diag}(\tanh')\, W_h
+\end{equation}
+$\Rightarrow$ weight $W_h$ 对梯度有重大影响。
+
+\subsection{LSTM}
+
+\begin{equation}
+  C_t = f_t \odot C_{t-1} + i_t \odot \tilde{C}_t
+  \qquad (\text{act as } h_t \text{ in RNN})
+\end{equation}
+\begin{equation}
+  \frac{\partial C_t}{\partial C_{t-1}} = \operatorname{diag}(f_t)
+  \;\Rightarrow\; f_t \text{ 无 const weight}
+\end{equation}
+\begin{equation}
+  f_t = \sigma\bigl(W_f [h_{t-1}, x_t] + b_f\bigr) \in [0, 1]
+\end{equation}
+$\Rightarrow$ learnable weight decay。
+
+\subsection{Attention}
+
+\begin{equation}
+  O = \softmax\!\left(\frac{QK^\top}{\sqrt{d}}\right) V,
+  \qquad Q, K, V \in \mathbb{R}^{N \times d}, \quad N \gg d
+\end{equation}
+MAC：$2 \times N^2 d$。
+
+结合律：若没有 softmax，
+\begin{equation}
+  (QK^\top) V = Q (K^\top V)
+\end{equation}
+计算量从 $2N^2 d$ 降到 $2d^2 N$。
+
+\subsection{From Causal Softmax Attn to Linear Attention}
+
+\begin{equation}
+  o_t = \sum_{s \le t} \frac{\exp(q_t^\top k_s)}{\sum_{s' \le t} \exp(q_t^\top k_{s'})}\, v_s
+\end{equation}
+用 $\phi$ 近似 $\exp$：
+\begin{equation}
+  \exp(q^\top k) \to \phi(q)^\top \phi(k)
+\end{equation}
+损失表现力，但解耦了 $q$ 和 $k$……
+\begin{equation}
+  o_t = \frac{\sum_{s \le t} v_s\, \phi(k_s)^\top \phi(q_t)}{\sum_{s \le t} \phi(k_s)^\top \phi(q_t)}
+      = \frac{\bigl(\sum_{s \le t} v_s\, \phi(k_s)^\top\bigr) \phi(q_t)}{\sum_{s \le t} \phi(k_s)^\top \phi(q_t)}
+\end{equation}
+忽略分母，则有
+\begin{equation}
+  o_t = \Bigl(\sum_{s \le t} v_s\, \phi(k_s)^\top\Bigr) \phi(q_t)
+\end{equation}
+记做递推（下面 $k, q$ 直接指 $\phi(k), \phi(q)$）：
+\begin{equation}
+  S_t = S_{t-1} + v_t k_t^\top, \qquad o_t = S_t q_t
+\end{equation}
+\begin{enumerate}
+  \item 分母由 norm 取代；
+  \item $\phi$ fuse 进 FFN。
+\end{enumerate}
+
+\subsection{Parallel Training, Linear Inference}
+
+\begin{enumerate}
+  \item Inference：由前文递推给出。
+  \item Training：由于 causal mask，仍然 $O(N^2)$：
+  \begin{equation}
+    O = (QK^\top \odot M)\, V
+  \end{equation}
+  \item 折中：chunk-wise scan。
+  \begin{align}
+    S_{[i+1]} &= S_{[i]} + V_{[i]}^\top K_{[i]}
+      && \text{// state 递推} \\
+    O_{[i]} &= Q_{[i]} S_{[i]}^\top + \bigl(Q_{[i]} K_{[i]}^\top \odot M\bigr) V_{[i]}
+      && \text{// $M$ parallel}
+  \end{align}
+  两种实现：
+  \begin{enumerate}
+    \item pass 1：递推算 $S$；pass 2：算 $O$。（FLA）
+    \item $S$ on-tile，fused in 1 pass，相当于序列方向串行。
+  \end{enumerate}
+\end{enumerate}
+
+\subsection{Decay for State}
+
+\begin{equation}
+  S_t = a_t S_{t-1} + v_t k_t^\top,
+  \qquad a_t \in (0, 1),
+  \qquad \frac{\partial S_t}{\partial S_{t-1}} = a_t
+\end{equation}
+$a_t$ 可以是 fix，也可以是 data dependent。
+
+\subsection{Delta Rule}
+
+\begin{itemize}
+  \item 写入：$S_t = v k^\top$
+  \item 读出：$S k = \sum_s v_s (k_s^\top k)$，按 $k$ 相似度加权求和
+\end{itemize}
+
+问题：同一个 $k$ 写入 2 次不同的 $v$ $\Rightarrow$ error。
+例如（$\|k_t\| = 1$）：
+\begin{equation}
+  S_t k_t = \underbrace{S_{t-1} k_t}_{v^{\text{old}}} + v_t (k_t^\top k_t)
+          = \underbrace{S_{t-1} k_t}_{\text{旧内容}} + v_t
+\end{equation}
+
+改为写入 diff，记 $v_t^{\text{old}} = S_{t-1} k_t$：
+\begin{equation}
+  S_t = S_{t-1} + \underbrace{\beta_t}_{\text{写入强度}}
+        \underbrace{\bigl(v_t - v_t^{\text{old}}\bigr)}_{\text{写入 diff}} k_t^\top
+      = S_{t-1}\bigl(I - \beta_t k_t k_t^\top\bigr) + \beta_t v_t k_t^\top
+\end{equation}
+where $\beta_t = \sigma(W_\beta x_t)$。
+
+$\beta_t = 1$，$\|k_t\| = 1 \Rightarrow$ 原地覆盖。
+
+\subsection{Decay + Delta Rule}
+
+\begin{equation}
+  S_t = a_t S_{t-1} \bigl(I - \beta_t k_t k_t^\top\bigr) + \beta_t v_t k_t^\top
+\end{equation}

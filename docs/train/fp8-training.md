@@ -130,7 +130,7 @@ TE 的 `DelayedScaling` 当前默认 `amax_history_len=1024`、`amax_compute_alg
 1. 论文测得 H800 上 FP8 GEMM 的 Tensor Core 累加器只保留约 14 bit，远低于 fp32；$K = 4096$ 的随机矩阵乘，最大相对误差接近 2%（作者自测）。论文指出这个有限精度的累加仍是一些 fp8 框架的默认选项。
 2. 做法：沿 $K$ 每 $N_C = 128$ 个元素（4 个 WGMMA）就把 Tensor Core 的部分和拷到 CUDA core 的 fp32 寄存器里累加。per-block 的 scale 正好也在这一步乘上去（反量化），几乎不额外花钱。
 3. 为了不让 Tensor Core 闲着：一个 warpgroup 做提升时，另一个 warpgroup 继续做 MMA。
-4. 算一笔：$K = 7168$ 时每个输出元素提升 $7168/128 = 56$ 次。为什么 fp32 累加器重要见 [Tensor Core GEMM](/gpu/tensor-core-gemm)。
+4. 算一笔：$K = 7168$ 时每个输出元素提升 $7168/128 = 56$ 次。Tensor Core 累加的精度问题见 [计算单元](/gpu/compute-units#tensor-core-里的加法不完全是-ieee)。
 
 **3. 全部用 e4m3**：Fprop、Dgrad、Wgrad 的所有输入都用 e4m3，不用 HYBRID 的 e5m2。论文把可行性归功于细粒度 scale：组越小，组内的数值跨度越小，e4m3 的范围就够了，于是可以选精度更高的格式。
 

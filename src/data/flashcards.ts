@@ -117,11 +117,11 @@ const primitiveCards: Card[] = [
     deck: 'torch',
     topic: 'mask',
     q: 'causal mask 的标准写法？为什么不用 `triu`？',
-    a: '1. 本站模板：行下标 `i = arange(S)[:, None]`，列下标 `j = arange(S)[None, :]`，`allowed = j <= i`（True = 能看），`attn.masked_fill(~allowed, -inf)`。规则直接照公式写，不用推对角线编号。\n2. `triu` 版本只是备选：`full((S, S), -inf).triu(1)`。要记住 `k=1` 才不含主对角线；写成 `triu(0)` 会把对角线也盖掉，第一行全是 -inf，softmax 出 **NaN**。sliding window 这类规则要推两条对角线，最容易差一。\n3. 加法 mask 只能取交集；规则里有「或」（sink | window）只能用 bool `allowed`。',
+    a: '1. 本站模板：query 下标 `q_pos = arange(S).unsqueeze(1)` 是 `(S, 1)`，key 下标 `kv_pos = arange(S).unsqueeze(0)` 是 `(1, S)`，`allowed = q_pos >= kv_pos`（True = 能看），`attn.masked_fill(~allowed, -inf)`。规则直接照公式写，不用推对角线编号。\n2. `triu` 版本只是备选：`full((S, S), -inf).triu(1)`。要记住 `k=1` 才不含主对角线；写成 `triu(0)` 会把对角线也盖掉，第一行全是 -inf，softmax 出 **NaN**。sliding window 这类规则要推两条对角线，最容易差一。\n3. 加法 mask 只能取交集；规则里有「或」（sink | window）只能用 bool `allowed`。',
     code: lines`
-      i = torch.arange(S, device=x.device)[:, None]   # (S, 1) query
-      j = torch.arange(S, device=x.device)[None, :]   # (1, S) key
-      allowed = j <= i
+      q_pos = torch.arange(S, device=x.device).unsqueeze(1)    # (S, 1) query
+      kv_pos = torch.arange(S, device=x.device).unsqueeze(0)   # (1, S) key
+      allowed = q_pos >= kv_pos                                # (S, S)
       attn = attn.masked_fill(~allowed, float('-inf'))
     `,
     ref: '/leetgpu/mask',
@@ -714,6 +714,25 @@ const primitiveCards: Card[] = [
     ref: '/leetgpu/mask',
   },
   {
+    id: 'torch-write-causal-attn',
+    deck: 'torch',
+    topic: 'mask · 写代码',
+    q: '写代码：causal self-attention（LeetGPU 53）。`Q`、`K`、`V` 是 `(M, d)`，结果写进预先分配好的 `output`（`(M, d)`）。',
+    a: '1. score：`Q @ K.transpose(-1, -2) / sqrt(d)`，`(M, M)`，第 i 行第 j 列是「query i 看 key j」。\n2. mask：`q_pos` 是 `(M, 1)`、`kv_pos` 是 `(1, M)`，`q_pos >= kv_pos` 广播成 `(M, M)` 的下三角（含对角线），True = 能看；`~allowed` 的位置填 -inf。下标要建在 GPU 上（`device=Q.device`）。\n3. softmax 沿 `dim=-1`（key）；对角线总是 True，每行至少一个有限值，不会出 NaN。\n4. 写回：`output` 是调用方给的 buffer，`output = ...` 只是改了局部变量名，要 `output.copy_(out)`，或直接 `torch.matmul(p, V, out=output)`。',
+    code: lines`
+      def solve(Q, K, V, output, M, d):
+          attn_raw = torch.matmul(Q, K.transpose(-1, -2)) / math.sqrt(d)   # (M, M)
+          q_pos = torch.arange(M, device=Q.device).unsqueeze(1)           # (M, 1)
+          kv_pos = torch.arange(M, device=K.device).unsqueeze(0)          # (1, M)
+          causal_allowed = q_pos >= kv_pos
+          attn_raw_masked = attn_raw.masked_fill(~causal_allowed, float('-inf'))
+          attn_normed = torch.softmax(attn_raw_masked, dim=-1)
+          out = torch.matmul(attn_normed, V)                              # (M, d)
+          output.copy_(out)
+    `,
+    ref: '/leetgpu/causal-self-attention',
+  },
+  {
     id: 'torch-read-masked-fill',
     deck: 'torch',
     topic: 'masked_fill · 读代码',
@@ -1044,28 +1063,47 @@ const primitiveCards: Card[] = [
     q: '已知每块的 $(m_b, d_b)$，全局的 M、D 怎么得到？代码里 M、D 放在哪？',
     a: '每块先只看自己：\n$$m_b = \\max_{i \\in b} x_i, \\qquad d_b = \\sum_{i \\in b} e^{x_i - m_b}$$\n合并：\n$$M = \\max_b m_b, \\qquad D = \\sum_b d_b \\, e^{m_b - M}$$\n每块的和是相对 $m_b$ 算的，乘 $e^{m_b - M}$ 换算成相对 M；因为 $m_b \\le M$，修正因子 ≤ 1，不会溢出。\nM、D 怎么分配：\n1. 显存里只分配每块一格的 `m`、`d`：`torch.empty(NB)`，NB 是块数。不用初始化，第 1 趟每格都会写。\n2. M、D **不占显存**：第 2 趟每个 program 都把 NB 个 `m`、`d` 读回来，在寄存器里自己算一遍 M、D，再归一化自己那块。',
     code: lines`
-      def solve(x, out, N):
+      @triton.jit
+      def partial_kernel(x_ptr, m_ptr, d_ptr, N, BLOCK: tl.constexpr):
+          # 第 1 趟：每块算 (m_b, d_b)，写进自己那一格
+          offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+          x = tl.load(x_ptr + offs, mask=offs < N, other=-float('inf'))
+          m_b = tl.max(x, axis=0)
+          tl.store(m_ptr + tl.program_id(0), m_b)
+          tl.store(d_ptr + tl.program_id(0), tl.sum(tl.exp(x - m_b), axis=0))
+
+      @triton.jit
+      def norm_kernel(x_ptr, out_ptr, m_ptr, d_ptr, N, NB, BLOCK: tl.constexpr, NB_BLOCK: tl.constexpr):
+          # 第 2 趟：读回所有块，在寄存器里合并出 M、D，再逐元素归一化
+          i = tl.arange(0, NB_BLOCK)
+          ms = tl.load(m_ptr + i, mask=i < NB, other=-float('inf'))
+          ds = tl.load(d_ptr + i, mask=i < NB, other=0.0)    # 补齐位置：exp(-inf - M) * 0 = 0
+          M = tl.max(ms, axis=0)
+          D = tl.sum(ds * tl.exp(ms - M), axis=0)            # 和三趟版唯一的区别：乘 exp(m_b - M) 修正
+          offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+          mask = offs < N
+          x = tl.load(x_ptr + offs, mask=mask)
+          tl.store(out_ptr + offs, tl.exp(x - M) / D, mask=mask)
+
+      def solve(input, output, N):
           BLOCK = 4096
           NB = triton.cdiv(N, BLOCK)                          # 块数
           NB_BLOCK = max(16, triton.next_power_of_2(NB))      # tl.arange 的长度要是 2 的幂
-          m = torch.empty(NB, device=x.device, dtype=torch.float32)   # 每块一格
+          m = torch.empty(NB, device=input.device, dtype=torch.float32)   # 每块一格
           d = torch.empty_like(m)
-          partial_kernel[(NB,)](x, m, d, N, BLOCK=BLOCK)
-          norm_kernel[(NB,)](x, out, m, d, N, NB, BLOCK=BLOCK, NB_BLOCK=NB_BLOCK)
-
-      # 第 1 趟 partial_kernel：每块算 (m_b, d_b)，写进自己那一格
-      m_b = tl.max(x, axis=0)
-      tl.store(m_ptr + pid, m_b)
-      tl.store(d_ptr + pid, tl.sum(tl.exp(x - m_b), axis=0))
-
-      # 第 2 趟 norm_kernel：读回所有块，在寄存器里合并出 M、D
-      i = tl.arange(0, NB_BLOCK)
-      ms = tl.load(m_ptr + i, mask=i < NB, other=-float('inf'))
-      ds = tl.load(d_ptr + i, mask=i < NB, other=0.0)        # 补齐的位置：0 * exp(-inf) = 0
-      M = tl.max(ms, axis=0)
-      D = tl.sum(ds * tl.exp(ms - M), axis=0)
+          grid = (NB,)
+          partial_kernel[grid](input, m, d, N, BLOCK=BLOCK)
+          norm_kernel[grid](input, output, m, d, N, NB, BLOCK=BLOCK, NB_BLOCK=NB_BLOCK)
     `,
     ref: `${SM}#大-n-先-max-再-sum-vs-online-合并`,
+  },
+  {
+    id: 'triton-online-recurrence',
+    deck: 'triton',
+    topic: 'softmax',
+    q: 'tile 一块接一块串行扫，running 的 $(m, d)$ 怎么更新？$d$ 是什么？初值是多少？',
+    a: '$$m^{(t+1)} = \\max\\big(m^{(t)},\\ m_t\\big)$$\n$$d^{(t+1)} = \\underbrace{d^{(t)} \\, e^{\\,m^{(t)} - m^{(t+1)}}}_{\\text{max 修正}} + \\underbrace{\\sum_{i \\in \\mathcal{B}_t} e^{\\,x_i - m^{(t+1)}}}_{\\text{本 tile 的 sum}}$$\n1. $m_t$ 是第 t 块自己的 max；$d$ 是**分母**，准确地说是「以 m 为基准的 exp 和」：$\\sum_i e^{x_i} = d \\cdot e^{m}$，所以 $(m, d)$ 要成对看。\n2. **max 修正**：max 变大了，旧分母的基准从 $m^{(t)}$ 换成 $m^{(t+1)}$，乘 $e^{m^{(t)} - m^{(t+1)}} \\le 1$。\n3. **sum 项**：本块直接减新 max 求和，不用再单独修正。\n4. 初值 $(-\\infty, 0)$：第一块进来 $e^{-\\infty} = 0$，旧项消失。扫完 $m = M$、$d = D$，输出 $e^{x_i - M} / D$。',
+    ref: '/handson/online-softmax#tile-wise的解释',
   },
   {
     id: 'triton-why-one-program-no',

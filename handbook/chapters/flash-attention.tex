@@ -1,0 +1,55 @@
+\section{Flash Attention}
+
+记 $Q, K, V \in \mathbb{R}^{S \times D}$。
+
+\subsection{Naive Attention}
+
+\begin{equation}
+  O = \softmax\!\left(\frac{QK^\top}{\sqrt{D}}\right) V
+\end{equation}
+
+\begin{center}
+\begin{tabular}{l|c|c}
+  Kernel & Mem & Compute \\
+  \hline
+  1. $QK^\top \to [S, S]$ & $O(S^2)$ & $O(S^2)$\footnotemark \\
+  2. softmax on attn       & $O(S^2)$ & $O(S^2)$ \\
+  3. attn $@\, V$          & $O(S^2)$ & $O(S^2)$ \\
+\end{tabular}
+\end{center}
+\footnotetext{这里把 $D$ 视为常数；两个 matmul 严格来说是 $O(S^2 D)$。}
+
+compute / mem $\Rightarrow$ 常数，所以是 memory bound：$[S, S]$ 的中间结果要在 HBM 上写一次、读一次。
+
+\subsection{Online Softmax}
+
+Online softmax 可以把求 max 和求 sum 两个 reduce kernel 融合成一个（见上一节）。
+
+\subsection{把 Online Softmax 进一步融合进 Attention}
+
+只看一行 query $q$，记 $x_j = q \cdot K[j,:] / \sqrt{D}$，
+$m_i$、$d'_i$ 为前 $i$ 个元素的 online max 和 online sum：
+\begin{equation}
+  m_i = \max(m_{i-1}, x_i), \qquad
+  d'_i = d'_{i-1}\, e^{m_{i-1} - m_i} + e^{x_i - m_i}
+\end{equation}
+
+定义前 $i$ 项的部分输出
+\begin{equation}
+  o'_i = \sum_{j=1}^{i} \frac{e^{x_j - m_i}}{d'_i}\, V[j,:]
+\end{equation}
+于是
+\begin{equation}
+  o'_i = o'_{i-1} \cdot \underbrace{\frac{d'_{i-1}\, e^{m_{i-1} - m_i}}{d'_i}}_{\text{update } d}
+       + \frac{e^{x_i - m_i}}{d'_i}\, V[i,:]
+\end{equation}
+第一项把旧输出的归一化从 $(m_{i-1}, d'_{i-1})$ 换到 $(m_i, d'_i)$。
+递推到底，$o'_N = o_N$，即为真正的输出。
+
+\paragraph{Tile-wise。}
+实际按 KV tile 计算 $o'$：每个 tile 做两次 matmul（$qK_t^\top$ 和 $P_t V_t$），
+之后按上式更新 $m$、$d'$、$o'$。这个更新出现在两处：
+\begin{itemize}
+  \item FA 内部的 for loop：沿 KV 维顺序扫 tile；
+  \item split-K 的 reduce kernel：KV 切给不同 block 并行算局部 $(m, d', o')$，最后再合并。
+\end{itemize}

@@ -77,7 +77,7 @@ for k in range(0, K, BK):
 store(C, rows, cols, acc.to(bf16))        # 寄存器 → HBM，只写一次
 ```
 
-A 的每个元素从 HBM 读进来一次，在 shared memory 里被这个 tile 的 BN = 128 列复用；B 的每个元素被 BM = 128 行复用。复用次数越多，每读 1 字节做的运算越多，算术强度就越高，具体推导见 [Tensor Core 与 GEMM](/gpu/tensor-core-gemm)。
+A 的每个元素从 HBM 读进来一次，在 shared memory 里被这个 tile 的 BN = 128 列复用；B 的每个元素被 BM = 128 行复用。复用次数越多，每读 1 字节做的运算越多，算术强度就越高，具体推导见 [GEMM Tiling](/gpu/tensor-core-gemm)。
 
 decode 的 GEMV 里 M 就是 batch，比如 B = 1 时 A 只有一行，B 的每个元素只被用 1 次。没有可复用的东西，tiling 也帮不上忙，只能等 HBM，这就是 [roofline](/inference/prefill-decode-roofline) 里 decode 落在斜线上的原因。
 

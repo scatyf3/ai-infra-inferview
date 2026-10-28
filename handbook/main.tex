@@ -1,0 +1,22 @@
+\documentclass[11pt]{ctexart}
+
+\usepackage{amsmath,amssymb,amsthm,bm}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{hyperref}
+
+\newtheorem{proposition}{命题}
+\newcommand{\softmax}{\operatorname{softmax}}
+
+\title{AI Infra 推导手册}
+\author{scatyf3}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\input{chapters/online-softmax}
+\input{chapters/flash-attention}
+\input{chapters/linear-attention}
+
+\end{document}

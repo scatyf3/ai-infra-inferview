@@ -13,7 +13,9 @@ title: GPU / 算子
 ## 本领域主题
 
 - [GPU 执行模型：SM / Warp / Shared Memory](./gpu-architecture) — bank conflict、coalescing、occupancy
-- [Tensor Core 与 GEMM Tiling](./tensor-core-gemm) — 为什么 GEMV 打不满
+- [SM 里的计算单元：CUDA Core / Tensor Core / SFU](./compute-units) — 每种单元一个周期做多少、为什么算力都在 Tensor Core
+- [普通 SIMT 之外的指令](./special-instructions) — shuffle、TMA、wgmma、SFU、mbarrier、setmaxnreg
+- [GEMM Tiling](./tensor-core-gemm) — 切块复用，以及为什么 GEMV 打不满
 - [Triton 编程模型](./triton) — autotune；什么时候写 Triton、什么时候直接调 cuBLAS / CUTLASS
 - [CUDA Graph 与 Kernel Fusion](./cuda-graph-fusion) — 在框架侧的落地
 - [Profiling：nsys / ncu / torch profiler](./profiling) — 看哪几个指标

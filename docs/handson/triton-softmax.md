@@ -71,7 +71,7 @@ $$
 :::
 
 ::: details Q：num_warps 怎么选？
-一行 N 个元素，每个线程处理 N / (32 × num_warps) 个；行短时 4 个 warp 够，行长到几万时增加 warp 数让每线程的寄存器压力降下来。Triton 教程里按 BLOCK_SIZE 用启发式（2048 以上 8 warps，4096 以上 16 warps），生产上交给 autotune。
+一行 N 个元素，每个线程处理 N / (32 × num_warps) 个；行短时 4 个 warp 够，行长到几万时增加 warp 数让每线程的寄存器压力降下来。Triton 教程里按 BLOCK_SIZE 用启发式（2048 以上 8 warps，4096 以上 16 warps），生产上交给 autotune。加 warp 不会让一个 SM 多放 program（一行占的寄存器总量不变），只是防止每线程寄存器超过 255 而 spill；按行长算 occupancy 见 [Triton 编程模型 · occupancy](/gpu/triton#occupancy-编译器算用量-你定参数)。
 :::
 
 ## 手撕
@@ -189,7 +189,6 @@ online 合并（2 个 kernel）：第 1 趟同时求每块的 max 和 sum，sum 
 ```python
 @triton.jit
 def partial_kernel(x_ptr, m_ptr, d_ptr, N, BLOCK: tl.constexpr):
-    # 第 1 趟：每块的 (m_b, d_b)，d_b = sum(exp(x - m_b))，减的是这块自己的 max
     offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
     x = tl.load(x_ptr + offs, mask=offs < N, other=-float('inf'))
     m_b = tl.max(x, axis=0)

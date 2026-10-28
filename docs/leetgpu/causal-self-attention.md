@@ -19,16 +19,19 @@ leetgpu: [53]
 import torch
 import math
 
-
+# Q, K, V, output are tensors on the GPU
 def solve(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, output: torch.Tensor, M: int, d: int):
-    # Q/K/V: [M, d]
-    kt = K.transpose(0, 1)
-    attn = torch.matmul(Q, kt) / math.sqrt(d)                               # [M, M]
-    # 严格上三角（j > i，未来位置）为 -inf，对角线和下三角为 0
-    mask = torch.full((M, M), float('-inf'), device=Q.device).triu(1)
-    attn = attn + mask
-    attn_norm = torch.softmax(attn, dim=-1)                                  # exp(-inf) = 0
-    torch.matmul(attn_norm, V, out=output)                                   # [M, d]，shape 一致可以 out=
+    
+    attn_raw = torch.matmul(Q,K.transpose(-1,-2))/math.sqrt(d)
+    
+    q_pos = torch.arange(M,device=Q.device).unsqueeze(1)
+    kv_pos = torch.arange(M,device=K.device).unsqueeze(0)
+
+    casual_allowed = q_pos>=kv_pos
+    attn_raw_masked = attn_raw.masked_fill(~casual_allowed,float("-inf"))
+    attn_normed = torch.softmax(attn_raw_masked,dim=-1)
+    out = torch.matmul(attn_normed,V)
+    output.copy_(out)
 ```
 
 ## mask 的写法
@@ -36,25 +39,13 @@ def solve(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, output: torch.Tenso
 **标准写法**（[mask 怎么拼](./mask)）：下标比较。
 
 ```python
-i = torch.arange(M, device=Q.device)[:, None]   # [M, 1] query
-j = torch.arange(M, device=Q.device)[None, :]   # [1, M] key
-allowed = j <= i                                # 下三角含对角线
-attn = attn.masked_fill(~allowed, float('-inf'))
+q_pos = torch.arange(M,device=Q.device).unsqueeze(1)
+kv_pos = torch.arange(M,device=K.device).unsqueeze(0)
+
+casual_allowed = q_pos>=kv_pos
+attn_raw_masked = attn_raw.masked_fill(~casual_allowed,float("-inf"))
 ```
 
-用 `triu` / `tril` 的两种等价写法：
-
-```python
-# 加法 mask：上面题解的写法
-mask = torch.full((M, M), float('-inf'), device=Q.device).triu(1)
-attn = attn + mask
-
-# 布尔 mask：同样用 triu(1) 标出看不到的位置，填 -inf
-mask = torch.ones(M, M, dtype=torch.bool, device=Q.device).triu(1)
-attn = attn.masked_fill(mask, float('-inf'))
-```
-
-`triu(k)` 保留第 k 条对角线及其右上方，其余置 0。`k=0` 从主对角线开始，`k=1` 从主对角线右边一条开始（主对角线也被置 0）。
 
 ## 这题的坑
 
