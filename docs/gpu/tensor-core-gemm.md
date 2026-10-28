@@ -489,6 +489,101 @@ v1–v4 是同一个 kernel `matmul_tiled`，每一版只多拧一个旋钮，�
 
 单位 TFLOP/s。v0 和 v1 太慢，只测到 2048 和 8192。
 
+### Triton 代码
+
+**v0：朴素内积。** 一个 program 只算 $C$ 的一个元素，grid 有 $M \times N$ 个 program。沿 $K$ 每次取 `BK` 个数做逐元素乘加，最后求和：
+
+```python
+@triton.jit
+def matmul_naive(a_ptr, b_ptr, c_ptr, M, N, K,
+                 stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
+                 BK: tl.constexpr):
+    pid = tl.program_id(0)
+    i = pid // N                      # 这个 program 负责 C[i, j]
+    j = pid % N
+    acc = tl.zeros((BK,), dtype=tl.float32)
+    for k0 in range(0, K, BK):
+        offs_k = k0 + tl.arange(0, BK)
+        a = tl.load(a_ptr + i * stride_am + offs_k * stride_ak, mask=offs_k < K, other=0.0)  # A 的第 i 行
+        b = tl.load(b_ptr + offs_k * stride_bk + j * stride_bn, mask=offs_k < K, other=0.0)  # B 的第 j 列
+        acc += a.to(tl.float32) * b.to(tl.float32)   # 每个数只用一次
+    tl.store(c_ptr + i * stride_cm + j * stride_cn, tl.sum(acc).to(tl.bfloat16))
+```
+
+**v1–v4：同一个 kernel。** 一个 program 算一个 $BM \times BN$ 的 block tile。`TENSOR_CORE`、`GROUP_M` 是编译期常量，`num_stages` 在 launch 时传：
+
+```python
+@triton.jit
+def matmul_tiled(a_ptr, b_ptr, c_ptr, M, N, K,
+                 stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
+                 BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr,
+                 GROUP_M: tl.constexpr, TENSOR_CORE: tl.constexpr):
+    # ---- v3：program 编号 -> tile 坐标。GROUP_M = 1 就是行优先 ----
+    pid = tl.program_id(0)
+    num_pid_m = tl.cdiv(M, BM)
+    num_pid_n = tl.cdiv(N, BN)
+    num_pid_in_group = GROUP_M * num_pid_n
+    group = pid // num_pid_in_group
+    first_m = group * GROUP_M
+    group_rows = min(num_pid_m - first_m, GROUP_M)
+    local = pid % num_pid_in_group
+    pid_m = first_m + local % group_rows          # 组内先往下走
+    pid_n = local // group_rows                   # 走满再换列
+
+    # ---- v1：block tile。这个 program 负责 C[pid_m*BM : +BM, pid_n*BN : +BN] ----
+    offs_m = pid_m * BM + tl.arange(0, BM)
+    offs_n = pid_n * BN + tl.arange(0, BN)
+    offs_k = tl.arange(0, BK)
+    a_ptrs = a_ptr + offs_m[:, None] * stride_am + offs_k[None, :] * stride_ak   # A[BM, BK] 一块
+    b_ptrs = b_ptr + offs_k[:, None] * stride_bk + offs_n[None, :] * stride_bn   # B[BK, BN] 一块
+
+    acc = tl.zeros((BM, BN), dtype=tl.float32)    # 累加器在寄存器
+    for k0 in range(0, K, BK):                    # v4：num_stages > 1 时编译器把这个循环做成多级流水
+        a = tl.load(a_ptrs, mask=(offs_m[:, None] < M) & (offs_k[None, :] < K - k0), other=0.0)
+        b = tl.load(b_ptrs, mask=(offs_k[:, None] < K - k0) & (offs_n[None, :] < N), other=0.0)
+        if TENSOR_CORE:
+            acc = tl.dot(a, b, acc)               # v2：bf16 进 Tensor Core（mma）
+        else:
+            acc = tl.dot(a.to(tl.float32), b.to(tl.float32), acc,
+                         input_precision="ieee")  # v1：fp32 FMA，走 CUDA core
+        a_ptrs += BK * stride_ak                  # 沿 K 往前挪一段
+        b_ptrs += BK * stride_bk
+
+    c_ptrs = c_ptr + offs_m[:, None] * stride_cm + offs_n[None, :] * stride_cn
+    tl.store(c_ptrs, acc.to(tl.bfloat16), mask=(offs_m[:, None] < M) & (offs_n[None, :] < N))
+```
+
+`tl.dot` 背后的 shared memory 和 warp / 指令两级 tiling 由编译器生成：`tl.load` 进来的块放进 shared memory，按 `num_warps` 把 $BM \times BN$ 切给各个 warp，每个 warp 再拆成 `mma` 指令的形状。所以 Triton 里显式写出来的只有 block tile 这一级。
+
+各版本的 launch，只差参数：
+
+```python
+grid = (triton.cdiv(M, BM) * triton.cdiv(N, BN),)
+matmul_tiled[grid](..., BM=64,  BN=64,  BK=32, GROUP_M=1, TENSOR_CORE=False, num_warps=4, num_stages=1)  # v1
+matmul_tiled[grid](..., BM=128, BN=128, BK=64, GROUP_M=1, TENSOR_CORE=True,  num_warps=8, num_stages=1)  # v2
+matmul_tiled[grid](..., BM=128, BN=128, BK=64, GROUP_M=8, TENSOR_CORE=True,  num_warps=8, num_stages=1)  # v3
+matmul_tiled[grid](..., BM=128, BN=128, BK=64, GROUP_M=8, TENSOR_CORE=True,  num_warps=8, num_stages=3)  # v4
+```
+
+**v5：autotune。** 用 `@triton.autotune` 给出候选配置，每遇到一组新的 `(M, N, K)` 就把候选都跑一遍，留最快的：
+
+```python
+@triton.autotune(configs=[
+    triton.Config({"BM": bm, "BN": bn, "BK": bk, "GROUP_M": 8}, num_warps=w, num_stages=s)
+    for bm, bn, bk, w, s in [
+        (128, 128, 32, 4, 4), (128, 128, 64, 8, 3), (128, 256, 32, 8, 3), (256, 128, 32, 8, 3),
+        (128, 64, 32, 4, 4), (64, 128, 32, 4, 4), (64, 64, 64, 4, 4), (64, 64, 32, 4, 5),
+    ]], key=["M", "N", "K"])
+@triton.jit
+def matmul_autotuned(a_ptr, b_ptr, c_ptr, M, N, K, stride_am, stride_ak, stride_bk, stride_bn,
+                     stride_cm, stride_cn, BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr,
+                     GROUP_M: tl.constexpr):
+    matmul_tiled(a_ptr, b_ptr, c_ptr, M, N, K, stride_am, stride_ak, stride_bk, stride_bn,
+                 stride_cm, stride_cn, BM, BN, BK, GROUP_M, True)   # jit 函数互相调用会被内联
+```
+
+### 结果
+
 <GemmBenchChart />
 
 逐版看：
