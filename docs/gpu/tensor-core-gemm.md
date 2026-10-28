@@ -72,6 +72,98 @@ $$
 
 比 ridge 低 600 倍。问题在于 $A[i, k]$ 被第 $i$ 行的 $N$ 个线程各读了一遍，$B[k, j]$ 被第 $j$ 列的 $M$ 个线程各读了一遍。同一个数读了几千次，每次只用一下。
 
+## 内积和外积：tiling 在两者之间折中
+
+$C = AB$ 有两种基本算法，差别只在 $k$ 这层循环放在最内还是最外。
+
+### 内积：一个输出一个输出地算
+
+$$
+C_{ij} = \sum_{k} A_{ik} B_{kj} = \mathbf{a}_i^\top \mathbf{b}_j
+$$
+
+$\mathbf{a}_i$ 是 $A$ 的第 $i$ 行，$\mathbf{b}_j$ 是 $B$ 的第 $j$ 列，$C$ 的每个元素是一次长度为 $K$ 的内积：
+
+```python
+for i in range(M):
+    for j in range(N):
+        acc = 0                        # 只要 1 个累加器
+        for k in range(K):             # k 在最内层
+            acc += A[i, k] * B[k, j]   # 每做 1 次 MAC 读 2 个数
+        C[i, j] = acc
+```
+
+上面的朴素版就是它。
+
+### 外积：一层一层地叠
+
+$$
+C = \sum_{k} A_{:,k}\, B_{k,:}
+$$
+
+$A_{:,k}$ 是 $A$ 的第 $k$ 列（$M \times 1$），$B_{k,:}$ 是 $B$ 的第 $k$ 行（$1 \times N$），两者的外积是一个 $M \times N$ 的秩 1 矩阵。$C$ 是 $K$ 个这样的矩阵叠起来：
+
+```python
+C = zeros(M, N)                        # M·N 个累加器同时活着
+for k in range(K):                     # k 在最外层
+    a, b = A[:, k], B[k, :]            # 读 M + N 个
+    for i in range(M):
+        for j in range(N):
+            C[i, j] += a[i] * b[j]     # 做 M·N 次 MAC
+```
+
+| | 内积 | 外积 |
+|---|---|---|
+| $k$ 循环 | 最内层 | 最外层 |
+| 同时活着的累加器 | 1 | $MN$ |
+| 每一轮 | 读 2 个，做 1 次 MAC | 读 $M + N$ 个，做 $MN$ 次 MAC |
+| 每读 1 个数做几次 MAC | $\frac{1}{2}$ | $\frac{MN}{M + N}$ |
+| 省的是 | 空间 | load |
+
+内积几乎不占空间，但读进来的数只用一次。外积读进来的 $a_i$ 被 $N$ 个输出各用一次、$b_j$ 被 $M$ 个输出各用一次，代价是整个 $C$ 的部分和要一直留在手边：4096 × 4096 的 fp32 是 64 MB，寄存器和 shared memory 都放不下。
+
+### tiling：块间内积，块内外积
+
+把 $C$ 切成 $T_M \times T_N$ 的块。块和块之间按内积走（一块沿 $k$ 累加完再换下一块），块内部按外积走：
+
+$$
+C_{IJ} = \sum_{k} A_{I,k}\, B_{k,J}
+$$
+
+$I$、$J$ 是一块的行、列下标集合，$A_{I,k}$ 是 $T_M$ 维的列向量，$B_{k,J}$ 是 $T_N$ 维的行向量：
+
+```python
+for I in tiles(M, TM):
+    for J in tiles(N, TN):
+        acc = zeros(TM, TN)                    # TM·TN 个累加器
+        for k in range(K):
+            acc += outer(A[I, k], B[k, J])     # 读 TM + TN 个，做 TM·TN 次 MAC
+        C[I, J] = acc
+```
+
+$T_M = T_N = 1$ 就是内积，$T_M = M$、$T_N = N$ 就是外积，中间每一档都是两者的折中：
+
+$$
+\text{每读 1 个数做的 MAC} = \frac{T_M T_N}{T_M + T_N}, \qquad \text{空间} = T_M T_N
+$$
+
+空间固定为 $S = T_M T_N$ 时，方块 $T_M = T_N = \sqrt{S}$ 复用最高，每读 1 个数做 $\sqrt{S} / 2$ 次 MAC：**复用只随空间的平方根增长**。L2 那节「一波铺成方块最省」是同一个结论。
+
+$k$ 这一维不占空间。它是归约维，按时间流过去，所以 $BK$ 只决定每轮搬多少，不影响复用（下面「AI 和 $BK$ 无关」那条）。累加器原地不动、$A$ 和 $B$ 从旁边流过的这种做法，在加速器文献里叫 output stationary。
+
+<InnerOuterViz />
+
+### 每一级都在做同一个折中
+
+tiling 本质上是：针对每一级存储的容量，找内积和外积之间最好的折中点。空间放在哪、预算多大由硬件定；能换来多少复用，由 $\frac{T_M T_N}{T_M + T_N}$ 定。下面几节逐级展开：
+
+| 级 | 外积的空间放在哪 | 预算（H100） | 典型块 | 每读 1 个数做几次 MAC |
+|---|---|---|---|---|
+| 一波 block（L2） | L2 里的 $A$、$B$ 条带 | 50 MB | 8 × 17 个 tile | 每条条带被 132 / 25 ≈ 5.3 个 block 用 |
+| block（第 1 级） | 累加器在寄存器，$A$、$B$ 的 tile 在 shared memory | 每 SM 256 KB 寄存器、228 KB smem | 128 × 128 | $\frac{128 \cdot 128}{128 + 128} = 64$ |
+| 线程（CUDA core 第 3 级） | 每线程的寄存器 | 每线程 ≤ 255 个 | 8 × 8 | $\frac{64}{16} = 4$ |
+| 指令（Tensor Core 第 3 级） | `mma` 的 fragment | 硬件定 | 16 × 8（$k = 16$） | $\frac{16 \cdot 8}{16 + 8} \approx 5.3$ |
+
 ## 第一级：block tile 放进 shared memory
 
 让一个 block 负责 $C$ 的一个 $BM \times BN$ 块。这个块要用到 $A$ 的 $BM$ 行和 $B$ 的 $BN$ 列，沿 $K$ 每次搬 $BK$ 那么宽一段进 shared memory，block 内所有线程从 shared memory 反复取：

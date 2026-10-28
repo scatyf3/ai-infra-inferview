@@ -22,6 +22,17 @@ export function regTileCost(tm: number, tn: number, vec: 1 | 4 = 1): RegTileCost
 }
 
 /**
+ * 把 C 切成 TM × TN 的块：块间内积、块内外积。TM = TN = 1 是纯内积，TM = M、TN = N 是纯外积。
+ * 整个 GEMM 从外层存储读多少个数、做多少次 MAC、同时活着多少个累加器。
+ */
+export function tiledGemmCost(m: number, n: number, k: number, tm: number, tn: number) {
+  const tiles = Math.ceil(m / tm) * Math.ceil(n / tn)
+  const loads = tiles * k * (tm + tn)
+  const macs = m * n * k
+  return { tiles, loads, macs, accum: tm * tn, macPerLoad: macs / loads }
+}
+
+/**
  * 整个 block 在一个 kk 里从 shared memory 读多少个数，以及其中有多少个不同的数。
  * As 的一列（BM 个）被 BN / TN 个线程各读一遍，Bs 的一行（BN 个）被 BM / TM 个线程各读一遍。
  */
